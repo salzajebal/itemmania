@@ -916,6 +916,16 @@ const SELL_INTERCEPT_SCRIPT = `
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    // 삽니다 탭 → 삽니다 목록으로 이동 (search_game 유지)
+    document.querySelectorAll('button[data-type="buy"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var params = new URLSearchParams(location.search);
+        var game = params.get('search_game') || '5913';
+        location.href = '/proxy/buy/list.html?search_game=' + game;
+      }, true);
+    });
+
     // 로그인·회원가입 버튼
     var loginBtn = document.querySelector('.header-logins button');
     if (loginBtn) {
