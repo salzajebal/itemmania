@@ -89,6 +89,7 @@ function loadSellHtml(filename: string): string {
 
 const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
+const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
 const sellMabinogiHtml        = loadSellHtml("sell-mabinogi.html");
@@ -713,6 +714,7 @@ function stripCsp(html: string): string {
 // 알려진 라우트 매핑 (구체적인 경로 우선)
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
+  ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
   ['https://www.itemmania.com/myroom/chat/list.html',         '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat/',                  '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat',                   '/proxy/myroom/chat/list.html'],
@@ -766,6 +768,7 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 'use strict';
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
+  ['/sell/application.html','/proxy/sell/application.html'],
   ['/myroom/chat/list.html','/proxy/myroom/chat/list.html'],
   ['/myroom/chat/','/proxy/myroom/chat/list.html'],
   ['/myroom/chat','/proxy/myroom/chat/list.html'],
@@ -985,6 +988,153 @@ const CHAT_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const SELL_APPLICATION_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
+  }
+
+  function showLoginModal() {
+    var existing = document.getElementById('_im_overlay');
+    if (existing) { existing.style.display = 'flex'; return; }
+    var div = document.createElement('div');
+    div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:400px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><input type="email" id="_im_e" placeholder="이메일" style="display:block;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:10px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;outline:none"><input type="password" id="_im_p" placeholder="비밀번호" style="display:block;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:10px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;outline:none"><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button><div id="_im_err" style="margin-top:10px;min-height:18px;font-size:13px;color:#e03030;text-align:center"></div></div></div>';
+    document.body.appendChild(div.firstChild);
+    document.getElementById('_im_close').onclick = function(){ document.getElementById('_im_overlay').style.display='none'; };
+    document.getElementById('_im_login_btn').onclick = function(){
+      var email = document.getElementById('_im_e').value;
+      var pw = document.getElementById('_im_p').value;
+      var errEl = document.getElementById('_im_err');
+      if (!email || !pw) { errEl.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+      api('POST', '/auth/login', { email: email, password: pw }).then(function(data){
+        if (data && data.id) {
+          document.getElementById('_im_overlay').style.display = 'none';
+          showPurchaseSuccess();
+        } else {
+          errEl.textContent = (data && data.error) || '로그인에 실패했습니다.';
+        }
+      });
+    };
+    setTimeout(function(){ var el = document.getElementById('_im_e'); if(el) el.focus(); }, 50);
+  }
+
+  function showPurchaseSuccess() {
+    alert('구매 신청이 완료되었습니다.\\n판매자와 채팅으로 거래를 진행해 주세요.');
+  }
+
+  function init() {
+    // 구매신청 버튼 — form 제출 인터셉트
+    var form = document.getElementById('frmSell');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        api('GET', '/auth/me').then(function(data){
+          if (data && data.id) { showPurchaseSuccess(); }
+          else { showLoginModal(); }
+        });
+      });
+    }
+    // 구매신청 버튼 (button[type=button] 이름 없는 마지막 버튼)
+    document.querySelectorAll('button[type=button]').forEach(function(btn) {
+      if (btn.textContent.trim() === '구매신청') {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          api('GET', '/auth/me').then(function(data){
+            if (data && data.id) { showPurchaseSuccess(); }
+            else { showLoginModal(); }
+          });
+        }, true);
+      }
+    });
+
+    // 채팅 버튼 → 채팅 창
+    document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+      }, true);
+    });
+
+    // 충전하기 버튼 → 준비 중
+    document.querySelectorAll('button.charge_btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        alert('충전 서비스는 게임 할인충전 페이지를 이용해주세요.');
+      }, true);
+    });
+
+    // 쿠폰, 찜하기 버튼 → 준비 중
+    document.querySelectorAll('#coupon_btn, .btn_fav').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        alert('해당 기능은 현재 준비 중입니다.');
+      }, true);
+    });
+
+    // 헤더 로그인 버튼
+    var loginBtn = document.querySelector('.header-logins button');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/login';
+      }, true);
+    }
+
+    // 채팅 버튼 (헤더)
+    var chatBtn = document.querySelector('#chat_notice button');
+    if (chatBtn) {
+      chatBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+      }, true);
+    }
+
+    // 차단 마커 링크
+    document.body.addEventListener('click', function(e) {
+      var a = e.target.closest && e.target.closest('a[data-blocked]');
+      if (a) { e.preventDefault(); alert('해당 기능은 현재 준비 중입니다.'); }
+    });
+
+    // 로그인 상태에 따라 헤더 업데이트
+    api('GET', '/auth/me').then(function(data){
+      if (data && data.id) {
+        var loginsDiv = document.querySelector('.header-logins');
+        if (loginsDiv) {
+          loginsDiv.innerHTML =
+            '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
+            '<div class="divider"></div>' +
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+          document.getElementById('_im_logout_btn').addEventListener('click', function(){
+            api('POST', '/auth/logout').then(function(){ location.reload(); });
+          });
+        }
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
+function serveApplication(html: string): string {
+  const result = prepare(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", SELL_APPLICATION_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + SELL_APPLICATION_INTERCEPT_SCRIPT;
+}
+
 function serveChat(html: string): string {
   const result = prepare(html);
   if (result.includes("</body>")) {
@@ -1008,6 +1158,10 @@ router.get(["/myroom", "/myroom/"], (_req, res): void => {
 });
 router.get(["/myroom/chat/list.html", "/myroom/chat/"], (_req, res): void => {
   res.redirect(302, "/proxy/myroom/chat/list.html");
+});
+router.get("/sell/application.html", (req, res): void => {
+  const id = req.query["id"] ? `?id=${req.query["id"]}` : "";
+  res.redirect(302, `/proxy/sell/application.html${id}`);
 });
 
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
@@ -1083,6 +1237,17 @@ router.get("/sell/list.html", (req, res): void => {
   } else {
     res.redirect(302, "/proxy/");
   }
+});
+
+// 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
+router.get("/proxy/sell/application.html", (req, res): void => {
+  if (!sellApplicationHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveApplication(sellApplicationHtml));
 });
 
 // 매니아 채팅 페이지
