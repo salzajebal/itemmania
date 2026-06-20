@@ -270,7 +270,7 @@ const INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        showLogin();
+        location.href = '/proxy/portal/user/p_login_form.html';
       }, true);
     }
     if (registerLink) {
