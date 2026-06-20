@@ -338,6 +338,35 @@ const INTERCEPT_SCRIPT = `
 
   initPanel();
 
+  // --- href 직접 교체 (이벤트 인터셉트 없이 네이티브 클릭) ---
+  function rewriteLinks() {
+    // 로고
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) { logoLink.setAttribute('href', '/proxy/'); logoLink.removeAttribute('target'); }
+
+    // 네비 링크 href 직접 교체
+    var navHrefMap = {
+      'game_charge':   '/proxy/game-charge',
+      'portal/giftcard': '/proxy/giftcard',
+      'gamemania.co.kr': '/proxy/gamemania',
+      'itemmania.com/myroom': '/proxy/'
+    };
+    document.querySelectorAll('.header-nav a').forEach(function(link) {
+      var href = link.getAttribute('href') || '';
+      for (var pattern in navHrefMap) {
+        if (href.indexOf(pattern) >= 0) {
+          link.setAttribute('href', navHrefMap[pattern]);
+          link.removeAttribute('target');
+          break;
+        }
+      }
+    });
+  }
+
+  // DOM 파싱 전에도 최대한 빠르게 실행
+  rewriteLinks();
+  document.addEventListener('DOMContentLoaded', rewriteLinks);
+
   // --- 버튼 후킹 ---
   function hookButtons() {
     var loginsDiv = document.querySelector('.header-logins');
@@ -345,31 +374,6 @@ const INTERCEPT_SCRIPT = `
 
     var loginBtn     = loginsDiv.querySelector('button');
     var registerLink = loginsDiv.querySelector('a');
-
-    // 로고 클릭 → 홈으로
-    var logoLink = document.querySelector('.header-logo a');
-    if (logoLink) {
-      logoLink.addEventListener('click', function(e){
-        e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/';
-      }, true);
-    }
-
-    // 네비 링크 인터셉트
-    var navLinks = document.querySelectorAll('.header-nav a');
-    var navMap = {
-      '상품권몰': '/proxy/giftcard',
-      '게임매니아': '/proxy/gamemania'
-    };
-    navLinks.forEach(function(link) {
-      var text = (link.textContent || '').trim();
-      if (navMap[text]) {
-        link.addEventListener('click', function(e){
-          e.preventDefault(); e.stopImmediatePropagation();
-          location.href = navMap[text];
-        }, true);
-      }
-    });
 
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
@@ -384,36 +388,18 @@ const INTERCEPT_SCRIPT = `
       }, true);
     }
 
-    // 외부 링크(itemmania.com 내부 페이지) 클릭 차단
+    // 남은 외부 링크 차단 (itemmania.com 으로의 탈출 방지)
     document.addEventListener('click', function(e) {
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a) return;
       var href = a.getAttribute('href') || '';
-      // 내부 라우팅 우선 처리
-      if (href.indexOf('portal/giftcard') >= 0) {
+      if ((href.startsWith('http') || href.startsWith('//')) &&
+          href.indexOf('/proxy/') < 0) {
         e.preventDefault(); e.stopPropagation();
-        location.href = '/proxy/giftcard';
-        return;
-      }
-      if (href.indexOf('gamemania.co.kr') >= 0) {
-        e.preventDefault(); e.stopPropagation();
-        location.href = '/proxy/gamemania';
-        return;
-      }
-      if (href.indexOf('game_charge') >= 0) {
-        e.preventDefault(); e.stopPropagation();
-        location.href = '/proxy/game-charge';
-        return;
-      }
-      if (href.indexOf('itemmania.com/portal') >= 0 ||
-          href.indexOf('itemmania.com/login') >= 0 ||
-          href.indexOf('itemmania.com/myroom') >= 0 ||
-          href.indexOf('itemmania.com/sell') >= 0) {
-        e.preventDefault(); e.stopPropagation();
-        if (href.indexOf('portal/user') >= 0) {
-          showRegister();
-        } else if (!currentUser) {
-          showLogin();
+        // 로그인 필요 페이지
+        if (href.indexOf('itemmania.com/portal') >= 0 ||
+            href.indexOf('itemmania.com/sell') >= 0) {
+          if (!currentUser) { showLogin(); }
         }
       }
     }, true);
