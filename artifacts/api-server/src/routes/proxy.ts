@@ -66,6 +66,16 @@ try {
   logger.error({ err: e }, "sell-lineage-classic.html 로드 실패");
 }
 
+const SELL_MAPLESTORY_WORLD_HTML_PATH = join(process.cwd(), "src", "static", "sell-maplestory-world.html");
+let sellMaplestoryWorldHtml = "";
+
+try {
+  sellMaplestoryWorldHtml = readFileSync(SELL_MAPLESTORY_WORLD_HTML_PATH, "utf-8");
+  logger.info("sell-maplestory-world.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "sell-maplestory-world.html 로드 실패");
+}
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -861,8 +871,15 @@ router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], 
   res.send(serveGameCharge(gamechargeHtml));
 });
 
-// 리니지클래식 상품 목록 페이지 (search_game=5913)
+// 게임별 상품 목록 페이지 — search_game 쿼리로 분기
 router.get(["/proxy/sell/list.html", "/proxy/sell/lineage-classic"], (req, res): void => {
+  const game = String(req.query["search_game"] ?? "");
+  if (game === "5233" && sellMaplestoryWorldHtml) {
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-cache");
+    res.send(serveLineageClassic(sellMaplestoryWorldHtml));
+    return;
+  }
   if (!sellLineageClassicHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -872,11 +889,24 @@ router.get(["/proxy/sell/list.html", "/proxy/sell/lineage-classic"], (req, res):
   res.send(serveLineageClassic(sellLineageClassicHtml));
 });
 
+// 메이플스토리월드 상품 목록 페이지 (search_game=5233)
+router.get("/proxy/sell/maplestory-world", (req, res): void => {
+  if (!sellMaplestoryWorldHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveLineageClassic(sellMaplestoryWorldHtml));
+});
+
 // 원본 경로 리다이렉트
 router.get("/sell/list.html", (req, res): void => {
   const game = req.query["search_game"];
   if (game === "5913") {
     res.redirect(302, "/proxy/sell/list.html?search_game=5913");
+  } else if (game === "5233") {
+    res.redirect(302, "/proxy/sell/maplestory-world");
   } else {
     res.redirect(302, "/proxy/");
   }
