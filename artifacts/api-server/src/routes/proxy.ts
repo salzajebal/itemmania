@@ -87,6 +87,8 @@ function loadSellHtml(filename: string): string {
   }
 }
 
+const chatHtml                = loadSellHtml("chat.html");
+const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
 const sellMabinogiHtml        = loadSellHtml("sell-mabinogi.html");
@@ -702,6 +704,9 @@ function stripCsp(html: string): string {
 // 알려진 라우트 매핑 (구체적인 경로 우선)
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
+  ['https://www.itemmania.com/myroom/chat/list.html',         '/proxy/myroom/chat/list.html'],
+  ['https://www.itemmania.com/myroom/chat/',                  '/proxy/myroom/chat/list.html'],
+  ['https://www.itemmania.com/myroom/chat',                   '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/game_charge/', '/proxy/game-charge'],
   ['https://www.itemmania.com/game_charge',  '/proxy/game-charge'],
   ['https://www.itemmania.com/portal/giftcard/', '/proxy/giftcard'],
@@ -855,6 +860,57 @@ function serveLineageClassic(html: string): string {
   return result + SELL_INTERCEPT_SCRIPT;
 }
 
+const CHAT_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  // 로그인 상태 확인
+  function isLoggedIn() {
+    return fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { return d && d.id; })
+      .catch(function() { return false; });
+  }
+
+  // 마이룸 버튼 → 메인으로
+  function initButtons() {
+    var myroomBtn = document.querySelector('button.go_myroom');
+    if (myroomBtn) {
+      myroomBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/proxy/';
+      });
+    }
+    var blockBtn = document.querySelector('button.block_list');
+    if (blockBtn) {
+      blockBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('차단리스트 기능은 준비 중입니다.');
+      });
+    }
+    // 차단 마커 링크
+    document.body.addEventListener('click', function(e) {
+      var a = e.target.closest && e.target.closest('a[data-blocked]');
+      if (a) { e.preventDefault(); alert('해당 기능은 현재 준비 중입니다.'); }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initButtons);
+  } else {
+    initButtons();
+  }
+})();
+</script>
+`;
+
+function serveChat(html: string): string {
+  const result = prepare(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", CHAT_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + CHAT_INTERCEPT_SCRIPT;
+}
+
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
 router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
   res.redirect(302, "/proxy/game-charge");
@@ -867,6 +923,9 @@ router.get("/portal/user/p_login_form.html", (_req, res): void => {
 });
 router.get(["/myroom", "/myroom/"], (_req, res): void => {
   res.redirect(302, "/proxy/");
+});
+router.get(["/myroom/chat/list.html", "/myroom/chat/"], (_req, res): void => {
+  res.redirect(302, "/proxy/myroom/chat/list.html");
 });
 
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
@@ -942,6 +1001,19 @@ router.get("/sell/list.html", (req, res): void => {
   } else {
     res.redirect(302, "/proxy/");
   }
+});
+
+// 매니아 채팅 페이지
+router.get(["/proxy/myroom/chat/list.html", "/proxy/myroom/chat/"], (req, res): void => {
+  const order = req.query["order"];
+  const html = order === "1" ? chatOrderedHtml : chatHtml;
+  if (!html) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveChat(html));
 });
 
 // 게임매니아 페이지
