@@ -16,6 +16,16 @@ try {
   logger.error({ err: e }, "itemmania.html 로드 실패");
 }
 
+const LOGIN_HTML_PATH = join(process.cwd(), "src", "static", "login.html");
+let loginHtml = "";
+
+try {
+  loginHtml = readFileSync(LOGIN_HTML_PATH, "utf-8");
+  logger.info("login.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "login.html 로드 실패");
+}
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -311,21 +321,144 @@ const INTERCEPT_SCRIPT = `
 </script>
 `;
 
-function serveItemmania(html: string): string {
-  // SingleFile이 주입한 CSP 메타태그 제거 (connect-src 차단 방지)
-  let result = html.replace(
+// 로그인 페이지 전용 인터셉트 스크립트
+const LOGIN_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function stripCSP() {
+    document.querySelectorAll('meta[http-equiv="content-security-policy"]').forEach(el => el.remove());
+  }
+
+  function showError(msg) {
+    var errEl = document.getElementById('_im_login_err');
+    if (!errEl) {
+      errEl = document.createElement('p');
+      errEl.id = '_im_login_err';
+      errEl.style.cssText = 'color:#e53e3e;font-size:14px;margin:8px 0 0;text-align:center;';
+      var form = document.querySelector('form[name=g_LOGIN_FORM]');
+      if (form) form.appendChild(errEl);
+    }
+    errEl.textContent = msg;
+  }
+
+  function init() {
+    stripCSP();
+
+    // 로그인 폼 가로채기
+    var loginForm = document.querySelector('form[name=g_LOGIN_FORM]');
+    if (loginForm) {
+      loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var userId = document.getElementById('user_id').value.trim();
+        var userPw = document.getElementById('user_password').value;
+        var btn = loginForm.querySelector('button[type=submit]');
+        if (btn) btn.disabled = true;
+
+        try {
+          var res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email: userId, password: userPw })
+          });
+          var data = await res.json();
+          if (res.ok) {
+            var returnUrl = new URLSearchParams(location.search).get('returnUrl');
+            location.href = returnUrl ? '/proxy/' : '/proxy/';
+          } else {
+            showError(data.error || '아이디 또는 비밀번호가 올바르지 않습니다.');
+            if (btn) btn.disabled = false;
+          }
+        } catch(err) {
+          showError('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+
+    // 네이버/카카오 소셜 로그인 차단
+    var naverBtn = document.getElementById('naver_id_login');
+    if (naverBtn) {
+      naverBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('소셜 로그인은 지원하지 않습니다. 아이디/비밀번호로 로그인해주세요.');
+      });
+    }
+
+    // 아이디찾기/비밀번호찾기 외부 링크 차단
+    document.querySelectorAll('a[href*="itemmania.com"]').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('해당 기능은 현재 준비 중입니다.');
+      });
+    });
+
+    // 헤더 로그인 버튼 → 현재 페이지 유지
+    var headerLoginBtn = document.querySelector('.header-logins button');
+    if (headerLoginBtn) {
+      headerLoginBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+      });
+    }
+
+    // 회원가입 링크 차단
+    var joinLink = document.querySelector('.header-logins a');
+    if (joinLink) {
+      joinLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('회원가입은 메인 페이지에서 이용해주세요.');
+        location.href = '/proxy/';
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
+function stripCsp(html: string): string {
+  return html.replace(
     /<meta[^>]+http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi,
     ""
   );
+}
 
-  // 스크립트 주입
+function serveItemmania(html: string): string {
+  let result = stripCsp(html);
   if (result.includes("</body>")) {
     return result.replace("</body>", INTERCEPT_SCRIPT + "</body>");
   }
   return result + INTERCEPT_SCRIPT;
 }
 
-// /proxy 및 모든 하위 경로 → itemmania.html 서빙
+function serveLogin(html: string): string {
+  let result = stripCsp(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", LOGIN_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + LOGIN_INTERCEPT_SCRIPT;
+}
+
+// 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
+router.get(
+  ["/proxy/portal/user/p_login_form.html", "/proxy/login"],
+  (req, res): void => {
+    if (!loginHtml) {
+      res.status(503).send("<html><body><h2>로그인 페이지를 불러올 수 없습니다</h2></body></html>");
+      return;
+    }
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-cache");
+    res.send(serveLogin(loginHtml));
+  }
+);
+
+// /proxy 및 나머지 하위 경로 → itemmania.html 서빙
 router.get(["/proxy", "/proxy/", "/proxy/{*splat}"], (req, res): void => {
   if (!staticHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
