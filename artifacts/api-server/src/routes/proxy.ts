@@ -46,6 +46,16 @@ try {
   logger.error({ err: e }, "gamemania.html 로드 실패");
 }
 
+const GAMECHARGE_HTML_PATH = join(process.cwd(), "src", "static", "game-charge.html");
+let gamechargeHtml = "";
+
+try {
+  gamechargeHtml = readFileSync(GAMECHARGE_HTML_PATH, "utf-8");
+  logger.info("game-charge.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "game-charge.html 로드 실패");
+}
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -700,6 +710,94 @@ const GAMEMANIA_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const GAMECHARGE_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  var noop = function(e) { if (e && e.preventDefault) e.preventDefault(); };
+  var loginFns = ['showLogin','openLogin','g_login','gLogin','loginPop','loginPopup'];
+  loginFns.forEach(function(fn) { try { window[fn] = noop; } catch(e) {} });
+
+  // 로그인 팝업 MutationObserver로 억제
+  var observer = new MutationObserver(function() {
+    document.querySelectorAll('.g_layer:not(.all_menu_layer), .g_popup, .g_dim').forEach(function(el) {
+      el.style.display = 'none';
+    });
+    loginFns.forEach(function(fn) { try { if (typeof window[fn] !== 'function' || window[fn] !== noop) window[fn] = noop; } catch(e) {} });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  function init() {
+    // 기존 모달 숨김
+    document.querySelectorAll('.g_layer:not(.all_menu_layer), .g_popup, .g_dim').forEach(function(el) {
+      el.style.display = 'none';
+    });
+    loginFns.forEach(function(fn) { try { window[fn] = noop; } catch(e) {} });
+
+    // 로고 href 먼저 교체 → itemmania.com 선택자에 안 걸리도록
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) {
+      logoLink.setAttribute('href', '/proxy/');
+      logoLink.removeAttribute('target');
+      logoLink.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/';
+      }, true);
+    }
+
+    // 네비 링크 rewrite
+    var navMap = {
+      'game_charge':       '/proxy/game-charge',
+      'portal/giftcard':   '/proxy/giftcard',
+      'gamemania.co.kr':   '/proxy/gamemania',
+      'myroom':            '/proxy/'
+    };
+    document.querySelectorAll('.header-nav a').forEach(function(link) {
+      var href = link.getAttribute('href') || '';
+      for (var pattern in navMap) {
+        if (href.indexOf(pattern) >= 0) {
+          link.setAttribute('href', navMap[pattern]);
+          link.removeAttribute('target');
+          break;
+        }
+      }
+    });
+
+    // 로그인 버튼 → 로그인 페이지
+    var loginBtn = document.querySelector('.header-logins button');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/portal/user/p_login_form.html';
+      }, true);
+    }
+
+    // 충전 버튼 클릭 → "준비 중" 안내
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('button, .charge_btn, [class*="charge"]');
+      if (btn && (btn.type === 'submit' || btn.classList.contains('charge_btn'))) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        alert('게임 충전 서비스는 현재 준비 중입니다.');
+        return;
+      }
+      // 외부 링크 차단 (rewrite 안 된 것)
+      var a = e.target.closest('a');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.startsWith('http') || href.startsWith('//')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
 function stripCsp(html: string): string {
   return html.replace(
     /<meta[^>]+http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi,
@@ -739,6 +837,14 @@ function serveGamemania(html: string): string {
   return result + GAMEMANIA_INTERCEPT_SCRIPT;
 }
 
+function serveGameCharge(html: string): string {
+  let result = stripCsp(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", GAMECHARGE_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + GAMECHARGE_INTERCEPT_SCRIPT;
+}
+
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
 router.get(
   ["/proxy/portal/user/p_login_form.html", "/proxy/login"],
@@ -762,6 +868,17 @@ router.get(["/proxy/giftcard", "/proxy/portal/giftcard", "/proxy/portal/giftcard
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   res.send(serveGiftcard(giftcardHtml));
+});
+
+// 게임 할인충전 페이지
+router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], (req, res): void => {
+  if (!gamechargeHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveGameCharge(gamechargeHtml));
 });
 
 // 게임매니아 페이지
