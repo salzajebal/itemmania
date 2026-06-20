@@ -326,6 +326,15 @@ const INTERCEPT_SCRIPT = `
     var loginBtn     = loginsDiv.querySelector('button');
     var registerLink = loginsDiv.querySelector('a');
 
+    // 로고 클릭 → 홈으로
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) {
+      logoLink.addEventListener('click', function(e){
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/';
+      }, true);
+    }
+
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
@@ -451,6 +460,15 @@ const LOGIN_INTERCEPT_SCRIPT = `
         alert('해당 기능은 현재 준비 중입니다.');
       });
     });
+
+    // 로고 클릭 → 홈으로
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) {
+      logoLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/proxy/';
+      });
+    }
 
     // 헤더 로그인 버튼 → 현재 페이지 유지
     var headerLoginBtn = document.querySelector('.header-logins button');
