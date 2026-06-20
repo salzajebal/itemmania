@@ -435,12 +435,12 @@ const INTERCEPT_SCRIPT = `
       }
     });
 
-    // 채팅 버튼 → 채팅 페이지로 이동
+    // 채팅 버튼 → 별도 창으로 열기
     var chatBtn = document.querySelector('#chat_notice button[aria-label="채팅"], #chat_notice button');
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/myroom/chat/list.html';
+        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     }
 
