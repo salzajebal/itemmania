@@ -389,6 +389,17 @@ const INTERCEPT_SCRIPT = `
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a) return;
       var href = a.getAttribute('href') || '';
+      // 내부 라우팅 우선 처리
+      if (href.indexOf('portal/giftcard') >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        location.href = '/proxy/giftcard';
+        return;
+      }
+      if (href.indexOf('gamemania.co.kr') >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        location.href = '/proxy/gamemania';
+        return;
+      }
       if (href.indexOf('itemmania.com/portal') >= 0 ||
           href.indexOf('itemmania.com/login') >= 0 ||
           href.indexOf('itemmania.com/myroom') >= 0 ||
