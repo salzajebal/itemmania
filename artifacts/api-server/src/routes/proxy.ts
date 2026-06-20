@@ -56,6 +56,16 @@ try {
   logger.error({ err: e }, "game-charge.html 로드 실패");
 }
 
+const SELL_LINEAGE_CLASSIC_HTML_PATH = join(process.cwd(), "src", "static", "sell-lineage-classic.html");
+let sellLineageClassicHtml = "";
+
+try {
+  sellLineageClassicHtml = readFileSync(SELL_LINEAGE_CLASSIC_HTML_PATH, "utf-8");
+  logger.info("sell-lineage-classic.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "sell-lineage-classic.html 로드 실패");
+}
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -736,6 +746,71 @@ function serveGameCharge(html: string): string {
   return result + GAMECHARGE_INTERCEPT_SCRIPT;
 }
 
+const SELL_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function isLoggedIn() {
+    try { return !!JSON.parse(localStorage.getItem('_im_user') || 'null'); } catch(e) { return false; }
+  }
+
+  function showLoginModal() {
+    const ov = document.getElementById('_im_overlay');
+    if (ov) { ov.classList.add('active'); return; }
+    const div = document.createElement('div');
+    div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:380px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button></div></div>';
+    document.body.appendChild(div.firstChild);
+    document.getElementById('_im_close').onclick = function() { document.getElementById('_im_overlay').style.display='none'; };
+    document.getElementById('_im_login_btn').onclick = function() { location.href='/proxy/login'; };
+  }
+
+  function interceptBuyButtons() {
+    document.querySelectorAll('a.buy-btn, a[href*="buy"], a[href*="order"], button.buy-btn, .btn_buy, .sell-buy-btn, a.btn_trade, .item-buy-btn, [class*="buy"], [class*="order_btn"]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (!isLoggedIn()) { e.preventDefault(); e.stopPropagation(); showLoginModal(); }
+      }, true);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // 로그인·회원가입 버튼
+    var loginBtn = document.querySelector('.header-logins button');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopPropagation(); location.href = '/proxy/login';
+      });
+    }
+    var joinBtn = document.querySelector('.header-logins a');
+    if (joinBtn) { joinBtn.href = '/proxy/login'; }
+
+    // 구매 버튼 인터셉트
+    interceptBuyButtons();
+
+    // 동적 콘텐츠를 위한 MutationObserver
+    var mo = new MutationObserver(function() { interceptBuyButtons(); });
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    // 아이템 목록 링크 클릭 시 → 로그인 요구
+    document.body.addEventListener('click', function(e) {
+      var target = e.target.closest('a');
+      if (!target) return;
+      var href = target.getAttribute('href') || '';
+      if (href.includes('order') || href.includes('buy') || href.includes('trade_buy')) {
+        if (!isLoggedIn()) { e.preventDefault(); e.stopPropagation(); showLoginModal(); }
+      }
+    }, true);
+  });
+})();
+</script>
+`;
+
+function serveLineageClassic(html: string): string {
+  const result = prepare(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", SELL_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + SELL_INTERCEPT_SCRIPT;
+}
+
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
 router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
   res.redirect(302, "/proxy/game-charge");
@@ -784,6 +859,27 @@ router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], 
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   res.send(serveGameCharge(gamechargeHtml));
+});
+
+// 리니지클래식 상품 목록 페이지 (search_game=5913)
+router.get(["/proxy/sell/list.html", "/proxy/sell/lineage-classic"], (req, res): void => {
+  if (!sellLineageClassicHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveLineageClassic(sellLineageClassicHtml));
+});
+
+// 원본 경로 리다이렉트
+router.get("/sell/list.html", (req, res): void => {
+  const game = req.query["search_game"];
+  if (game === "5913") {
+    res.redirect(302, "/proxy/sell/list.html?search_game=5913");
+  } else {
+    res.redirect(302, "/proxy/");
+  }
 });
 
 // 게임매니아 페이지
