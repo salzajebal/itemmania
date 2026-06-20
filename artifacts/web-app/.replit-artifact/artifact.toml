@@ -11,7 +11,7 @@ kind = "web"
 
   [[services]]
   name = "web"
-  paths = [ "/" ]
+  paths = [ "/app" ]
   localPort = 22965
 
   [services.development]
@@ -28,5 +28,4 @@ kind = "web"
 
   [services.env]
   PORT = "22965"
-  BASE_PATH = "/"
-  
+  BASE_PATH = "/app"

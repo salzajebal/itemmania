@@ -2312,6 +2312,11 @@ function serveChatNew(html: string): string {
     : result + CHAT_NEW_INTERCEPT_SCRIPT;
 }
 
+// 루트 접속 → 아이템마니아 메인으로 리다이렉트
+router.get(["/", ""], (_req, res): void => {
+  res.redirect(302, "/proxy/");
+});
+
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
 router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
   res.redirect(302, "/proxy/game-charge");
