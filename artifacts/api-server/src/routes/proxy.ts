@@ -88,6 +88,7 @@ function loadSellHtml(filename: string): string {
 }
 
 const buyLineageClassicHtml   = loadSellHtml("buy-lineage-classic.html");
+const buyApplicationHtml      = loadSellHtml("buy-application-1.html");
 const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
@@ -716,6 +717,7 @@ function stripCsp(html: string): string {
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
   ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
+  ['https://www.itemmania.com/buy/application.html',          '/proxy/buy/application.html'],
   ['https://www.itemmania.com/buy/list.html',                 '/proxy/buy/list.html'],
   ['https://www.itemmania.com/buy/',                          '/proxy/buy/list.html'],
   ['https://www.itemmania.com/buy',                           '/proxy/buy/list.html'],
@@ -773,6 +775,7 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
   ['/sell/application.html','/proxy/sell/application.html'],
+  ['/buy/application.html','/proxy/buy/application.html'],
   ['/buy/list.html','/proxy/buy/list.html'],
   ['/buy/','/proxy/buy/list.html'],
   ['/buy','/proxy/buy/list.html'],
@@ -1207,6 +1210,138 @@ const BUY_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const BUY_APPLICATION_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
+  }
+
+  function showLoginModal() {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:36px 32px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">' +
+      '<div style="font-size:22px;font-weight:700;margin-bottom:8px;color:#2e2e2e">로그인이 필요합니다</div>' +
+      '<div style="font-size:14px;color:#767676;margin-bottom:24px">판매신청/채팅을 이용하려면 로그인해 주세요.</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center">' +
+        '<button id="_im_modal_cancel" style="flex:1;padding:12px 0;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:15px;font-weight:600;cursor:pointer;color:#555">취소</button>' +
+        '<button id="_im_modal_login" style="flex:1;padding:12px 0;border:none;border-radius:8px;background:#159EFD;color:#fff;font-size:15px;font-weight:700;cursor:pointer">로그인</button>' +
+      '</div>' +
+    '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('_im_modal_cancel').onclick = function(){ document.body.removeChild(overlay); };
+    document.getElementById('_im_modal_login').onclick = function(){ location.href = '/proxy/login'; };
+    overlay.addEventListener('click', function(e){ if(e.target === overlay) document.body.removeChild(overlay); });
+  }
+
+  function showSuccessModal(msg) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:36px 32px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">' +
+      '<div style="font-size:40px;margin-bottom:12px">✅</div>' +
+      '<div style="font-size:20px;font-weight:700;margin-bottom:8px;color:#2e2e2e">' + msg + '</div>' +
+      '<div style="font-size:14px;color:#767676;margin-bottom:24px">채팅창에서 판매자와 거래를 진행해 주세요.</div>' +
+      '<button id="_im_modal_ok" style="padding:12px 40px;border:none;border-radius:8px;background:#159EFD;color:#fff;font-size:15px;font-weight:700;cursor:pointer">확인</button>' +
+    '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('_im_modal_ok').onclick = function(){ document.body.removeChild(overlay); };
+  }
+
+  var _loggedIn = null;
+  function checkLogin() {
+    if (_loggedIn !== null) return Promise.resolve(_loggedIn);
+    return api('GET', '/auth/me').then(function(d){ _loggedIn = !!(d && d.id); return _loggedIn; });
+  }
+
+  function init() {
+    // 판매신청 버튼 (btn_green)
+    document.querySelectorAll('button.btn_green').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        checkLogin().then(function(ok) {
+          if (!ok) { showLoginModal(); return; }
+          showSuccessModal('판매신청이 완료되었습니다');
+        });
+      }, true);
+    });
+
+    // form submit 차단 (frmSell)
+    var form = document.getElementById('frmSell');
+    if (form) {
+      form.addEventListener('submit', function(e){ e.preventDefault(); e.stopImmediatePropagation(); }, true);
+    }
+
+    // 채팅 버튼 (.go_chat)
+    document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        checkLogin().then(function(ok) {
+          if (!ok) { showLoginModal(); return; }
+          window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        });
+      }, true);
+    });
+
+    // 찜하기 버튼
+    document.querySelectorAll('button.btn_fav, button.btn_fav2').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        checkLogin().then(function(ok) {
+          if (!ok) { showLoginModal(); return; }
+          btn.textContent = '찜완료 ♥';
+          btn.style.color = '#ff4d4d';
+        });
+      }, true);
+    });
+
+    // 헤더 채팅 버튼
+    var chatBtn = document.querySelector('#chat_notice button');
+    if (chatBtn) {
+      chatBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+      }, true);
+    }
+
+    // 로그인 상태 반영
+    api('GET', '/auth/me').then(function(data){
+      _loggedIn = !!(data && data.id);
+      if (data && data.id) {
+        var loginsDiv = document.querySelector('.header-logins');
+        if (loginsDiv) {
+          loginsDiv.innerHTML =
+            '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
+            '<div class="divider"></div>' +
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+          document.getElementById('_im_logout_btn').addEventListener('click', function(){
+            api('POST', '/auth/logout').then(function(){ location.reload(); });
+          });
+        }
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
+function serveBuyApplication(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", BUY_APPLICATION_INTERCEPT_SCRIPT + "</body>")
+    : result + BUY_APPLICATION_INTERCEPT_SCRIPT;
+}
+
 function serveBuy(html: string): string {
   const result = prepare(html);
   return result.includes("</body>")
@@ -1335,6 +1470,23 @@ router.get("/proxy/sell/application.html", (req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   res.send(serveApplication(sellApplicationHtml));
+});
+
+// 삽니다 상세 페이지 (/buy/application.html?id=...)
+router.get("/proxy/buy/application.html", (req, res): void => {
+  if (!buyApplicationHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveBuyApplication(buyApplicationHtml));
+});
+
+// 삽니다 상세 리다이렉트
+router.get("/buy/application.html", (req, res): void => {
+  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(302, `/proxy/buy/application.html${qs}`);
 });
 
 // 삽니다 목록 페이지 (/buy/list.html?search_game=...)
