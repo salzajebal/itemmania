@@ -26,6 +26,16 @@ try {
   logger.error({ err: e }, "login.html 로드 실패");
 }
 
+const GIFTCARD_HTML_PATH = join(process.cwd(), "src", "static", "giftcard.html");
+let giftcardHtml = "";
+
+try {
+  giftcardHtml = readFileSync(GIFTCARD_HTML_PATH, "utf-8");
+  logger.info("giftcard.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "giftcard.html 로드 실패");
+}
+
 const GAMEMANIA_HTML_PATH = join(process.cwd(), "src", "static", "gamemania.html");
 let gamemanaHtml = "";
 
@@ -345,13 +355,18 @@ const INTERCEPT_SCRIPT = `
       }, true);
     }
 
-    // 게임매니아 네비 링크 → /proxy/gamemania
+    // 네비 링크 인터셉트
     var navLinks = document.querySelectorAll('.header-nav a');
+    var navMap = {
+      '상품권몰': '/proxy/giftcard',
+      '게임매니아': '/proxy/gamemania'
+    };
     navLinks.forEach(function(link) {
-      if (link.textContent && link.textContent.trim() === '게임매니아') {
+      var text = (link.textContent || '').trim();
+      if (navMap[text]) {
         link.addEventListener('click', function(e){
           e.preventDefault(); e.stopImmediatePropagation();
-          location.href = '/proxy/gamemania';
+          location.href = navMap[text];
         }, true);
       }
     });
@@ -519,6 +534,66 @@ const LOGIN_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const GIFTCARD_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function init() {
+    // 로고 클릭 → 홈으로
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) {
+      logoLink.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/';
+      }, true);
+    }
+
+    // 네비 링크 인터셉트
+    var navLinks = document.querySelectorAll('.header-nav a');
+    navLinks.forEach(function(link) {
+      var text = (link.textContent || '').trim();
+      var map = {
+        '게임 할인충전': '/proxy/',
+        '상품권몰': '/proxy/giftcard',
+        '게임매니아': '/proxy/gamemania',
+        '마이룸': '/proxy/'
+      };
+      if (map[text]) {
+        link.addEventListener('click', function(e) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          location.href = map[text];
+        }, true);
+      }
+    });
+
+    // 로그인 버튼 → 로그인 페이지
+    var loginBtn = document.querySelector('.header-logins button');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/portal/user/p_login_form.html';
+      }, true);
+    }
+
+    // 기타 외부 링크 차단
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest('a');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.startsWith('http') || href.startsWith('//')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
 const GAMEMANIA_INTERCEPT_SCRIPT = `
 <script>
 (function() {
@@ -576,6 +651,14 @@ function serveLogin(html: string): string {
   return result + LOGIN_INTERCEPT_SCRIPT;
 }
 
+function serveGiftcard(html: string): string {
+  let result = stripCsp(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", GIFTCARD_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + GIFTCARD_INTERCEPT_SCRIPT;
+}
+
 function serveGamemania(html: string): string {
   let result = stripCsp(html);
   if (result.includes("</body>")) {
@@ -597,6 +680,17 @@ router.get(
     res.send(serveLogin(loginHtml));
   }
 );
+
+// 상품권몰 페이지
+router.get(["/proxy/giftcard", "/proxy/portal/giftcard", "/proxy/portal/giftcard/"], (req, res): void => {
+  if (!giftcardHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveGiftcard(giftcardHtml));
+});
 
 // 게임매니아 페이지
 router.get("/proxy/gamemania", (req, res): void => {
