@@ -10,11 +10,23 @@ function formatKRW(amount: number) {
   return amount.toLocaleString("ko-KR") + "원";
 }
 
-function ProductCard({ product }: { product: { id: number; title: string; price: number; gameName?: string | null; sellerName?: string | null; thumbnailUrl?: string | null; status: string } }) {
+type ProductType = {
+  id: number;
+  title: string;
+  price: number;
+  gameName?: string | null;
+  sellerName?: string | null;
+  thumbnailUrl?: string | null;
+  status: string;
+  itemmaniaid?: string | null;
+};
+
+function ProductCard({ product, onBuy }: { product: ProductType; onBuy: (p: ProductType) => void }) {
   return (
     <div
       data-testid={`card-product-${product.id}`}
-      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/60 transition-colors cursor-pointer group"
+      onClick={() => onBuy(product)}
+      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/60 hover:shadow-md transition-all cursor-pointer group"
     >
       <div className="aspect-square bg-muted relative overflow-hidden">
         {product.thumbnailUrl ? (
@@ -32,6 +44,11 @@ function ProductCard({ product }: { product: { id: number; title: string; price:
         {product.sellerName && (
           <p className="text-xs text-muted-foreground">{product.sellerName}</p>
         )}
+        <div className="pt-1">
+          <span className="inline-block w-full text-center text-xs font-semibold py-1.5 rounded bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+            구매하기
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -71,6 +88,18 @@ export default function Home() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setKeyword(searchInput.trim());
+  };
+
+  const handleBuy = (product: ProductType) => {
+    if (!user) {
+      openLogin();
+      return;
+    }
+    setBuyModalData({
+      title: product.title,
+      price: product.price,
+      itemId: String(product.itemmaniaid ?? product.id),
+    });
   };
 
   const products = productData?.items ?? [];
@@ -135,7 +164,7 @@ export default function Home() {
           ) : products.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} onBuy={handleBuy} />
               ))}
             </div>
           ) : (
