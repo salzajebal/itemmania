@@ -1,12 +1,26 @@
 import { Router, type IRouter } from "express";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+// production: cwd = /home/runner/workspace, dev: cwd = artifacts/api-server
+// 실제 static 폴더를 자동 탐지
+const STATIC_DIR = (() => {
+  const candidates = [
+    join(process.cwd(), "src", "static"),
+    join(process.cwd(), "artifacts", "api-server", "src", "static"),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return candidates[0];
+})();
+logger.info({ STATIC_DIR }, "static HTML 디렉토리");
+
 // 서버 시작 시 정적 HTML 파일을 메모리에 로드
-const STATIC_HTML_PATH = join(process.cwd(), "src", "static", "itemmania.html");
+const STATIC_HTML_PATH = join(STATIC_DIR, "itemmania.html");
 let staticHtml = "";
 
 try {
@@ -16,7 +30,7 @@ try {
   logger.error({ err: e }, "itemmania.html 로드 실패");
 }
 
-const LOGIN_HTML_PATH = join(process.cwd(), "src", "static", "login.html");
+const LOGIN_HTML_PATH = join(STATIC_DIR, "login.html");
 let loginHtml = "";
 
 try {
@@ -26,7 +40,7 @@ try {
   logger.error({ err: e }, "login.html 로드 실패");
 }
 
-const GIFTCARD_HTML_PATH = join(process.cwd(), "src", "static", "giftcard.html");
+const GIFTCARD_HTML_PATH = join(STATIC_DIR, "giftcard.html");
 let giftcardHtml = "";
 
 try {
@@ -36,7 +50,7 @@ try {
   logger.error({ err: e }, "giftcard.html 로드 실패");
 }
 
-const GAMEMANIA_HTML_PATH = join(process.cwd(), "src", "static", "gamemania.html");
+const GAMEMANIA_HTML_PATH = join(STATIC_DIR, "gamemania.html");
 let gamemanaHtml = "";
 
 try {
@@ -46,7 +60,7 @@ try {
   logger.error({ err: e }, "gamemania.html 로드 실패");
 }
 
-const GAMECHARGE_HTML_PATH = join(process.cwd(), "src", "static", "game-charge.html");
+const GAMECHARGE_HTML_PATH = join(STATIC_DIR, "game-charge.html");
 let gamechargeHtml = "";
 
 try {
@@ -56,7 +70,7 @@ try {
   logger.error({ err: e }, "game-charge.html 로드 실패");
 }
 
-const SELL_LINEAGE_CLASSIC_HTML_PATH = join(process.cwd(), "src", "static", "sell-lineage-classic.html");
+const SELL_LINEAGE_CLASSIC_HTML_PATH = join(STATIC_DIR, "sell-lineage-classic.html");
 let sellLineageClassicHtml = "";
 
 try {
@@ -66,7 +80,7 @@ try {
   logger.error({ err: e }, "sell-lineage-classic.html 로드 실패");
 }
 
-const SELL_MAPLESTORY_WORLD_HTML_PATH = join(process.cwd(), "src", "static", "sell-maplestory-world.html");
+const SELL_MAPLESTORY_WORLD_HTML_PATH = join(STATIC_DIR, "sell-maplestory-world.html");
 let sellMaplestoryWorldHtml = "";
 
 try {
@@ -78,7 +92,7 @@ try {
 
 function loadSellHtml(filename: string): string {
   try {
-    const html = readFileSync(join(process.cwd(), "src", "static", filename), "utf-8");
+    const html = readFileSync(join(STATIC_DIR, filename), "utf-8");
     logger.info(`${filename} 로드 완료`);
     return html;
   } catch (e) {
