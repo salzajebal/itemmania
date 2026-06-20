@@ -933,13 +933,15 @@ const SELL_INTERCEPT_SCRIPT = `
     var mo = new MutationObserver(function() { interceptBuyButtons(); });
     mo.observe(document.body, { childList: true, subtree: true });
 
-    // 아이템 목록 링크 클릭 시 → 로그인 요구
+    // 상품 리스트 아이템 클릭 → 상세 페이지 이동
     document.body.addEventListener('click', function(e) {
-      var target = e.target.closest('a');
-      if (!target) return;
-      var href = target.getAttribute('href') || '';
-      if (href.includes('order') || href.includes('buy') || href.includes('trade_buy')) {
-        if (!isLoggedIn()) { e.preventDefault(); e.stopPropagation(); showLoginModal(); }
+      var li = e.target.closest && e.target.closest('li.list_item[data-tid]');
+      if (li) {
+        var tid = li.getAttribute('data-tid');
+        if (tid) {
+          e.preventDefault(); e.stopPropagation();
+          location.href = '/proxy/sell/application.html?id=' + tid;
+        }
       }
     }, true);
   });
@@ -1178,11 +1180,17 @@ const BUY_INTERCEPT_SCRIPT = `
       }, true);
     }
 
-    // 차단 마커 링크
+    // 삽니다 상품 리스트 아이템 클릭 → 상세 페이지 이동
     document.body.addEventListener('click', function(e) {
-      var a = e.target.closest && e.target.closest('a[data-blocked]');
-      if (a) { e.preventDefault(); alert('해당 기능은 현재 준비 중입니다.'); }
-    });
+      var li = e.target.closest && e.target.closest('li.list_item[data-tid]');
+      if (li) {
+        var tid = li.getAttribute('data-tid');
+        if (tid) {
+          e.preventDefault(); e.stopPropagation();
+          location.href = '/proxy/buy/application.html?id=' + tid;
+        }
+      }
+    }, true);
 
     // 로그인 상태 반영
     api('GET', '/auth/me').then(function(data){
