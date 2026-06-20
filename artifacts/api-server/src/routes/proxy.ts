@@ -400,6 +400,11 @@ const INTERCEPT_SCRIPT = `
         location.href = '/proxy/gamemania';
         return;
       }
+      if (href.indexOf('game_charge') >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        location.href = '/proxy/game-charge';
+        return;
+      }
       if (href.indexOf('itemmania.com/portal') >= 0 ||
           href.indexOf('itemmania.com/login') >= 0 ||
           href.indexOf('itemmania.com/myroom') >= 0 ||
