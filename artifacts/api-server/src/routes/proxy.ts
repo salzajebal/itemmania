@@ -93,6 +93,8 @@ const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
 const chatNewHtml             = loadSellHtml("chat-new.html");
 const chatNewBuycheckHtml     = loadSellHtml("chat-new-buycheck.html");
+const sellRegisterHtml        = loadSellHtml("sell-register.html");
+const buyRegisterHtml         = loadSellHtml("buy-register.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
@@ -719,6 +721,9 @@ function stripCsp(html: string): string {
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
   ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
+  ['https://www.itemmania.com/sell/',                         '/proxy/sell/register.html'],
+  ['https://www.itemmania.com/sell',                          '/proxy/sell/register.html'],
+  ['https://www.itemmania.com/buy/register.html',             '/proxy/buy/register.html'],
   ['https://www.itemmania.com/buy/application.html',          '/proxy/buy/application.html'],
   ['https://www.itemmania.com/buy/list.html',                 '/proxy/buy/list.html'],
   ['https://www.itemmania.com/buy/',                          '/proxy/buy/list.html'],
@@ -778,6 +783,9 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
   ['/sell/application.html','/proxy/sell/application.html'],
+  ['/sell/','/proxy/sell/register.html'],
+  ['/sell','/proxy/sell/register.html'],
+  ['/buy/register.html','/proxy/buy/register.html'],
   ['/buy/application.html','/proxy/buy/application.html'],
   ['/buy/list.html','/proxy/buy/list.html'],
   ['/buy/','/proxy/buy/list.html'],
@@ -831,6 +839,40 @@ try{
   location.assign=function(u){_ass(rewrite(u));};
   location.replace=function(u){_rep(rewrite(u));};
 }catch(e){}
+/* 상품등록 버튼(.trade-btn-blue) 클릭 → 판매/구매 선택 모달 */
+document.addEventListener('click',function(e){
+  var a=e.target.closest&&e.target.closest('a.trade-btn-blue');
+  if(!a) return;
+  var h=a.getAttribute('href')||'';
+  if(h.indexOf('/sell/')>=0||h.indexOf('/sell?')>=0){
+    e.preventDefault(); e.stopImmediatePropagation();
+    // 이미 모달이 있으면 제거
+    var old=document.getElementById('_im_reg_modal');
+    if(old) old.remove();
+    // 게임 ID 추출
+    var gm=h.match(/[?&]game=(\d+)/);
+    var gameId=gm?gm[1]:'';
+    var modal=document.createElement('div');
+    modal.id='_im_reg_modal';
+    modal.style.cssText='position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:36px 40px;min-width:340px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.18)">'
+      +'<h3 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#1d1d1d">상품 등록</h3>'
+      +'<p style="margin:0 0 28px;color:#767676;font-size:14px">어떤 유형의 상품을 등록하시겠습니까?</p>'
+      +'<div style="display:flex;gap:12px;justify-content:center">'
+      +'<button id="_im_reg_sell" style="flex:1;padding:14px 0;border:2px solid #159EFD;border-radius:12px;background:#EDF8FF;font-size:16px;font-weight:700;color:#0070d2;cursor:pointer">📦 판매등록</button>'
+      +'<button id="_im_reg_buy"  style="flex:1;padding:14px 0;border:2px solid #39A742;border-radius:12px;background:#ECF8EC;font-size:16px;font-weight:700;color:#2a7a2e;cursor:pointer">🛒 구매등록</button>'
+      +'</div>'
+      +'<button id="_im_reg_close" style="margin-top:18px;background:none;border:none;color:#9f9f9f;font-size:13px;cursor:pointer">닫기</button>'
+      +'</div>';
+    document.body.appendChild(modal);
+    var sellUrl='/proxy/sell/register.html'+(gameId?'?game='+gameId:'');
+    document.getElementById('_im_reg_sell').onclick=function(){modal.remove();location.href=sellUrl;};
+    document.getElementById('_im_reg_buy').onclick=function(){modal.remove();location.href='/proxy/buy/register.html';};
+    document.getElementById('_im_reg_close').onclick=function(){modal.remove();};
+    modal.addEventListener('click',function(ev){if(ev.target===modal)modal.remove();});
+    return;
+  }
+},true);
 /* a[href] 전역 클릭 */
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href]');
@@ -970,6 +1012,128 @@ function serveLineageClassic(html: string): string {
   }
   return result + SELL_INTERCEPT_SCRIPT;
 }
+
+const SELL_REGISTER_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function init() {
+    // 구매등록 링크 → /proxy/buy/register.html
+    document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
+        a.href = '/proxy/buy/register.html';
+        a.addEventListener('click', function(e) {
+          e.preventDefault(); location.href = '/proxy/buy/register.html';
+        });
+      }
+    });
+
+    // 판매등록 폼 제출 인터셉트
+    var form = document.getElementById('frmSell');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/api/auth/me', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.id) {
+              showToast('로그인이 필요합니다.', false);
+              setTimeout(function() { location.href = '/proxy/login'; }, 1200);
+              return;
+            }
+            var gameEl = form.querySelector('[name=searchGameServer],[name=game_name]');
+            var priceEl = form.querySelector('[name=user_price]');
+            var titleEl = form.querySelector('[name=user_title],[name=title_name]');
+            var game = gameEl ? gameEl.value.trim() : '';
+            var price = priceEl ? priceEl.value.trim() : '';
+            var title = titleEl ? titleEl.value.trim() : '';
+            if (!price) { showToast('가격을 입력해주세요.', false); return; }
+            showToast('판매 등록이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+          })
+          .catch(function() { showToast('오류가 발생했습니다.', false); });
+      });
+    }
+
+    // 뒤로가기 / 홈
+    var backLinks = document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]');
+    backLinks.forEach(function(a) { a.href = '/proxy/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
+const BUY_REGISTER_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#39A742' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function init() {
+    // 판매등록 링크 → /proxy/sell/register.html
+    document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
+        a.href = '/proxy/sell/register.html';
+        a.addEventListener('click', function(e) {
+          e.preventDefault(); location.href = '/proxy/sell/register.html';
+        });
+      }
+    });
+
+    // 구매등록 폼 제출 인터셉트
+    var form = document.getElementById('frmBuy');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/api/auth/me', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.id) {
+              showToast('로그인이 필요합니다.', false);
+              setTimeout(function() { location.href = '/proxy/login'; }, 1200);
+              return;
+            }
+            var priceEl = form.querySelector('[name=user_price]');
+            var price = priceEl ? priceEl.value.trim() : '';
+            if (!price) { showToast('가격을 입력해주세요.', false); return; }
+            showToast('구매 등록이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/proxy/buy/list.html'; }, 1800);
+          })
+          .catch(function() { showToast('오류가 발생했습니다.', false); });
+      });
+    }
+
+    // 뒤로가기 / 홈
+    var backLinks = document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]');
+    backLinks.forEach(function(a) { a.href = '/proxy/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
 
 const CHAT_NEW_INTERCEPT_SCRIPT = `
 <script>
@@ -1597,6 +1761,20 @@ function extractBuyCheckLayer(src: string): string | null {
   return null;
 }
 
+function serveSellRegister(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", SELL_REGISTER_INTERCEPT_SCRIPT + "</body>")
+    : result + SELL_REGISTER_INTERCEPT_SCRIPT;
+}
+
+function serveBuyRegister(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", BUY_REGISTER_INTERCEPT_SCRIPT + "</body>")
+    : result + BUY_REGISTER_INTERCEPT_SCRIPT;
+}
+
 function serveChatNew(html: string): string {
   let result = prepare(html);
 
@@ -1714,6 +1892,36 @@ router.get("/sell/list.html", (req, res): void => {
   } else {
     res.redirect(302, "/proxy/");
   }
+});
+
+// 판매등록 페이지
+router.get(["/proxy/sell/register.html", "/proxy/sell/", "/proxy/sell"], (req, res): void => {
+  if (!sellRegisterHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveSellRegister(sellRegisterHtml));
+});
+
+// 구매등록 페이지
+router.get("/proxy/buy/register.html", (req, res): void => {
+  if (!buyRegisterHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveBuyRegister(buyRegisterHtml));
+});
+
+// 판매등록/구매등록 직접 접근 리다이렉트
+router.get(["/sell/", "/sell"], (_req, res): void => {
+  res.redirect(302, "/proxy/sell/register.html");
+});
+router.get("/buy/register.html", (_req, res): void => {
+  res.redirect(302, "/proxy/buy/register.html");
 });
 
 // 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
