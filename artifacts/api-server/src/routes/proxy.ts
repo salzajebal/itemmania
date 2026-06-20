@@ -760,8 +760,81 @@ function rewriteExternalLinks(html: string): string {
   return result;
 }
 
+/** 모든 페이지에 주입되는 전역 네비게이션 인터셉터 — window.open / location.assign 등 재정의 */
+const GLOBAL_NAV_INTERCEPTOR = `<script>
+(function(){
+'use strict';
+var ROUTE_MAP=[
+  ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
+  ['/myroom/chat/list.html','/proxy/myroom/chat/list.html'],
+  ['/myroom/chat/','/proxy/myroom/chat/list.html'],
+  ['/myroom/chat','/proxy/myroom/chat/list.html'],
+  ['/game_charge/','/proxy/game-charge'],
+  ['/game_charge','/proxy/game-charge'],
+  ['/portal/giftcard/','/proxy/giftcard'],
+  ['/portal/giftcard','/proxy/giftcard'],
+  ['/sell/list.html','/proxy/sell/list.html'],
+  ['/myroom/','/proxy/'],
+  ['/myroom','/proxy/'],
+  ['/','/proxy/'],
+];
+var IM_ORIGINS=[
+  'https://www.itemmania.com','http://www.itemmania.com',
+  'https://itemmania.com','http://itemmania.com',
+];
+var GM_ORIGINS=['https://www.gamemania.co.kr','http://www.gamemania.co.kr','https://gamemania.co.kr'];
+function rewrite(url){
+  if(!url||typeof url!=='string') return url;
+  var u=url.trim();
+  for(var g=0;g<GM_ORIGINS.length;g++) if(u.startsWith(GM_ORIGINS[g])) return '/proxy/gamemania';
+  for(var i=0;i<IM_ORIGINS.length;i++){
+    if(u.startsWith(IM_ORIGINS[i])){
+      var path=u.slice(IM_ORIGINS[i].length)||'/';
+      for(var r=0;r<ROUTE_MAP.length;r++){
+        if(path===ROUTE_MAP[r][0]||path.startsWith(ROUTE_MAP[r][0])){
+          return ROUTE_MAP[r][1]+(path.length>ROUTE_MAP[r][0].length?path.slice(ROUTE_MAP[r][0].length):'');
+        }
+      }
+      return '/proxy/';
+    }
+  }
+  return url;
+}
+/* window.open → 현재 탭 이동 */
+var _open=window.open;
+window.open=function(url,target,feat){
+  var rw=rewrite(url);
+  if(rw!==url){location.href=rw;return null;}
+  return _open?_open.call(window,url,target,feat):null;
+};
+/* location.assign / replace */
+try{
+  var _ass=location.assign.bind(location);
+  var _rep=location.replace.bind(location);
+  location.assign=function(u){_ass(rewrite(u));};
+  location.replace=function(u){_rep(rewrite(u));};
+}catch(e){}
+/* a[href] 전역 클릭 */
+document.addEventListener('click',function(e){
+  var a=e.target.closest&&e.target.closest('a[href]');
+  if(!a) return;
+  var h=a.getAttribute('href')||'';
+  var rw=rewrite(h);
+  if(rw!==h){e.preventDefault();e.stopImmediatePropagation();location.href=rw;}
+},true);
+})();
+</script>`;
+
 function prepare(html: string): string {
-  return rewriteExternalLinks(stripCsp(html));
+  const clean = rewriteExternalLinks(stripCsp(html));
+  // <head> 또는 문서 맨 앞에 전역 인터셉터 주입
+  if (clean.includes("<head>")) {
+    return clean.replace("<head>", "<head>" + GLOBAL_NAV_INTERCEPTOR);
+  }
+  if (clean.includes("<head ")) {
+    return clean.replace(/<head [^>]*>/, (m) => m + GLOBAL_NAV_INTERCEPTOR);
+  }
+  return GLOBAL_NAV_INTERCEPTOR + clean;
 }
 
 function serveItemmania(html: string): string {
