@@ -87,6 +87,7 @@ function loadSellHtml(filename: string): string {
   }
 }
 
+const buyLineageClassicHtml   = loadSellHtml("buy-lineage-classic.html");
 const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
@@ -715,6 +716,9 @@ function stripCsp(html: string): string {
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
   ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
+  ['https://www.itemmania.com/buy/list.html',                 '/proxy/buy/list.html'],
+  ['https://www.itemmania.com/buy/',                          '/proxy/buy/list.html'],
+  ['https://www.itemmania.com/buy',                           '/proxy/buy/list.html'],
   ['https://www.itemmania.com/myroom/chat/list.html',         '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat/',                  '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat',                   '/proxy/myroom/chat/list.html'],
@@ -769,6 +773,9 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
   ['/sell/application.html','/proxy/sell/application.html'],
+  ['/buy/list.html','/proxy/buy/list.html'],
+  ['/buy/','/proxy/buy/list.html'],
+  ['/buy','/proxy/buy/list.html'],
   ['/myroom/chat/list.html','/proxy/myroom/chat/list.html'],
   ['/myroom/chat/','/proxy/myroom/chat/list.html'],
   ['/myroom/chat','/proxy/myroom/chat/list.html'],
@@ -1127,6 +1134,86 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const BUY_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
+  }
+
+  function init() {
+    // 팝니다 탭 → 판매 목록으로 이동 (search_game 유지)
+    document.querySelectorAll('button[data-type="sell"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var params = new URLSearchParams(location.search);
+        var game = params.get('search_game') || '5913';
+        location.href = '/proxy/sell/list.html?search_game=' + game;
+      }, true);
+    });
+
+    // 채팅 버튼 (헤더) → 별도 창
+    var chatBtn = document.querySelector('#chat_notice button');
+    if (chatBtn) {
+      chatBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+      }, true);
+    }
+
+    // 헤더 로그인/로그아웃
+    var loginBtn = document.querySelector('.header-logins button');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/login';
+      }, true);
+    }
+
+    // 차단 마커 링크
+    document.body.addEventListener('click', function(e) {
+      var a = e.target.closest && e.target.closest('a[data-blocked]');
+      if (a) { e.preventDefault(); alert('해당 기능은 현재 준비 중입니다.'); }
+    });
+
+    // 로그인 상태 반영
+    api('GET', '/auth/me').then(function(data){
+      if (data && data.id) {
+        var loginsDiv = document.querySelector('.header-logins');
+        if (loginsDiv) {
+          loginsDiv.innerHTML =
+            '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
+            '<div class="divider"></div>' +
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+          document.getElementById('_im_logout_btn').addEventListener('click', function(){
+            api('POST', '/auth/logout').then(function(){ location.reload(); });
+          });
+        }
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
+function serveBuy(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", BUY_INTERCEPT_SCRIPT + "</body>")
+    : result + BUY_INTERCEPT_SCRIPT;
+}
+
 function serveApplication(html: string): string {
   const result = prepare(html);
   if (result.includes("</body>")) {
@@ -1248,6 +1335,23 @@ router.get("/proxy/sell/application.html", (req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   res.send(serveApplication(sellApplicationHtml));
+});
+
+// 삽니다 목록 페이지 (/buy/list.html?search_game=...)
+router.get("/proxy/buy/list.html", (req, res): void => {
+  if (!buyLineageClassicHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveBuy(buyLineageClassicHtml));
+});
+
+// 삽니다 목록 리다이렉트
+router.get(["/buy/list.html", "/buy/"], (req, res): void => {
+  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(302, `/proxy/buy/list.html${qs}`);
 });
 
 // 매니아 채팅 페이지
