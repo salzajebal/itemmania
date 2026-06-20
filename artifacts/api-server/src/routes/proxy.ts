@@ -620,30 +620,28 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
     // 로그인 팝업 함수 재무력화 (사이트 JS가 나중에 정의할 수 있으므로)
     loginFns.forEach(function(fn) { window[fn] = noop; });
 
-    // 로고 클릭 → 홈으로
+    // 로고 href 직접 rewrite (이벤트 핸들러 의존 안 함)
     var logoLink = document.querySelector('.header-logo a');
     if (logoLink) {
-      logoLink.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/';
-      }, true);
+      logoLink.setAttribute('href', '/proxy/');
+      logoLink.removeAttribute('target');
     }
 
-    // 네비 링크 인터셉트
-    var navLinks = document.querySelectorAll('.header-nav a');
-    navLinks.forEach(function(link) {
-      var text = (link.textContent || '').trim();
-      var map = {
-        '게임 할인충전': '/proxy/',
-        '상품권몰': '/proxy/giftcard',
-        '게임매니아': '/proxy/gamemania',
-        '마이룸': '/proxy/'
-      };
-      if (map[text]) {
-        link.addEventListener('click', function(e) {
-          e.preventDefault(); e.stopImmediatePropagation();
-          location.href = map[text];
-        }, true);
+    // 네비 링크 href 직접 rewrite (document capture 핸들러에 안 막히도록)
+    var navHrefMap = {
+      'game_charge':     '/proxy/game-charge',
+      'portal/giftcard': '/proxy/giftcard',
+      'gamemania.co.kr': '/proxy/gamemania',
+      'myroom':          '/proxy/'
+    };
+    document.querySelectorAll('.header-nav a').forEach(function(link) {
+      var href = link.getAttribute('href') || '';
+      for (var pattern in navHrefMap) {
+        if (href.indexOf(pattern) >= 0) {
+          link.setAttribute('href', navHrefMap[pattern]);
+          link.removeAttribute('target');
+          break;
+        }
       }
     });
 
@@ -656,7 +654,7 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
       }, true);
     }
 
-    // 기타 외부 링크 차단
+    // 기타 외부 링크 차단 (rewrite 안 된 http/https 링크만)
     document.addEventListener('click', function(e) {
       var a = e.target.closest('a');
       if (!a) return;
