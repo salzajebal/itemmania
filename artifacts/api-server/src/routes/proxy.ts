@@ -978,15 +978,17 @@ const CHAT_INTERCEPT_SCRIPT = `
       .catch(function() { return false; });
   }
 
-  // 마이룸 버튼 → 메인으로
   function initButtons() {
+    // 마이룸 버튼 → 메인으로
     var myroomBtn = document.querySelector('button.go_myroom');
     if (myroomBtn) {
       myroomBtn.addEventListener('click', function(e) {
         e.preventDefault();
-        location.href = '/proxy/';
+        window.close();
       });
     }
+
+    // 차단리스트
     var blockBtn = document.querySelector('button.block_list');
     if (blockBtn) {
       blockBtn.addEventListener('click', function(e) {
@@ -994,10 +996,43 @@ const CHAT_INTERCEPT_SCRIPT = `
         alert('차단리스트 기능은 준비 중입니다.');
       });
     }
-    // 차단 마커 링크
+
+    // 채팅종료 버튼
     document.body.addEventListener('click', function(e) {
-      var a = e.target.closest && e.target.closest('a[data-blocked]');
-      if (a) { e.preventDefault(); alert('해당 기능은 현재 준비 중입니다.'); }
+      var btn = e.target.closest && e.target.closest('button.chat_exit');
+      if (btn) {
+        e.preventDefault(); e.stopPropagation();
+        if (confirm('채팅을 종료하시겠습니까?')) {
+          var li = btn.closest('li.chat_list_item');
+          if (li) {
+            li.style.opacity = '0.4';
+            var stateEl = li.querySelector('.trade_state');
+            if (stateEl) { stateEl.textContent = '거래종료'; stateEl.className = 'trade_state end'; }
+          }
+        }
+      }
+    });
+
+    // 그룹보기 (expand/collapse)
+    document.body.addEventListener('click', function(e) {
+      var btn = e.target.closest && e.target.closest('button.chat_group_expand');
+      if (btn) {
+        e.preventDefault(); e.stopPropagation();
+        var li = btn.closest('li.chat_list_item');
+        if (li) {
+          li.classList.toggle('expand');
+          var subList = li.querySelector('.chat_sub_list');
+          if (subList) {
+            if (li.classList.contains('expand')) {
+              subList.style.height = 'auto';
+              btn.textContent = '그룹닫기';
+            } else {
+              subList.style.height = '0';
+              btn.textContent = '그룹보기';
+            }
+          }
+        }
+      }
     });
   }
 
