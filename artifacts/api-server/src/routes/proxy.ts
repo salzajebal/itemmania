@@ -259,6 +259,65 @@ const INTERCEPT_SCRIPT = `
     });
   };
 
+  // --- 전체서비스 패널 토글 ---
+  function initPanel() {
+    var panel = document.getElementById('headerMainPanel');
+    var menuBtn = document.querySelector('.header-menu');
+    if (!panel || !menuBtn) { setTimeout(initPanel, 200); return; }
+
+    // 패널 기본 숨김 (sf-hidden 대체)
+    panel.style.display = 'none';
+
+    function openPanel() {
+      panel.classList.add('is-open');
+      panel.style.display = '';
+      panel.setAttribute('aria-hidden', 'false');
+      menuBtn.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePanel() {
+      panel.classList.remove('is-open');
+      panel.style.display = 'none';
+      panel.setAttribute('aria-hidden', 'true');
+      menuBtn.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    }
+
+    // 3단바 버튼 클릭
+    menuBtn.addEventListener('click', function(e) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (panel.classList.contains('is-open')) { closePanel(); } else { openPanel(); }
+    }, true);
+
+    // 배경 클릭으로 닫기
+    panel.addEventListener('click', function(e) {
+      if (e.target.hasAttribute('data-header-panel-close') ||
+          e.target.classList.contains('header-panel-backdrop')) {
+        closePanel();
+      }
+    });
+
+    // ESC 키로 닫기
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && panel.classList.contains('is-open')) { closePanel(); }
+    });
+
+    // 패널 내부 외부 링크 차단
+    panel.addEventListener('click', function(e) {
+      var a = e.target.closest('a[href]');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.indexOf('itemmania.com') >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        closePanel();
+        if (!currentUser) { location.href = '/proxy/portal/user/p_login_form.html'; }
+      }
+    }, true);
+  }
+
+  initPanel();
+
   // --- 버튼 후킹 ---
   function hookButtons() {
     var loginsDiv = document.querySelector('.header-logins');
