@@ -858,6 +858,56 @@ function rewrite(url){
   }
   return url;
 }
+/* ── fetch / XHR 인터셉터: itemmania.com API 호출 → 우리 API로 대체 ── */
+var IM_API_ORIGINS=['https://www.itemmania.com','http://www.itemmania.com','https://itemmania.com','http://itemmania.com'];
+function isImOrigin(url){if(!url)return false;for(var i=0;i<IM_API_ORIGINS.length;i++)if(url.startsWith(IM_API_ORIGINS[i]))return true;return false;}
+function imPathOf(url){for(var i=0;i<IM_API_ORIGINS.length;i++)if(url.startsWith(IM_API_ORIGINS[i]))return url.slice(IM_API_ORIGINS[i].length);return url;}
+/* 우리 API로 요청 라우팅 */
+function proxyImFetch(url,init){
+  var path=imPathOf(url);
+  /* 상품 검색/목록 */
+  if(/\/(item|goods|product|search|list)/.test(path)){
+    var qs=path.includes('?')?path.slice(path.indexOf('?')):'';
+    var params=new URLSearchParams(qs);
+    var apiUrl='/api/products';
+    var q=params.get('keyword')||params.get('search')||params.get('q')||params.get('search_keyword')||'';
+    var game=params.get('search_game')||params.get('game_id')||params.get('game')||'';
+    var parts=[];
+    if(q) parts.push('search='+encodeURIComponent(q));
+    if(game) parts.push('gameId='+encodeURIComponent(game));
+    if(parts.length) apiUrl+='?'+parts.join('&');
+    return fetch(apiUrl,{credentials:'include'});
+  }
+  /* 로그인 상태 확인 */
+  if(/\/(session|auth|login|member|user)/.test(path)){
+    return fetch('/api/auth/me',{credentials:'include'});
+  }
+  /* 나머지 → 빈 JSON */
+  return Promise.resolve(new Response(JSON.stringify({result:'ok',data:[]}),{status:200,headers:{'Content-Type':'application/json'}}));
+}
+/* fetch override */
+var _origFetch=window.fetch;
+window.fetch=function(input,init){
+  var url=typeof input==='string'?input:(input&&input.url?input.url:'');
+  if(isImOrigin(url)) return proxyImFetch(url,init);
+  return _origFetch.apply(this,arguments);
+};
+/* XMLHttpRequest override */
+var _XHR=window.XMLHttpRequest;
+window.XMLHttpRequest=function(){
+  var xhr=new _XHR();
+  var _open2=xhr.open.bind(xhr);
+  var _captured={url:null,method:'GET'};
+  xhr.open=function(method,url){
+    _captured.method=method; _captured.url=url;
+    if(isImOrigin(url)){
+      _open2.call(xhr,method,'/api/products');
+      return;
+    }
+    return _open2.apply(xhr,arguments);
+  };
+  return xhr;
+};
 /* window.open → 현재 탭 이동 */
 var _open=window.open;
 window.open=function(url,target,feat){
