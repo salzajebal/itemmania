@@ -435,6 +435,15 @@ const INTERCEPT_SCRIPT = `
       }
     });
 
+    // 채팅 버튼 → 채팅 페이지로 이동
+    var chatBtn = document.querySelector('#chat_notice button[aria-label="채팅"], #chat_notice button');
+    if (chatBtn) {
+      chatBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/myroom/chat/list.html';
+      }, true);
+    }
+
     // 이미 로그인 여부 확인
     api('GET', '/auth/me').then(function(data){
       if (data && data.id) { currentUser = data; updateHeader(); }
