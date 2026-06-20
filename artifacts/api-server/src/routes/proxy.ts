@@ -491,22 +491,42 @@ const LOGIN_INTERCEPT_SCRIPT = `
       });
     }
 
-    // 아이디찾기/비밀번호찾기 외부 링크 차단
+    // 로고 href 먼저 교체 (itemmania.com 선택자에 안 걸리도록)
+    var logoLink = document.querySelector('.header-logo a');
+    if (logoLink) {
+      logoLink.setAttribute('href', '/proxy/');
+      logoLink.removeAttribute('target');
+      logoLink.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/proxy/';
+      }, true);
+    }
+
+    // 네비 링크도 교체
+    var loginNavMap = {
+      'game_charge':       '/proxy/game-charge',
+      'portal/giftcard':   '/proxy/giftcard',
+      'gamemania.co.kr':   '/proxy/gamemania',
+      'itemmania.com/myroom': '/proxy/'
+    };
+    document.querySelectorAll('.header-nav a').forEach(function(link) {
+      var href = link.getAttribute('href') || '';
+      for (var pattern in loginNavMap) {
+        if (href.indexOf(pattern) >= 0) {
+          link.setAttribute('href', loginNavMap[pattern]);
+          link.removeAttribute('target');
+          break;
+        }
+      }
+    });
+
+    // 아이디찾기/비밀번호찾기 외부 링크 차단 (로고/네비는 이미 rewrite됐으므로 안 걸림)
     document.querySelectorAll('a[href*="itemmania.com"]').forEach(function(a) {
       a.addEventListener('click', function(e) {
         e.preventDefault();
         alert('해당 기능은 현재 준비 중입니다.');
       });
     });
-
-    // 로고 클릭 → 홈으로
-    var logoLink = document.querySelector('.header-logo a');
-    if (logoLink) {
-      logoLink.addEventListener('click', function(e) {
-        e.preventDefault();
-        location.href = '/proxy/';
-      });
-    }
 
     // 헤더 로그인 버튼 → 현재 페이지 유지
     var headerLoginBtn = document.querySelector('.header-logins button');
