@@ -535,9 +535,59 @@ const LOGIN_INTERCEPT_SCRIPT = `
 `;
 
 const GIFTCARD_INTERCEPT_SCRIPT = `
+<style>
+/* 로그인 모달/오버레이 강제 숨김 */
+.g_layer:not(.all_menu_layer),
+.g_popup,
+.g_dim,
+[class*="login_layer"],
+[class*="login_modal"],
+[id*="login_layer"],
+[id*="login_pop"] {
+  display: none !important;
+}
+</style>
 <script>
 (function() {
+  // 로그인 팝업 함수 무력화
+  var noop = function() {};
+  var loginFns = ['g_login_open','loginOpen','openLogin','showLogin','login_popup','loginPopup','g_login_popup'];
+  loginFns.forEach(function(fn) { window[fn] = noop; });
+
+  // MutationObserver로 동적으로 추가되는 로그인 모달 차단
+  var observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(node) {
+        if (node.nodeType !== 1) return;
+        var el = node;
+        var cls = el.className || '';
+        var id  = el.id || '';
+        if (
+          (cls.includes('g_layer') && !cls.includes('all_menu_layer')) ||
+          cls.includes('g_popup') ||
+          cls.includes('g_dim') ||
+          id.toLowerCase().includes('login')
+        ) {
+          el.style.display = 'none';
+        }
+        // 자식 노드 중 로그인 모달도 처리
+        el.querySelectorAll && el.querySelectorAll('.g_layer:not(.all_menu_layer), .g_popup, .g_dim').forEach(function(child) {
+          child.style.display = 'none';
+        });
+      });
+    });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
   function init() {
+    // 이미 있는 모달 숨김
+    document.querySelectorAll('.g_layer:not(.all_menu_layer), .g_popup, .g_dim').forEach(function(el) {
+      el.style.display = 'none';
+    });
+
+    // 로그인 팝업 함수 재무력화 (사이트 JS가 나중에 정의할 수 있으므로)
+    loginFns.forEach(function(fn) { window[fn] = noop; });
+
     // 로고 클릭 → 홈으로
     var logoLink = document.querySelector('.header-logo a');
     if (logoLink) {
