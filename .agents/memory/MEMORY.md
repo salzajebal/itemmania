@@ -1,0 +1,3 @@
+- [Itemmania clone architecture](itemmania-arch.md) — proxy serves /proxy/* with cheerio injection; all auth/money on our Express server; never touch itemmania auth/payment flows.
+- [connect-pg-simple bundling](session-table.md) — createTableIfMissing breaks in esbuild bundles; pre-create user_sessions table via executeSql instead.
+- [Orval path+query collision](orval-collision.md) — having both path param AND query param on same route causes GetXxxParams TS2308 collision; remove query param from spec or rename operationId.
