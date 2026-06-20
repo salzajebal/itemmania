@@ -76,6 +76,40 @@ try {
   logger.error({ err: e }, "sell-maplestory-world.html 로드 실패");
 }
 
+function loadSellHtml(filename: string): string {
+  try {
+    const html = readFileSync(join(process.cwd(), "src", "static", filename), "utf-8");
+    logger.info(`${filename} 로드 완료`);
+    return html;
+  } catch (e) {
+    logger.error({ err: e }, `${filename} 로드 실패`);
+    return "";
+  }
+}
+
+const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
+const sellOdinHtml            = loadSellHtml("sell-odin.html");
+const sellMabinogiHtml        = loadSellHtml("sell-mabinogi.html");
+const sellLostarkHtml         = loadSellHtml("sell-lostark.html");
+const sellLineageMHtml        = loadSellHtml("sell-lineage-m.html");
+const sellGeosangHtml         = loadSellHtml("sell-geosang.html");
+const sellAion2Html           = loadSellHtml("sell-aion2.html");
+const sellDnfHtml             = loadSellHtml("sell-dnf.html");
+
+// game_id → html 매핑 (TOP 10)
+const SELL_HTML_MAP: Record<string, string> = {
+  "5913": "", // 리니지클래식 — 별도 변수로 처리
+  "5233": "", // 메이플스토리월드 — 별도 변수로 처리
+  "138":  sellMaplestoryHtml,
+  "4696": sellOdinHtml,
+  "155":  sellMabinogiHtml,
+  "2696": sellLostarkHtml,
+  "3449": sellLineageMHtml,
+  "101":  sellGeosangHtml,
+  "5799": sellAion2Html,
+  "281":  sellDnfHtml,
+};
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -871,42 +905,40 @@ router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], 
   res.send(serveGameCharge(gamechargeHtml));
 });
 
-// 게임별 상품 목록 페이지 — search_game 쿼리로 분기
-router.get(["/proxy/sell/list.html", "/proxy/sell/lineage-classic"], (req, res): void => {
-  const game = String(req.query["search_game"] ?? "");
-  if (game === "5233" && sellMaplestoryWorldHtml) {
+// 게임별 상품 목록 페이지 — search_game 쿼리로 분기 (TOP 10 전체)
+router.get(
+  ["/proxy/sell/list.html", "/proxy/sell/lineage-classic", "/proxy/sell/maplestory-world"],
+  (req, res): void => {
+    const game = String(req.query["search_game"] ?? "");
+
+    // 게임 ID → HTML 선택
+    let html: string;
+    if (game === "5913") {
+      html = sellLineageClassicHtml;
+    } else if (game === "5233") {
+      html = sellMaplestoryWorldHtml;
+    } else if (SELL_HTML_MAP[game]) {
+      html = SELL_HTML_MAP[game];
+    } else {
+      // search_game 없거나 알 수 없는 경우 → 리니지클래식을 기본
+      html = sellLineageClassicHtml;
+    }
+
+    if (!html) {
+      res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+      return;
+    }
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-cache");
-    res.send(serveLineageClassic(sellMaplestoryWorldHtml));
-    return;
+    res.send(serveLineageClassic(html));
   }
-  if (!sellLineageClassicHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
-    return;
-  }
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
-  res.send(serveLineageClassic(sellLineageClassicHtml));
-});
+);
 
-// 메이플스토리월드 상품 목록 페이지 (search_game=5233)
-router.get("/proxy/sell/maplestory-world", (req, res): void => {
-  if (!sellMaplestoryWorldHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
-    return;
-  }
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
-  res.send(serveLineageClassic(sellMaplestoryWorldHtml));
-});
-
-// 원본 경로 리다이렉트
+// 원본 경로 리다이렉트 — search_game 그대로 전달
 router.get("/sell/list.html", (req, res): void => {
   const game = req.query["search_game"];
-  if (game === "5913") {
-    res.redirect(302, "/proxy/sell/list.html?search_game=5913");
-  } else if (game === "5233") {
-    res.redirect(302, "/proxy/sell/maplestory-world");
+  if (game) {
+    res.redirect(302, `/proxy/sell/list.html?search_game=${game}`);
   } else {
     res.redirect(302, "/proxy/");
   }
