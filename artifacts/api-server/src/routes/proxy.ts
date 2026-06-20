@@ -26,6 +26,16 @@ try {
   logger.error({ err: e }, "login.html 로드 실패");
 }
 
+const GAMEMANIA_HTML_PATH = join(process.cwd(), "src", "static", "gamemania.html");
+let gamemanaHtml = "";
+
+try {
+  gamemanaHtml = readFileSync(GAMEMANIA_HTML_PATH, "utf-8");
+  logger.info("gamemania.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "gamemania.html 로드 실패");
+}
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
@@ -335,6 +345,17 @@ const INTERCEPT_SCRIPT = `
       }, true);
     }
 
+    // 게임매니아 네비 링크 → /proxy/gamemania
+    var navLinks = document.querySelectorAll('.header-nav a');
+    navLinks.forEach(function(link) {
+      if (link.textContent && link.textContent.trim() === '게임매니아') {
+        link.addEventListener('click', function(e){
+          e.preventDefault(); e.stopImmediatePropagation();
+          location.href = '/proxy/gamemania';
+        }, true);
+      }
+    });
+
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
@@ -498,6 +519,40 @@ const LOGIN_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const GAMEMANIA_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function init() {
+    // 로고 클릭 → 아이템매니아 홈으로
+    var logoLink = document.querySelector('.topNav-logo a');
+    if (logoLink) {
+      logoLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/proxy/';
+      });
+    }
+
+    // 모든 외부 링크 차단 (gamemania.co.kr, 기타)
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest('a');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.startsWith('http') || href.startsWith('//')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+`;
+
 function stripCsp(html: string): string {
   return html.replace(
     /<meta[^>]+http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi,
@@ -521,6 +576,14 @@ function serveLogin(html: string): string {
   return result + LOGIN_INTERCEPT_SCRIPT;
 }
 
+function serveGamemania(html: string): string {
+  let result = stripCsp(html);
+  if (result.includes("</body>")) {
+    return result.replace("</body>", GAMEMANIA_INTERCEPT_SCRIPT + "</body>");
+  }
+  return result + GAMEMANIA_INTERCEPT_SCRIPT;
+}
+
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
 router.get(
   ["/proxy/portal/user/p_login_form.html", "/proxy/login"],
@@ -534,6 +597,17 @@ router.get(
     res.send(serveLogin(loginHtml));
   }
 );
+
+// 게임매니아 페이지
+router.get("/proxy/gamemania", (req, res): void => {
+  if (!gamemanaHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveGamemania(gamemanaHtml));
+});
 
 // /proxy 및 나머지 하위 경로 → itemmania.html 서빙
 router.get(["/proxy", "/proxy/", "/proxy/{*splat}"], (req, res): void => {
