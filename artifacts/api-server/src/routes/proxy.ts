@@ -1192,8 +1192,28 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             var price = priceEl ? priceEl.value.trim() : '';
             var title = titleEl ? titleEl.value.trim() : '';
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
-            showToast('판매 등록이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+            if (!title) { showToast('상품명을 입력해주세요.', false); return; }
+            fetch('/api/products', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                title: title,
+                price: parseInt(price.replace(/[^0-9]/g, ''), 10),
+                gameName: game,
+                category: 'sell',
+                sellerName: d.nickname || d.email
+              })
+            })
+            .then(function(r) {
+              if (r.ok) {
+                showToast('판매 등록이 완료되었습니다!', true);
+                setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+              } else {
+                return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
+              }
+            })
+            .catch(function() { showToast('서버 오류가 발생했습니다.', false); });
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1268,9 +1288,33 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             }
             var priceEl = form.querySelector('[name=user_price]');
             var price = priceEl ? priceEl.value.trim() : '';
+            var titleEl2 = form.querySelector('[name=user_title],[name=title_name],[name=buy_title]');
+            var gameEl2 = form.querySelector('[name=searchGameServer],[name=game_name]');
+            var title2 = titleEl2 ? titleEl2.value.trim() : '';
+            var game2 = gameEl2 ? gameEl2.value.trim() : '';
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
-            showToast('구매 등록이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/buy/list.html'; }, 1800);
+            if (!title2) { showToast('구매 희망 아이템명을 입력해주세요.', false); return; }
+            fetch('/api/products', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                title: title2,
+                price: parseInt(price.replace(/[^0-9]/g, ''), 10),
+                gameName: game2,
+                category: 'buy',
+                sellerName: d.nickname || d.email
+              })
+            })
+            .then(function(r) {
+              if (r.ok) {
+                showToast('구매 등록이 완료되었습니다!', true);
+                setTimeout(function() { location.href = '/proxy/buy/list.html'; }, 1800);
+              } else {
+                return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
+              }
+            })
+            .catch(function() { showToast('서버 오류가 발생했습니다.', false); });
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });

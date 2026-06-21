@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, usersTable, ordersTable, withdrawalsTable, walletsTable } from "@workspace/db";
+import { eq, sql, desc } from "drizzle-orm";
+import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -137,6 +137,81 @@ router.patch("/admin/withdrawals/:id", requireAdmin, async (req, res): Promise<v
     processedAt: updated.processedAt,
     createdAt: updated.createdAt,
   });
+});
+
+// ── 상품 관리 ──────────────────────────────────────────────────────
+
+// 전체 상품 목록
+router.get("/admin/products", requireAdmin, async (req, res): Promise<void> => {
+  const products = await db.select().from(productsTable).orderBy(desc(productsTable.createdAt));
+  res.json(products.map(p => ({
+    id: p.id,
+    itemmaniaid: p.itemmaniaid,
+    title: p.title,
+    price: Number(p.price),
+    category: p.category,
+    gameName: p.gameName,
+    sellerName: p.sellerName,
+    description: p.description,
+    status: p.status,
+    createdAt: p.createdAt,
+  })));
+});
+
+// 상품 등록 (어드민)
+router.post("/admin/products", requireAdmin, async (req, res): Promise<void> => {
+  const { title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
+  if (!title || !price) {
+    res.status(400).json({ error: "title과 price는 필수입니다." });
+    return;
+  }
+  const priceNum = parseInt(String(price), 10);
+  if (isNaN(priceNum) || priceNum <= 0) {
+    res.status(400).json({ error: "price는 양수여야 합니다." });
+    return;
+  }
+  const itemmaniaid = `admin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const [inserted] = await db.insert(productsTable).values({
+    itemmaniaid,
+    title: String(title).trim(),
+    price: priceNum,
+    gameName: gameName ? String(gameName).trim() : null,
+    category: category ? String(category).trim() : "sell",
+    sellerName: sellerName ? String(sellerName).trim() : null,
+    description: description ? String(description).trim() : null,
+    status: "active",
+  }).returning();
+  res.status(201).json({ id: inserted.id, itemmaniaid: inserted.itemmaniaid, title: inserted.title });
+});
+
+// 상품 상태 변경 / 수정
+router.patch("/admin/products/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const { status, title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
+
+  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
+
+  const updates: Partial<typeof productsTable.$inferInsert> = {};
+  if (status && ["active","sold","inactive"].includes(status)) updates.status = status as "active"|"sold"|"inactive";
+  if (title) updates.title = String(title).trim();
+  if (price) { const n = parseInt(String(price), 10); if (!isNaN(n) && n > 0) updates.price = n; }
+  if (gameName !== undefined) updates.gameName = gameName ? String(gameName).trim() : null;
+  if (category) updates.category = String(category).trim();
+  if (description !== undefined) updates.description = description ? String(description).trim() : null;
+  if (sellerName !== undefined) updates.sellerName = sellerName ? String(sellerName).trim() : null;
+
+  const [updated] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
+  res.json({ id: updated.id, status: updated.status, title: updated.title });
+});
+
+// 상품 삭제
+router.delete("/admin/products/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
+  await db.delete(productsTable).where(eq(productsTable.id, id));
+  res.json({ ok: true });
 });
 
 export default router;

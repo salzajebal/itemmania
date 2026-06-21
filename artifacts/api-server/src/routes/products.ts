@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, like, and, sql } from "drizzle-orm";
+import { eq, like, and, sql, desc } from "drizzle-orm";
 import { db, productsTable } from "@workspace/db";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -18,6 +19,7 @@ function formatProduct(p: typeof productsTable.$inferSelect) {
     detailUrl: p.detailUrl,
     status: p.status,
     crawledAt: p.crawledAt,
+    createdAt: p.createdAt,
   };
 }
 
@@ -42,7 +44,7 @@ router.get("/products", async (req, res): Promise<void> => {
   const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(where);
-  const items = await db.select().from(productsTable).where(where).limit(limit).offset(offset);
+  const items = await db.select().from(productsTable).where(where).orderBy(desc(productsTable.createdAt)).limit(limit).offset(offset);
 
   res.json({
     items: items.map(formatProduct),
@@ -64,6 +66,40 @@ router.get("/products/:id", async (req, res): Promise<void> => {
   }
 
   res.json(formatProduct(product));
+});
+
+// 상품 등록 (로그인 필요)
+router.post("/products", requireAuth, async (req, res): Promise<void> => {
+  const { title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
+
+  if (!title || !price) {
+    res.status(400).json({ error: "title과 price는 필수입니다." });
+    return;
+  }
+
+  const priceNum = parseInt(String(price), 10);
+  if (isNaN(priceNum) || priceNum <= 0) {
+    res.status(400).json({ error: "price는 양수 정수여야 합니다." });
+    return;
+  }
+
+  const itemmaniaid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  const [inserted] = await db
+    .insert(productsTable)
+    .values({
+      itemmaniaid,
+      title: String(title).trim(),
+      price: priceNum,
+      gameName: gameName ? String(gameName).trim() : null,
+      category: category ? String(category).trim() : "sell",
+      sellerName: sellerName ? String(sellerName).trim() : null,
+      description: description ? String(description).trim() : null,
+      status: "active",
+    })
+    .returning();
+
+  res.status(201).json(formatProduct(inserted));
 });
 
 export default router;
