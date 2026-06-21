@@ -957,6 +957,64 @@ document.addEventListener('click',function(e){
   var rw=rewrite(h);
   if(rw!==h){e.preventDefault();e.stopImmediatePropagation();location.href=rw;}
 },true);
+/* ── location.href setter 인터셉터 ── */
+try{
+  var _locDesc=Object.getOwnPropertyDescriptor(Location.prototype,'href');
+  if(_locDesc&&_locDesc.set){
+    Object.defineProperty(Location.prototype,'href',{
+      get:_locDesc.get,
+      set:function(val){
+        var rw=rewrite(val);
+        _locDesc.set.call(this,rw);
+      },
+      configurable:true
+    });
+  }
+}catch(e){}
+/* ── history.pushState / replaceState 인터셉터 ── */
+try{
+  var _push=history.pushState.bind(history);
+  var _repl=history.replaceState.bind(history);
+  history.pushState=function(s,t,url){_push(s,t,url?rewrite(String(url)):url);};
+  history.replaceState=function(s,t,url){_repl(s,t,url?rewrite(String(url)):url);};
+}catch(e){}
+/* ── form submit 인터셉터 ── */
+document.addEventListener('submit',function(e){
+  var form=e.target;
+  if(!form||form.tagName!=='FORM') return;
+  var action=form.action||location.href;
+  var rw=rewrite(action);
+  if(rw!==action){
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    /* GET 폼: action 바꿔서 재제출 */
+    if((form.method||'get').toLowerCase()==='get'){
+      form.action=rw;
+      form.submit();
+    } else {
+      /* POST 폼 (검색 등): 쿼리 파라미터로 변환해서 GET 이동 */
+      var fd=new FormData(form);
+      var params=new URLSearchParams();
+      fd.forEach(function(v,k){params.set(k,String(v));});
+      var qs=params.toString();
+      location.href=rw+(qs?'?'+qs:'');
+    }
+  }
+},true);
+/* ── g_searchbar_form (게임 검색) 전용 처리 ── */
+document.addEventListener('submit',function(e){
+  var form=e.target;
+  if(!form||form.id!=='g_searchbar_form') return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  var inp=form.querySelector('input[name="searchGameServer"],input.search_gs_name');
+  var keyword=(inp&&inp.value)||'';
+  if(keyword){
+    location.href='/proxy/sell/list.html?search_word='+encodeURIComponent(keyword);
+  } else {
+    location.href='/proxy/';
+  }
+},true);
 })();
 </script>`;
 
