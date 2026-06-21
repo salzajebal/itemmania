@@ -736,62 +736,55 @@ function stripCsp(html: string): string {
   );
 }
 
-// 알려진 라우트 매핑 (구체적인 경로 우선)
-const PROXY_URL_MAP: [string, string][] = [
-  ['https://www.itemmania.com/portal/user/p_login_form.html', '/proxy/portal/user/p_login_form.html'],
-  ['https://www.itemmania.com/myroom/mileage/payment/payment_switch.html', '/proxy/myroom/mileage/payment/payment_list.html'],
-  ['https://www.itemmania.com/myroom/mileage/payment/payment_phone.html',  '/proxy/myroom/mileage/payment/payment_phone_list.html'],
-  ['https://www.itemmania.com/myroom/mileage/payment/payment_list.html',   '/proxy/myroom/mileage/payment/payment_list.html'],
-  ['https://www.itemmania.com/myroom/mileage/payment/payment_phone_list.html', '/proxy/myroom/mileage/payment/payment_phone_list.html'],
-  ['https://www.itemmania.com/myroom/batch_goods/index.html', '/proxy/myroom/batch_goods/index.html'],
-  ['https://www.itemmania.com/myroom/', '/proxy/myroom/index.html'],
-  ['https://www.itemmania.com/myroom',  '/proxy/myroom/index.html'],
-  ['https://www.itemmania.com/sell/application.html',         '/proxy/sell/application.html'],
-  ['https://www.itemmania.com/sell/new.html',                 '/proxy/sell/new.html'],
-  ['https://www.itemmania.com/sell/',                         '/proxy/sell/register.html'],
-  ['https://www.itemmania.com/sell',                          '/proxy/sell/register.html'],
-  ['https://www.itemmania.com/buy/register.html',             '/proxy/buy/register.html'],
-  ['https://www.itemmania.com/buy/application.html',          '/proxy/buy/application.html'],
-  ['https://www.itemmania.com/buy/list.html',                 '/proxy/buy/list.html'],
-  ['https://www.itemmania.com/buy/',                          '/proxy/buy/list.html'],
-  ['https://www.itemmania.com/buy',                           '/proxy/buy/list.html'],
-  ['https://www.itemmania.com/myroom/chat/new_chat.html',     '/proxy/myroom/chat/new_chat.html'],
-  ['https://www.itemmania.com/myroom/chat/list.html',         '/proxy/myroom/chat/list.html'],
-  ['https://www.itemmania.com/myroom/chat/',                  '/proxy/myroom/chat/list.html'],
-  ['https://www.itemmania.com/myroom/chat',                   '/proxy/myroom/chat/list.html'],
-  ['https://www.itemmania.com/game_charge/', '/proxy/game-charge'],
-  ['https://www.itemmania.com/game_charge',  '/proxy/game-charge'],
-  ['https://www.itemmania.com/portal/giftcard/', '/proxy/giftcard'],
-  ['https://www.itemmania.com/portal/giftcard',  '/proxy/giftcard'],
-  ['https://www.gamemania.co.kr/',  '/proxy/gamemania'],
-  ['https://www.gamemania.co.kr',   '/proxy/gamemania'],
-  ['https://www.itemmania.com/',    '/proxy/'],
-  ['https://www.itemmania.com',     '/proxy/'],
-];
+/**
+ * itemmania.com 경로를 /proxy/... 경로로 매핑 (더 구체적인 경로 우선)
+ * query string / fragment 보존
+ */
+function mapImPath(rawPath: string): string {
+  const path = rawPath || '/';
+  const qi = path.indexOf('?');
+  const hi = path.indexOf('#');
+  const end = qi >= 0 ? qi : (hi >= 0 ? hi : path.length);
+  const base = path.slice(0, end);
+  const qs   = path.slice(end);
+
+  if (base.startsWith('/portal/user/p_login_form'))              return '/proxy/portal/user/p_login_form.html' + qs;
+  if (base.startsWith('/sell/list'))                             return '/proxy/sell/list.html' + qs;
+  if (base.startsWith('/sell/application'))                      return '/proxy/sell/application.html' + qs;
+  if (base.startsWith('/sell/new'))                              return '/proxy/sell/new.html' + qs;
+  if (base === '/sell' || base === '/sell/')                     return '/proxy/sell/register.html';
+  if (base.startsWith('/sell/'))                                 return '/proxy/sell/list.html' + qs;
+  if (base.startsWith('/buy/register'))                          return '/proxy/buy/register.html' + qs;
+  if (base.startsWith('/buy/application'))                       return '/proxy/buy/application.html' + qs;
+  if (base.startsWith('/buy/list'))                              return '/proxy/buy/list.html' + qs;
+  if (base === '/buy' || base === '/buy/')                       return '/proxy/buy/list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_phone_list')) return '/proxy/myroom/mileage/payment/payment_phone_list.html' + qs;
+  if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/proxy/myroom/mileage/payment/payment_phone_list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/proxy/myroom/mileage/payment/payment_list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_list'))   return '/proxy/myroom/mileage/payment/payment_list.html' + qs;
+  if (base.startsWith('/myroom/batch_goods'))                    return '/proxy/myroom/batch_goods/index.html';
+  if (base.startsWith('/myroom/chat/new_chat'))                  return '/proxy/myroom/chat/new_chat.html';
+  if (base.startsWith('/myroom/chat/list'))                      return '/proxy/myroom/chat/list.html' + qs;
+  if (base.startsWith('/myroom/chat'))                           return '/proxy/myroom/chat/list.html';
+  if (base === '/myroom' || base === '/myroom/')                 return '/proxy/myroom/index.html';
+  if (base.startsWith('/game_charge'))                           return '/proxy/game-charge';
+  if (base.startsWith('/portal/giftcard'))                       return '/proxy/giftcard';
+  if (base === '/' || base === '')                               return '/proxy/';
+  // 알 수 없는 경로: /proxy/ 하위로 보냄 (Express 404 또는 302 처리)
+  return '/proxy' + (base.startsWith('/') ? base : '/' + base) + qs;
+}
 
 /** HTML 전체(JS 문자열 포함)에서 외부 도메인을 제거/치환 */
 function rewriteExternalLinks(html: string): string {
   let result = html;
 
-  // Step 1: 알려진 라우트 전체 URL → 프록시 경로 (split/join = 전역 치환, unquoted 포함)
-  for (const [from, to] of PROXY_URL_MAP) {
-    result = result.split(from).join(to);
-  }
+  // itemmania.com 모든 URL → /proxy/... (regex 기반, query string 보존)
+  result = result.replace(
+    /https?:\/\/(?:www\.|m\.|ssadaprice\.)?itemmania\.com([^"'\s<>\u0022\u0027]*)/g,
+    (_match: string, path: string) => mapImPath(path)
+  );
 
-  // Step 2: 남은 itemmania.com 서브도메인 제거 (→ 상대경로로 변환)
-  for (const host of [
-    'https://img1.itemmania.com',
-    'https://m.itemmania.com',
-    'https://ssadaprice.itemmania.com',
-    'https://www.itemmania.com',
-    'http://www.itemmania.com',
-    'https://itemmania.com',
-    'http://itemmania.com',
-  ]) {
-    result = result.split(host).join('');
-  }
-
-  // Step 3: gamemania.co.kr → 프록시 경로
+  // gamemania.co.kr → 프록시 경로
   for (const host of [
     'https://www.gamemania.co.kr',
     'http://www.gamemania.co.kr',
@@ -809,13 +802,14 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 'use strict';
 var ROUTE_MAP=[
   ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
+  ['/myroom/mileage/payment/payment_phone_list.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/mileage/payment/payment_switch.html','/proxy/myroom/mileage/payment/payment_list.html'],
   ['/myroom/mileage/payment/payment_phone.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/mileage/payment/payment_list.html','/proxy/myroom/mileage/payment/payment_list.html'],
-  ['/myroom/mileage/payment/payment_phone_list.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/batch_goods/index.html','/proxy/myroom/batch_goods/index.html'],
   ['/sell/application.html','/proxy/sell/application.html'],
   ['/sell/new.html','/proxy/sell/new.html'],
+  ['/sell/list.html','/proxy/sell/list.html'],
   ['/sell/','/proxy/sell/register.html'],
   ['/sell','/proxy/sell/register.html'],
   ['/buy/register.html','/proxy/buy/register.html'],
@@ -831,7 +825,6 @@ var ROUTE_MAP=[
   ['/game_charge','/proxy/game-charge'],
   ['/portal/giftcard/','/proxy/giftcard'],
   ['/portal/giftcard','/proxy/giftcard'],
-  ['/sell/list.html','/proxy/sell/list.html'],
   ['/myroom/','/proxy/myroom/index.html'],
   ['/myroom','/proxy/myroom/index.html'],
   ['/','/proxy/'],
