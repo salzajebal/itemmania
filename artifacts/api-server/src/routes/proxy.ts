@@ -1069,9 +1069,16 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
       email: usersTable.email,
       nickname: usersTable.nickname,
       role: usersTable.role,
+      authStates: usersTable.authStates,
     }).from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return null;
-    return { id: user.id, email: user.email, nickname: user.nickname, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      nickname: user.nickname,
+      role: user.role,
+      authStates: user.authStates ?? { excellent: false, phone: false, email: false, ipin: false, withdraw: false },
+    };
   } catch {
     return null;
   }
@@ -1606,6 +1613,14 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
 `;
 
 const MYROOM_INTERCEPT_SCRIPT = `
+<style>
+/* 인증 배지 비활성 상태 */
+.im-auth-disabled {
+  filter: grayscale(100%) opacity(0.38) !important;
+  cursor: default !important;
+  pointer-events: none !important;
+}
+</style>
 <script>
 (function() {
   function showToast(msg, ok) {
@@ -1616,6 +1631,26 @@ const MYROOM_INTERCEPT_SCRIPT = `
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function applyAuthBadges(authStates) {
+    var auth = authStates || {};
+    var map = [
+      { key: 'excellent', sel: '.cert_excellent_on, .cert_excellent' },
+      { key: 'phone',     sel: '.cert_hp_on, .cert_hp' },
+      { key: 'email',     sel: '.cert_email_on, .cert_email' },
+      { key: 'ipin',      sel: '.cert_ipin_on, .cert_ipin' },
+      { key: 'withdraw',  sel: '.cert_account_on, .cert_account' },
+    ];
+    map.forEach(function(item) {
+      var el = document.querySelector(item.sel);
+      if (!el) return;
+      if (auth[item.key]) {
+        el.classList.remove('im-auth-disabled');
+      } else {
+        el.classList.add('im-auth-disabled');
+      }
+    });
   }
 
   function init() {
@@ -1679,6 +1714,8 @@ const MYROOM_INTERCEPT_SCRIPT = `
               el.textContent = Number(b.balance || 0).toLocaleString('ko-KR') + '원';
             });
           });
+        // 인증 배지 상태 반영
+        applyAuthBadges(d.authStates);
       });
   }
 

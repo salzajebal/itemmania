@@ -62,8 +62,13 @@ tbody tr:hover{background:#fafbff}
 .action-btn.reject{background:#fee;color:#c53030}.action-btn.reject:hover{background:#fcc}
 .action-btn.delete{background:#fee;color:#c53030}.action-btn.delete:hover{background:#fcc}
 .action-btn.edit{background:#edf8ff;color:#0e8de0}.action-btn.edit:hover{background:#bee3f8}
+.action-btn.auth{background:#f0f4ff;color:#5a5fc7}.action-btn.auth:hover{background:#dde3ff}
 .action-btn:disabled{opacity:.4;cursor:not-allowed}
 .empty-row td{text-align:center;color:#aaa;padding:32px}
+.auth-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.auth-item{display:flex;align-items:center;gap:6px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:border .2s;user-select:none}
+.auth-item:hover{border-color:#159EFD}
+.auth-item input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#159EFD}
 /* 모달 */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -156,8 +161,8 @@ tbody tr:hover{background:#fafbff}
           <button class="refresh-btn" onclick="loadUsers()">↻ 새로고침</button>
         </div>
         <table>
-          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th><th>관리</th></tr></thead>
-          <tbody id="usersBody"><tr class="empty-row"><td colspan="8">로딩 중...</td></tr></tbody>
+          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th><th>인증</th><th>관리</th></tr></thead>
+          <tbody id="usersBody"><tr class="empty-row"><td colspan="9">로딩 중...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -236,6 +241,25 @@ tbody tr:hover{background:#fafbff}
     <div class="modal-btns">
       <button class="cancel-btn" onclick="closeProductModal()">취소</button>
       <button class="save-btn" id="modalSaveBtn" onclick="saveProduct()">등록</button>
+    </div>
+  </div>
+</div>
+
+<!-- 인증상태 모달 -->
+<div class="modal-overlay" id="authModal" onclick="if(event.target===this)closeAuthModal()">
+  <div class="modal">
+    <h2>인증상태 관리 — <span id="authModalNick" style="color:#159EFD"></span></h2>
+    <p style="font-size:13px;color:#888;margin-top:-12px;margin-bottom:16px">체크 = 인증 완료 (배지 활성), 미체크 = 미인증 (배지 회색)</p>
+    <div class="auth-grid">
+      <label class="auth-item"><input type="checkbox" id="authExcellent"> 🏅 우수인증</label>
+      <label class="auth-item"><input type="checkbox" id="authPhone"> 📱 휴대폰</label>
+      <label class="auth-item"><input type="checkbox" id="authEmail"> 📧 이메일</label>
+      <label class="auth-item"><input type="checkbox" id="authIpin"> 🪪 아이핀</label>
+      <label class="auth-item"><input type="checkbox" id="authWithdraw"> 🏦 출금계좌</label>
+    </div>
+    <div class="modal-btns">
+      <button class="cancel-btn" onclick="closeAuthModal()">취소</button>
+      <button class="save-btn" id="authSaveBtn" onclick="saveAuthStates()">저장</button>
     </div>
   </div>
 </div>
@@ -409,16 +433,17 @@ async function deleteProduct(id){
 // ── 회원 ─────────────────────────────────────────────────
 async function loadUsers(){
   var tbody=document.getElementById('usersBody');
-  tbody.innerHTML='<tr class="empty-row"><td colspan="7">로딩 중...</td></tr>';
+  tbody.innerHTML='<tr class="empty-row"><td colspan="9">로딩 중...</td></tr>';
   try{
     var r=await fetch('/api/admin/users',{credentials:'include'});
     var users=await r.json();
     document.getElementById('statUsers').textContent=users.length;
-    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">회원이 없습니다</td></tr>';return;}
+    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="9">회원이 없습니다</td></tr>';return;}
     tbody.innerHTML=users.map(function(u){
       var delBtn=u.role!=='admin'
         ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
         :'-';
+      var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증 관리</button>';
       return '<tr>'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
@@ -427,10 +452,11 @@ async function loadUsers(){
         +'<td><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
         +'<td>'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
+        +'<td>'+authBtn+'</td>'
         +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="9">오류 발생</td></tr>';}
 }
 
 async function deleteUser(id){
@@ -442,6 +468,59 @@ async function deleteUser(id){
     showToast('🗑 회원이 삭제되었습니다');
     loadUsers();
   }catch(e){showToast('서버 오류');}
+}
+
+// ── 인증상태 ───────────────────────────────────────────────
+var authModalUserId=null;
+
+async function openAuthModal(id,nickname){
+  authModalUserId=id;
+  document.getElementById('authModalNick').textContent=nickname;
+  document.getElementById('authExcellent').checked=false;
+  document.getElementById('authPhone').checked=false;
+  document.getElementById('authEmail').checked=false;
+  document.getElementById('authIpin').checked=false;
+  document.getElementById('authWithdraw').checked=false;
+  document.getElementById('authModal').classList.add('open');
+  try{
+    var r=await fetch('/api/admin/users/'+id+'/auth-states',{credentials:'include'});
+    if(!r.ok){showToast('인증 정보 로딩 실패');return;}
+    var d=await r.json();
+    document.getElementById('authExcellent').checked=!!d.excellent;
+    document.getElementById('authPhone').checked=!!d.phone;
+    document.getElementById('authEmail').checked=!!d.email;
+    document.getElementById('authIpin').checked=!!d.ipin;
+    document.getElementById('authWithdraw').checked=!!d.withdraw;
+  }catch(e){showToast('서버 오류');}
+}
+
+function closeAuthModal(){
+  document.getElementById('authModal').classList.remove('open');
+  authModalUserId=null;
+}
+
+async function saveAuthStates(){
+  if(!authModalUserId)return;
+  var btn=document.getElementById('authSaveBtn');
+  btn.disabled=true;
+  var body={
+    excellent:document.getElementById('authExcellent').checked,
+    phone:document.getElementById('authPhone').checked,
+    email:document.getElementById('authEmail').checked,
+    ipin:document.getElementById('authIpin').checked,
+    withdraw:document.getElementById('authWithdraw').checked
+  };
+  try{
+    var r=await fetch('/api/admin/users/'+authModalUserId+'/auth-states',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify(body)
+    });
+    if(!r.ok){var d=await r.json();showToast('오류: '+(d.error||'저장 실패'));btn.disabled=false;return;}
+    showToast('✅ 인증상태가 저장되었습니다');
+    closeAuthModal();
+  }catch(e){showToast('서버 오류');btn.disabled=false;}
 }
 
 // ── 주문 ─────────────────────────────────────────────────

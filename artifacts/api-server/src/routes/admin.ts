@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc } from "drizzle-orm";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable } from "@workspace/db";
+import type { AuthStates } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -137,6 +138,34 @@ router.patch("/admin/withdrawals/:id", requireAdmin, async (req, res): Promise<v
     processedAt: updated.processedAt,
     createdAt: updated.createdAt,
   });
+});
+
+// 인증상태 조회
+router.get("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const [user] = await db.select({ authStates: usersTable.authStates }).from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+  res.json(user.authStates ?? { excellent: false, phone: false, email: false, ipin: false, withdraw: false });
+});
+
+// 인증상태 수정
+router.put("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const { excellent, phone, email, ipin, withdraw } = req.body as Record<string, boolean>;
+  const authStates: AuthStates = {
+    excellent: !!excellent,
+    phone: !!phone,
+    email: !!email,
+    ipin: !!ipin,
+    withdraw: !!withdraw,
+  };
+  const [updated] = await db
+    .update(usersTable)
+    .set({ authStates })
+    .where(eq(usersTable.id, id))
+    .returning({ id: usersTable.id });
+  if (!updated) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+  res.json(authStates);
 });
 
 // 회원 삭제
