@@ -604,6 +604,18 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
 [id*="login_pop"] {
   display: none !important;
 }
+/* 캐러셀이 g_container min-height를 height:100%로 상속해 공백 발생 → 수정 */
+.carousel_module { height: auto !important; }
+.carousel_module > .banner_in > .banner_item .carousel_images {
+  position: static !important;
+  left: auto !important;
+  transform: none !important;
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.center_banner > .banner_item > a { height: auto !important; }
 </style>
 <script>
 (function() {
