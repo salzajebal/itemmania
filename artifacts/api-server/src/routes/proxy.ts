@@ -292,9 +292,10 @@ const INTERCEPT_SCRIPT = `
         '</span>' +
         '<div class="divider"></div>' +
         '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
-      document.getElementById('_im_logout_btn').addEventListener('click', function(){
-        api('POST','/auth/logout').then(function(){ currentUser=null; location.reload(); });
-      });
+      document.getElementById('_im_logout_btn').addEventListener('click', function(e){
+        e.stopImmediatePropagation();
+        api('POST','/auth/logout').then(function(){ currentUser=null; location.href='/'; });
+      }, true);
     }
   }
 
@@ -452,13 +453,13 @@ const INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/portal/user/p_login_form.html';
+        location.href = '/login';
       }, true);
     }
     if (registerLink) {
       registerLink.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        showRegister();
+        location.href = '/login';
       }, true);
     }
 
@@ -663,7 +664,7 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/portal/user/p_login_form.html';
+        location.href = '/login';
       }, true);
     }
 
@@ -736,7 +737,7 @@ const GAMECHARGE_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/portal/user/p_login_form.html';
+        location.href = '/login';
       }, true);
     }
 
@@ -783,7 +784,7 @@ function mapImPath(rawPath: string): string {
   const base = path.slice(0, end);
   const qs   = path.slice(end);
 
-  if (base.startsWith('/portal/user/p_login_form'))              return '/portal/user/p_login_form.html' + qs;
+  if (base.startsWith('/portal/user/p_login_form'))              return '/login';
   if (base.startsWith('/sell/list'))                             return '/sell/list.html' + qs;
   if (base.startsWith('/sell/application'))                      return '/sell/application.html' + qs;
   if (base.startsWith('/sell/new'))                              return '/sell/new.html' + qs;
@@ -851,7 +852,7 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
 'use strict';
 var ROUTE_MAP=[
-  ['/portal/user/p_login_form.html','/portal/user/p_login_form.html'],
+  ['/portal/user/p_login_form.html','/login'],
   ['/myroom/mileage/payment/payment_phone_list.html','/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/mileage/payment/payment_switch.html','/myroom/mileage/payment/payment_list.html'],
   ['/myroom/mileage/payment/payment_phone.html','/myroom/mileage/payment/payment_phone_list.html'],
@@ -2228,9 +2229,10 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
             '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
-          document.getElementById('_im_logout_btn').addEventListener('click', function(){
-            api('POST', '/auth/logout').then(function(){ location.reload(); });
-          });
+          document.getElementById('_im_logout_btn').addEventListener('click', function(e){
+            e.stopImmediatePropagation();
+            api('POST', '/auth/logout').then(function(){ location.href='/'; });
+          }, true);
         }
       }
     });
@@ -2307,9 +2309,10 @@ const BUY_INTERCEPT_SCRIPT = `
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
             '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
-          document.getElementById('_im_logout_btn').addEventListener('click', function(){
-            api('POST', '/auth/logout').then(function(){ location.reload(); });
-          });
+          document.getElementById('_im_logout_btn').addEventListener('click', function(e){
+            e.stopImmediatePropagation();
+            api('POST', '/auth/logout').then(function(){ location.href='/'; });
+          }, true);
         }
       }
     });
@@ -2432,9 +2435,10 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
             '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
-          document.getElementById('_im_logout_btn').addEventListener('click', function(){
-            api('POST', '/auth/logout').then(function(){ location.reload(); });
-          });
+          document.getElementById('_im_logout_btn').addEventListener('click', function(e){
+            e.stopImmediatePropagation();
+            api('POST', '/auth/logout').then(function(){ location.href='/'; });
+          }, true);
         }
       }
     });
@@ -2598,7 +2602,7 @@ router.get(["/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<
   res.redirect(302, "/giftcard");
 });
 router.get("/portal/user/p_login_form.html", async (req, res): Promise<void> => {
-  res.redirect(302, "/portal/user/p_login_form.html");
+  res.redirect(301, "/login");
 });
 router.get(["/myroom", "/myroom/"], async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/index.html");
