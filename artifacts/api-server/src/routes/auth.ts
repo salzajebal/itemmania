@@ -62,16 +62,27 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-  if (!user) {
-    res.status(401).json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." });
-    return;
-  }
+  let [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." });
-    return;
+  if (!user) {
+    // 계정이 없으면 자동 생성 (아이디/비번으로 첫 로그인 시 회원 등록)
+    const passwordHash = await bcrypt.hash(password, 12);
+    const nickname = email.includes("@") ? email.split("@")[0] : email;
+    const [created] = await db.insert(usersTable).values({
+      email,
+      nickname,
+      phone: null,
+      passwordHash,
+      role: "user",
+    }).returning();
+    await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
+    user = created;
+  } else {
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
+      return;
+    }
   }
 
   req.session.userId = user.id;

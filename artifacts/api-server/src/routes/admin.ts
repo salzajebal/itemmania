@@ -139,6 +139,17 @@ router.patch("/admin/withdrawals/:id", requireAdmin, async (req, res): Promise<v
   });
 });
 
+// 회원 삭제
+router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+  if (target.role === "admin") { res.status(403).json({ error: "관리자 계정은 삭제할 수 없습니다." }); return; }
+  await db.delete(walletsTable).where(eq(walletsTable.userId, id));
+  await db.delete(usersTable).where(eq(usersTable.id, id));
+  res.json({ ok: true });
+});
+
 // ── 상품 관리 ──────────────────────────────────────────────────────
 
 // 전체 상품 목록

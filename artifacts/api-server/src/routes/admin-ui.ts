@@ -156,8 +156,8 @@ tbody tr:hover{background:#fafbff}
           <button class="refresh-btn" onclick="loadUsers()">↻ 새로고침</button>
         </div>
         <table>
-          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th></tr></thead>
-          <tbody id="usersBody"><tr class="empty-row"><td colspan="7">로딩 중...</td></tr></tbody>
+          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th><th>관리</th></tr></thead>
+          <tbody id="usersBody"><tr class="empty-row"><td colspan="8">로딩 중...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -414,8 +414,11 @@ async function loadUsers(){
     var r=await fetch('/api/admin/users',{credentials:'include'});
     var users=await r.json();
     document.getElementById('statUsers').textContent=users.length;
-    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">회원이 없습니다</td></tr>';return;}
+    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">회원이 없습니다</td></tr>';return;}
     tbody.innerHTML=users.map(function(u){
+      var delBtn=u.role!=='admin'
+        ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
+        :'-';
       return '<tr>'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
@@ -424,9 +427,21 @@ async function loadUsers(){
         +'<td><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
         +'<td>'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
+        +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="7">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">오류 발생</td></tr>';}
+}
+
+async function deleteUser(id){
+  if(!confirm('이 회원을 삭제하시겠습니까? 지갑 데이터도 함께 삭제됩니다.'))return;
+  try{
+    var r=await fetch('/api/admin/users/'+id,{method:'DELETE',credentials:'include'});
+    var d=await r.json();
+    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
+    showToast('🗑 회원이 삭제되었습니다');
+    loadUsers();
+  }catch(e){showToast('서버 오류');}
 }
 
 // ── 주문 ─────────────────────────────────────────────────
