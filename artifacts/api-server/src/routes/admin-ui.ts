@@ -470,8 +470,8 @@ async function loadWithdrawals(){
     tbody.innerHTML=wds.map(function(w){
       var sl={pending:'대기중',approved:'승인됨',rejected:'거절됨'}[w.status]||w.status;
       var actions=w.status==='pending'
-        ?'<button class="action-btn approve" onclick="processWd('+w.id+',\'approved\')">승인</button>'
-          +'<button class="action-btn reject" onclick="processWd('+w.id+',\'rejected\')">거절</button>'
+        ?'<button class="action-btn approve" onclick="processWd('+w.id+',\\'approved\\')">승인</button>'
+          +'<button class="action-btn reject" onclick="processWd('+w.id+',\\'rejected\\')">거절</button>'
         :'-';
       return '<tr id="wd-'+w.id+'">'
         +'<td>'+w.id+'</td><td>'+w.userId+'</td>'
