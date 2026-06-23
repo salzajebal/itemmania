@@ -377,12 +377,18 @@ const INTERCEPT_SCRIPT = `
     var menuBtn = document.querySelector('.header-menu');
     if (!panel || !menuBtn) { setTimeout(initPanel, 200); return; }
 
-    // 패널 기본 숨김 (sf-hidden 대체)
-    panel.style.display = 'none';
+    // 패널 초기화: 항상 닫힌 상태로 강제 설정 (is-open이 붙은 채로 저장된 스냅샷 대비)
+    panel.classList.remove('is-open');
+    panel.removeAttribute('aria-hidden');
+    panel.setAttribute('aria-hidden', 'true');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    panel.style.visibility = 'hidden';
+    panel.style.pointerEvents = 'none';
 
     function openPanel() {
       panel.classList.add('is-open');
-      panel.style.display = '';
+      panel.style.visibility = '';
+      panel.style.pointerEvents = '';
       panel.setAttribute('aria-hidden', 'false');
       menuBtn.setAttribute('aria-expanded', 'true');
       document.body.style.overflow = 'hidden';
@@ -390,7 +396,8 @@ const INTERCEPT_SCRIPT = `
 
     function closePanel() {
       panel.classList.remove('is-open');
-      panel.style.display = 'none';
+      panel.style.visibility = 'hidden';
+      panel.style.pointerEvents = 'none';
       panel.setAttribute('aria-hidden', 'true');
       menuBtn.setAttribute('aria-expanded', 'false');
       document.body.style.overflow = '';
