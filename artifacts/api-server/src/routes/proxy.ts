@@ -427,7 +427,7 @@ const INTERCEPT_SCRIPT = `
       var a = e.target.closest('a[href]');
       if (!a) return;
       var href = a.getAttribute('href') || '';
-      if (href.startsWith('/proxy/')) { closePanel(); }
+      if (href.startsWith('/')) { closePanel(); }
     });
   }
 
@@ -450,7 +450,7 @@ const INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/portal/user/p_login_form.html';
+        location.href = '/portal/user/p_login_form.html';
       }, true);
     }
     if (registerLink) {
@@ -473,7 +473,7 @@ const INTERCEPT_SCRIPT = `
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     }
 
@@ -535,7 +535,7 @@ const LOGIN_INTERCEPT_SCRIPT = `
           var data = await res.json();
           if (res.ok) {
             var returnUrl = new URLSearchParams(location.search).get('returnUrl');
-            location.href = returnUrl ? '/proxy/' : '/proxy/';
+            location.href = returnUrl ? '/' : '/';
           } else {
             showError(data.error || '아이디 또는 비밀번호가 올바르지 않습니다.');
             if (btn) btn.disabled = false;
@@ -576,7 +576,7 @@ const LOGIN_INTERCEPT_SCRIPT = `
       joinLink.addEventListener('click', function(e) {
         e.preventDefault();
         alert('회원가입은 메인 페이지에서 이용해주세요.');
-        location.href = '/proxy/';
+        location.href = '/';
       });
     }
   }
@@ -649,7 +649,7 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/portal/user/p_login_form.html';
+        location.href = '/portal/user/p_login_form.html';
       }, true);
     }
 
@@ -708,7 +708,7 @@ const GAMECHARGE_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/portal/user/p_login_form.html';
+        location.href = '/portal/user/p_login_form.html';
       }, true);
     }
 
@@ -744,7 +744,7 @@ function stripCsp(html: string): string {
 }
 
 /**
- * itemmania.com 경로를 /proxy/... 경로로 매핑 (더 구체적인 경로 우선)
+ * itemmania.com 경로를 /... 경로로 매핑 (더 구체적인 경로 우선)
  * query string / fragment 보존
  */
 function mapImPath(rawPath: string): string {
@@ -755,37 +755,37 @@ function mapImPath(rawPath: string): string {
   const base = path.slice(0, end);
   const qs   = path.slice(end);
 
-  if (base.startsWith('/portal/user/p_login_form'))              return '/proxy/portal/user/p_login_form.html' + qs;
-  if (base.startsWith('/sell/list'))                             return '/proxy/sell/list.html' + qs;
-  if (base.startsWith('/sell/application'))                      return '/proxy/sell/application.html' + qs;
-  if (base.startsWith('/sell/new'))                              return '/proxy/sell/new.html' + qs;
-  if (base === '/sell' || base === '/sell/')                     return '/proxy/sell/register.html';
-  if (base.startsWith('/sell/'))                                 return '/proxy/sell/list.html' + qs;
-  if (base.startsWith('/buy/register'))                          return '/proxy/buy/register.html' + qs;
-  if (base.startsWith('/buy/application'))                       return '/proxy/buy/application.html' + qs;
-  if (base.startsWith('/buy/list'))                              return '/proxy/buy/list.html' + qs;
-  if (base === '/buy' || base === '/buy/')                       return '/proxy/buy/list.html';
-  if (base.startsWith('/myroom/mileage/payment/payment_phone_list')) return '/proxy/myroom/mileage/payment/payment_phone_list.html' + qs;
-  if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/proxy/myroom/mileage/payment/payment_phone_list.html';
-  if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/proxy/myroom/mileage/payment/payment_list.html';
-  if (base.startsWith('/myroom/mileage/payment/payment_list'))   return '/proxy/myroom/mileage/payment/payment_list.html' + qs;
-  if (base.startsWith('/myroom/batch_goods'))                    return '/proxy/myroom/batch_goods/index.html';
-  if (base.startsWith('/myroom/chat/new_chat'))                  return '/proxy/myroom/chat/new_chat.html';
-  if (base.startsWith('/myroom/chat/list'))                      return '/proxy/myroom/chat/list.html' + qs;
-  if (base.startsWith('/myroom/chat'))                           return '/proxy/myroom/chat/list.html';
-  if (base === '/myroom' || base === '/myroom/')                 return '/proxy/myroom/index.html';
-  if (base.startsWith('/game_charge'))                           return '/proxy/game-charge';
-  if (base.startsWith('/portal/giftcard'))                       return '/proxy/giftcard';
-  if (base === '/' || base === '')                               return '/proxy/';
-  // 알 수 없는 경로: /proxy/ 하위로 보냄 (Express 404 또는 302 처리)
-  return '/proxy' + (base.startsWith('/') ? base : '/' + base) + qs;
+  if (base.startsWith('/portal/user/p_login_form'))              return '/portal/user/p_login_form.html' + qs;
+  if (base.startsWith('/sell/list'))                             return '/sell/list.html' + qs;
+  if (base.startsWith('/sell/application'))                      return '/sell/application.html' + qs;
+  if (base.startsWith('/sell/new'))                              return '/sell/new.html' + qs;
+  if (base === '/sell' || base === '/sell/')                     return '/sell/register.html';
+  if (base.startsWith('/sell/'))                                 return '/sell/list.html' + qs;
+  if (base.startsWith('/buy/register'))                          return '/buy/register.html' + qs;
+  if (base.startsWith('/buy/application'))                       return '/buy/application.html' + qs;
+  if (base.startsWith('/buy/list'))                              return '/buy/list.html' + qs;
+  if (base === '/buy' || base === '/buy/')                       return '/buy/list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_phone_list')) return '/myroom/mileage/payment/payment_phone_list.html' + qs;
+  if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/myroom/mileage/payment/payment_phone_list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/myroom/mileage/payment/payment_list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_list'))   return '/myroom/mileage/payment/payment_list.html' + qs;
+  if (base.startsWith('/myroom/batch_goods'))                    return '/myroom/batch_goods/index.html';
+  if (base.startsWith('/myroom/chat/new_chat'))                  return '/myroom/chat/new_chat.html';
+  if (base.startsWith('/myroom/chat/list'))                      return '/myroom/chat/list.html' + qs;
+  if (base.startsWith('/myroom/chat'))                           return '/myroom/chat/list.html';
+  if (base === '/myroom' || base === '/myroom/')                 return '/myroom/index.html';
+  if (base.startsWith('/game_charge'))                           return '/game-charge';
+  if (base.startsWith('/portal/giftcard'))                       return '/giftcard';
+  if (base === '/' || base === '')                               return '/';
+  // 알 수 없는 경로: / 하위로 보냄 (Express 404 또는 302 처리)
+  return (base.startsWith('/') ? base : '/' + base) + qs;
 }
 
 /** HTML 전체(JS 문자열 포함)에서 외부 도메인을 제거/치환 */
 function rewriteExternalLinks(html: string): string {
   let result = html;
 
-  // itemmania.com 모든 URL → /proxy/... (regex 기반, query string 보존)
+  // itemmania.com 모든 URL → /... (regex 기반, query string 보존)
   result = result.replace(
     /https?:\/\/(?:www\.|m\.|ssadaprice\.)?itemmania\.com([^"'\s<>\u0022\u0027]*)/g,
     (_match: string, path: string) => mapImPath(path)
@@ -797,7 +797,7 @@ function rewriteExternalLinks(html: string): string {
     'http://www.gamemania.co.kr',
     'https://gamemania.co.kr',
   ]) {
-    result = result.split(host).join('/proxy/gamemania');
+    result = result.split(host).join('/gamemania');
   }
 
   return result;
@@ -823,33 +823,33 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
 'use strict';
 var ROUTE_MAP=[
-  ['/portal/user/p_login_form.html','/proxy/portal/user/p_login_form.html'],
-  ['/myroom/mileage/payment/payment_phone_list.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
-  ['/myroom/mileage/payment/payment_switch.html','/proxy/myroom/mileage/payment/payment_list.html'],
-  ['/myroom/mileage/payment/payment_phone.html','/proxy/myroom/mileage/payment/payment_phone_list.html'],
-  ['/myroom/mileage/payment/payment_list.html','/proxy/myroom/mileage/payment/payment_list.html'],
-  ['/myroom/batch_goods/index.html','/proxy/myroom/batch_goods/index.html'],
-  ['/sell/application.html','/proxy/sell/application.html'],
-  ['/sell/new.html','/proxy/sell/new.html'],
-  ['/sell/list.html','/proxy/sell/list.html'],
-  ['/sell/','/proxy/sell/register.html'],
-  ['/sell','/proxy/sell/register.html'],
-  ['/buy/register.html','/proxy/buy/register.html'],
-  ['/buy/application.html','/proxy/buy/application.html'],
-  ['/buy/list.html','/proxy/buy/list.html'],
-  ['/buy/','/proxy/buy/list.html'],
-  ['/buy','/proxy/buy/list.html'],
-  ['/myroom/chat/new_chat.html','/proxy/myroom/chat/new_chat.html'],
-  ['/myroom/chat/list.html','/proxy/myroom/chat/list.html'],
-  ['/myroom/chat/','/proxy/myroom/chat/list.html'],
-  ['/myroom/chat','/proxy/myroom/chat/list.html'],
-  ['/game_charge/','/proxy/game-charge'],
-  ['/game_charge','/proxy/game-charge'],
-  ['/portal/giftcard/','/proxy/giftcard'],
-  ['/portal/giftcard','/proxy/giftcard'],
-  ['/myroom/','/proxy/myroom/index.html'],
-  ['/myroom','/proxy/myroom/index.html'],
-  ['/','/proxy/'],
+  ['/portal/user/p_login_form.html','/portal/user/p_login_form.html'],
+  ['/myroom/mileage/payment/payment_phone_list.html','/myroom/mileage/payment/payment_phone_list.html'],
+  ['/myroom/mileage/payment/payment_switch.html','/myroom/mileage/payment/payment_list.html'],
+  ['/myroom/mileage/payment/payment_phone.html','/myroom/mileage/payment/payment_phone_list.html'],
+  ['/myroom/mileage/payment/payment_list.html','/myroom/mileage/payment/payment_list.html'],
+  ['/myroom/batch_goods/index.html','/myroom/batch_goods/index.html'],
+  ['/sell/application.html','/sell/application.html'],
+  ['/sell/new.html','/sell/new.html'],
+  ['/sell/list.html','/sell/list.html'],
+  ['/sell/','/sell/register.html'],
+  ['/sell','/sell/register.html'],
+  ['/buy/register.html','/buy/register.html'],
+  ['/buy/application.html','/buy/application.html'],
+  ['/buy/list.html','/buy/list.html'],
+  ['/buy/','/buy/list.html'],
+  ['/buy','/buy/list.html'],
+  ['/myroom/chat/new_chat.html','/myroom/chat/new_chat.html'],
+  ['/myroom/chat/list.html','/myroom/chat/list.html'],
+  ['/myroom/chat/','/myroom/chat/list.html'],
+  ['/myroom/chat','/myroom/chat/list.html'],
+  ['/game_charge/','/game-charge'],
+  ['/game_charge','/game-charge'],
+  ['/portal/giftcard/','/giftcard'],
+  ['/portal/giftcard','/giftcard'],
+  ['/myroom/','/myroom/index.html'],
+  ['/myroom','/myroom/index.html'],
+  ['/','/'],
 ];
 var IM_ORIGINS=[
   'https://www.itemmania.com','http://www.itemmania.com',
@@ -859,7 +859,7 @@ var GM_ORIGINS=['https://www.gamemania.co.kr','http://www.gamemania.co.kr','http
 function rewrite(url){
   if(!url||typeof url!=='string') return url;
   var u=url.trim();
-  for(var g=0;g<GM_ORIGINS.length;g++) if(u.startsWith(GM_ORIGINS[g])) return '/proxy/gamemania';
+  for(var g=0;g<GM_ORIGINS.length;g++) if(u.startsWith(GM_ORIGINS[g])) return '/gamemania';
   for(var i=0;i<IM_ORIGINS.length;i++){
     if(u.startsWith(IM_ORIGINS[i])){
       var path=u.slice(IM_ORIGINS[i].length)||'/';
@@ -868,7 +868,7 @@ function rewrite(url){
           return ROUTE_MAP[r][1]+(path.length>ROUTE_MAP[r][0].length?path.slice(ROUTE_MAP[r][0].length):'');
         }
       }
-      return '/proxy/';
+      return '/';
     }
   }
   return url;
@@ -963,9 +963,9 @@ document.addEventListener('click',function(e){
       +'<button id="_im_reg_close" style="margin-top:18px;background:none;border:none;color:#9f9f9f;font-size:13px;cursor:pointer">닫기</button>'
       +'</div>';
     document.body.appendChild(modal);
-    var sellUrl='/proxy/sell/register.html'+(gameId?'?game='+gameId:'');
+    var sellUrl='/sell/register.html'+(gameId?'?game='+gameId:'');
     document.getElementById('_im_reg_sell').onclick=function(){modal.remove();location.href=sellUrl;};
-    document.getElementById('_im_reg_buy').onclick=function(){modal.remove();location.href='/proxy/buy/register.html';};
+    document.getElementById('_im_reg_buy').onclick=function(){modal.remove();location.href='/buy/register.html';};
     document.getElementById('_im_reg_close').onclick=function(){modal.remove();};
     modal.addEventListener('click',function(ev){if(ev.target===modal)modal.remove();});
     return;
@@ -1032,9 +1032,9 @@ document.addEventListener('submit',function(e){
   var inp=form.querySelector('input[name="searchGameServer"],input.search_gs_name');
   var keyword=(inp&&inp.value)||'';
   if(keyword){
-    location.href='/proxy/sell/list.html?search_word='+encodeURIComponent(keyword);
+    location.href='/sell/list.html?search_word='+encodeURIComponent(keyword);
   } else {
-    location.href='/proxy/';
+    location.href='/';
   }
 },true);
 })();
@@ -1107,7 +1107,7 @@ const SELL_INTERCEPT_SCRIPT = `
     div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:380px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button></div></div>';
     document.body.appendChild(div.firstChild);
     document.getElementById('_im_close').onclick = function() { document.getElementById('_im_overlay').style.display='none'; };
-    document.getElementById('_im_login_btn').onclick = function() { location.href='/proxy/login'; };
+    document.getElementById('_im_login_btn').onclick = function() { location.href='/login'; };
   }
 
   function interceptBuyButtons() {
@@ -1125,7 +1125,7 @@ const SELL_INTERCEPT_SCRIPT = `
         e.preventDefault(); e.stopImmediatePropagation();
         var params = new URLSearchParams(location.search);
         var game = params.get('search_game') || '5913';
-        location.href = '/proxy/buy/list.html?search_game=' + game;
+        location.href = '/buy/list.html?search_game=' + game;
       }, true);
     });
 
@@ -1133,11 +1133,11 @@ const SELL_INTERCEPT_SCRIPT = `
     var loginBtn = document.querySelector('.header-logins button');
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopPropagation(); location.href = '/proxy/login';
+        e.preventDefault(); e.stopPropagation(); location.href = '/login';
       });
     }
     var joinBtn = document.querySelector('.header-logins a');
-    if (joinBtn) { joinBtn.href = '/proxy/login'; }
+    if (joinBtn) { joinBtn.href = '/login'; }
 
     // 구매 버튼 인터셉트
     interceptBuyButtons();
@@ -1153,7 +1153,7 @@ const SELL_INTERCEPT_SCRIPT = `
         var tid = li.getAttribute('data-tid');
         if (tid) {
           e.preventDefault(); e.stopPropagation();
-          location.href = '/proxy/sell/application.html?id=' + tid;
+          location.href = '/sell/application.html?id=' + tid;
         }
       }
     }, true);
@@ -1184,13 +1184,13 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   function init() {
-    // 구매등록 링크 → /proxy/buy/register.html
+    // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
-        a.href = '/proxy/buy/register.html';
+        a.href = '/buy/register.html';
         a.addEventListener('click', function(e) {
-          e.preventDefault(); location.href = '/proxy/buy/register.html';
+          e.preventDefault(); location.href = '/buy/register.html';
         });
       }
     });
@@ -1205,7 +1205,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200);
+              setTimeout(function() { location.href = '/login'; }, 1200);
               return;
             }
             var gameEl = form.querySelector('[name=searchGameServer],[name=game_name]');
@@ -1231,7 +1231,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             .then(function(r) {
               if (r.ok) {
                 showToast('판매 등록이 완료되었습니다!', true);
-                setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+                setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
               }
@@ -1247,22 +1247,22 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     if (newModeBtn && newModeBtn.getAttribute('data-mode') === 'n') {
       newModeBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/sell/new.html';
+        location.href = '/sell/new.html';
       }, true);
     }
 
     // ── 물품일괄등록 (#batch_move) ──────────────────────────────────
     var batchBtn = document.getElementById('batch_move');
     if (batchBtn) {
-      batchBtn.href = '/proxy/myroom/batch_goods/index.html';
+      batchBtn.href = '/myroom/batch_goods/index.html';
       batchBtn.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/proxy/myroom/batch_goods/index.html';
+        e.preventDefault(); location.href = '/myroom/batch_goods/index.html';
       });
     }
 
     // 뒤로가기 / 홈
     var backLinks = document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]');
-    backLinks.forEach(function(a) { a.href = '/proxy/'; });
+    backLinks.forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1285,13 +1285,13 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   function init() {
-    // 판매등록 링크 → /proxy/sell/register.html
+    // 판매등록 링크 → /sell/register.html
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
-        a.href = '/proxy/sell/register.html';
+        a.href = '/sell/register.html';
         a.addEventListener('click', function(e) {
-          e.preventDefault(); location.href = '/proxy/sell/register.html';
+          e.preventDefault(); location.href = '/sell/register.html';
         });
       }
     });
@@ -1306,7 +1306,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200);
+              setTimeout(function() { location.href = '/login'; }, 1200);
               return;
             }
             var priceEl = form.querySelector('[name=user_price]');
@@ -1332,7 +1332,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             .then(function(r) {
               if (r.ok) {
                 showToast('구매 등록이 완료되었습니다!', true);
-                setTimeout(function() { location.href = '/proxy/buy/list.html'; }, 1800);
+                setTimeout(function() { location.href = '/buy/list.html'; }, 1800);
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
               }
@@ -1348,13 +1348,13 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     if (newModeBtn && newModeBtn.getAttribute('data-mode') === 'n') {
       newModeBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/buy/new.html';
+        location.href = '/buy/new.html';
       }, true);
     }
 
     // 뒤로가기 / 홈
     var backLinks = document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]');
-    backLinks.forEach(function(a) { a.href = '/proxy/'; });
+    backLinks.forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1382,16 +1382,16 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
     if (classicBtn) {
       classicBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/sell/register.html';
+        location.href = '/sell/register.html';
       }, true);
     }
 
     // ── 물품일괄등록 ─────────────────────────────────────────────────
     var batchBtn = document.getElementById('batch_move');
     if (batchBtn) {
-      batchBtn.href = '/proxy/myroom/batch_goods/index.html';
+      batchBtn.href = '/myroom/batch_goods/index.html';
       batchBtn.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/proxy/myroom/batch_goods/index.html';
+        e.preventDefault(); location.href = '/myroom/batch_goods/index.html';
       });
     }
 
@@ -1399,8 +1399,8 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
-        a.href = '/proxy/buy/register.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/buy/register.html'; });
+        a.href = '/buy/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/buy/register.html'; });
       }
     });
 
@@ -1414,12 +1414,12 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+              setTimeout(function() { location.href = '/login'; }, 1200); return;
             }
             var priceEl = form.querySelector('[name=user_price]');
             if (!priceEl || !priceEl.value.trim()) { showToast('가격을 입력해주세요.', false); return; }
             showToast('판매 등록이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+            setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1427,7 +1427,7 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1462,7 +1462,7 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
     if (classicBtn) {
       classicBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/buy/register.html';
+        location.href = '/buy/register.html';
       }, true);
     }
 
@@ -1470,8 +1470,8 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
-        a.href = '/proxy/sell/register.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/sell/register.html'; });
+        a.href = '/sell/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/sell/register.html'; });
       }
     });
 
@@ -1485,12 +1485,12 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+              setTimeout(function() { location.href = '/login'; }, 1200); return;
             }
             var priceEl = form.querySelector('[name=user_price]');
             if (!priceEl || !priceEl.value.trim()) { showToast('가격을 입력해주세요.', false); return; }
             showToast('구매 등록이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/buy/list.html'; }, 1800);
+            setTimeout(function() { location.href = '/buy/list.html'; }, 1800);
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1498,7 +1498,7 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1531,11 +1531,11 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+              setTimeout(function() { location.href = '/login'; }, 1200); return;
             }
             var fileEl = document.getElementById('excel_upload');
             showToast('일괄등록이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/sell/list.html'; }, 1800);
+            setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1557,14 +1557,14 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
-        a.href = '/proxy/sell/register.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/sell/register.html'; });
+        a.href = '/sell/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/sell/register.html'; });
       }
     });
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1589,10 +1589,10 @@ const MYROOM_INTERCEPT_SCRIPT = `
   function init() {
     // ── 출금하기 버튼 → 출금 목록 페이지 ───────────────────────────
     document.querySelectorAll('a[href*="payment_switch"],a.mileage_withdraw_btn').forEach(function(a) {
-      a.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      a.href = '/myroom/mileage/payment/payment_list.html';
       a.addEventListener('click', function(e) {
         e.preventDefault();
-        location.href = '/proxy/myroom/mileage/payment/payment_list.html';
+        location.href = '/myroom/mileage/payment/payment_list.html';
       });
     });
 
@@ -1600,8 +1600,8 @@ const MYROOM_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
-        a.href = '/proxy/sell/register.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/sell/register.html'; });
+        a.href = '/sell/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/sell/register.html'; });
       }
     });
 
@@ -1609,26 +1609,26 @@ const MYROOM_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
-        a.href = '/proxy/buy/register.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/buy/register.html'; });
+        a.href = '/buy/register.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/buy/register.html'; });
       }
     });
 
     // ── 일괄등록 링크 ─────────────────────────────────────────────────
     document.querySelectorAll('a[href*="batch_goods"]').forEach(function(a) {
-      a.href = '/proxy/myroom/batch_goods/index.html';
-      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/batch_goods/index.html'; });
+      a.href = '/myroom/batch_goods/index.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/batch_goods/index.html'; });
     });
 
     // ── 채팅 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href*="/myroom/chat"]').forEach(function(a) {
-      a.href = '/proxy/myroom/chat/list.html';
-      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/chat/list.html'; });
+      a.href = '/myroom/chat/list.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/chat/list.html'; });
     });
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
 
     // ── 마이룸에 실제 사용자 정보 표시 (API에서 가져와 채우기) ────────
     fetch('/api/auth/me', { credentials: 'include' })
@@ -1673,9 +1673,9 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
   function init() {
     // ── 탭: 휴대폰번호 출금 탭 ────────────────────────────────────────
     document.querySelectorAll('a[href*="payment_phone"]').forEach(function(a) {
-      a.href = '/proxy/myroom/mileage/payment/payment_phone_list.html';
+      a.href = '/myroom/mileage/payment/payment_phone_list.html';
       a.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/proxy/myroom/mileage/payment/payment_phone_list.html';
+        e.preventDefault(); location.href = '/myroom/mileage/payment/payment_phone_list.html';
       });
     });
 
@@ -1689,7 +1689,7 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+              setTimeout(function() { location.href = '/login'; }, 1200); return;
             }
             var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
             var amt = amtEl ? amtEl.value.trim() : '';
@@ -1697,7 +1697,7 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
               showToast('출금 금액을 입력해주세요.', false); return;
             }
             showToast('출금 신청이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/myroom/index.html'; }, 1800);
+            setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1707,14 +1707,14 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
-        a.href = '/proxy/myroom/index.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/index.html'; });
+        a.href = '/myroom/index.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
       }
     });
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1739,9 +1739,9 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
   function init() {
     // ── 탭: 은행계좌 출금 탭 ──────────────────────────────────────────
     document.querySelectorAll('a[href*="payment_list"]').forEach(function(a) {
-      a.href = '/proxy/myroom/mileage/payment/payment_list.html';
+      a.href = '/myroom/mileage/payment/payment_list.html';
       a.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/proxy/myroom/mileage/payment/payment_list.html';
+        e.preventDefault(); location.href = '/myroom/mileage/payment/payment_list.html';
       });
     });
 
@@ -1755,7 +1755,7 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/proxy/login'; }, 1200); return;
+              setTimeout(function() { location.href = '/login'; }, 1200); return;
             }
             var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
             var amt = amtEl ? amtEl.value.trim() : '';
@@ -1763,7 +1763,7 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
               showToast('출금 금액을 입력해주세요.', false); return;
             }
             showToast('휴대폰 출금 신청이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/proxy/myroom/index.html'; }, 1800);
+            setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
           })
           .catch(function() { showToast('오류가 발생했습니다.', false); });
       });
@@ -1773,14 +1773,14 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
       if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
-        a.href = '/proxy/myroom/index.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/proxy/myroom/index.html'; });
+        a.href = '/myroom/index.html';
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
       }
     });
 
     // ── 홈 링크 ──────────────────────────────────────────────────────
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
-      .forEach(function(a) { a.href = '/proxy/'; });
+      .forEach(function(a) { a.href = '/'; });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -1905,9 +1905,9 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     // ── 뒤로가기 링크 ───────────────────────────────────────────────
     var backBtn = document.querySelector('a.back_btn');
     if (backBtn) {
-      backBtn.href = '/proxy/myroom/chat/list.html';
+      backBtn.href = '/myroom/chat/list.html';
       backBtn.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/proxy/myroom/chat/list.html';
+        e.preventDefault(); location.href = '/myroom/chat/list.html';
       });
     }
 
@@ -2012,7 +2012,7 @@ const CHAT_INTERCEPT_SCRIPT = `
         if (cls.includes('buy')) tradeType = 'buy';
       }
       if (tid) {
-        var url = '/proxy/myroom/chat/new_chat.html?tid=' + tid + '&type=' + tradeType;
+        var url = '/myroom/chat/new_chat.html?tid=' + tid + '&type=' + tradeType;
         if (channel) url += '&channel_no=' + channel;
         window.open(url, '_chat_' + tid, 'width=900,height=700,resizable=yes,scrollbars=yes');
       }
@@ -2097,7 +2097,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     });
 
@@ -2122,7 +2122,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/login';
+        location.href = '/login';
       }, true);
     }
 
@@ -2131,7 +2131,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     }
 
@@ -2186,7 +2186,7 @@ const BUY_INTERCEPT_SCRIPT = `
         e.preventDefault(); e.stopImmediatePropagation();
         var params = new URLSearchParams(location.search);
         var game = params.get('search_game') || '5913';
-        location.href = '/proxy/sell/list.html?search_game=' + game;
+        location.href = '/sell/list.html?search_game=' + game;
       }, true);
     });
 
@@ -2195,7 +2195,7 @@ const BUY_INTERCEPT_SCRIPT = `
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     }
 
@@ -2204,7 +2204,7 @@ const BUY_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/proxy/login';
+        location.href = '/login';
       }, true);
     }
 
@@ -2215,7 +2215,7 @@ const BUY_INTERCEPT_SCRIPT = `
         var tid = li.getAttribute('data-tid');
         if (tid) {
           e.preventDefault(); e.stopPropagation();
-          location.href = '/proxy/buy/application.html?id=' + tid;
+          location.href = '/buy/application.html?id=' + tid;
         }
       }
     }, true);
@@ -2271,7 +2271,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     '</div>';
     document.body.appendChild(overlay);
     document.getElementById('_im_modal_cancel').onclick = function(){ document.body.removeChild(overlay); };
-    document.getElementById('_im_modal_login').onclick = function(){ location.href = '/proxy/login'; };
+    document.getElementById('_im_modal_login').onclick = function(){ location.href = '/login'; };
     overlay.addEventListener('click', function(e){ if(e.target === overlay) document.body.removeChild(overlay); });
   }
 
@@ -2318,7 +2318,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
         e.preventDefault(); e.stopImmediatePropagation();
         checkLogin().then(function(ok) {
           if (!ok) { showLoginModal(); return; }
-          window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+          window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
         });
       }, true);
     });
@@ -2340,7 +2340,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        window.open('/proxy/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
       }, true);
     }
 
@@ -2496,38 +2496,44 @@ function serveChatNew(html: string): string {
 
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
 router.get(["/", ""], (_req, res): void => {
-  res.redirect(302, "/proxy/");
+  if (!staticHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(serveItemmania(staticHtml));
 });
 
 // React 앱 경로 → 아이템마니아 클론으로 리다이렉트
 router.get(["/app", "/app/{*path}"], (_req, res): void => {
-  res.redirect(302, "/proxy/");
+  res.redirect(301, "/");
 });
 
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
 router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
-  res.redirect(302, "/proxy/game-charge");
+  res.redirect(302, "/game-charge");
 });
 router.get(["/portal/giftcard", "/portal/giftcard/"], (_req, res): void => {
-  res.redirect(302, "/proxy/giftcard");
+  res.redirect(302, "/giftcard");
 });
 router.get("/portal/user/p_login_form.html", (_req, res): void => {
-  res.redirect(302, "/proxy/portal/user/p_login_form.html");
+  res.redirect(302, "/portal/user/p_login_form.html");
 });
 router.get(["/myroom", "/myroom/"], (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/index.html");
+  res.redirect(302, "/myroom/index.html");
 });
 router.get(["/myroom/chat/list.html", "/myroom/chat/"], (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/chat/list.html");
+  res.redirect(302, "/myroom/chat/list.html");
 });
 router.get("/sell/application.html", (req, res): void => {
   const id = req.query["id"] ? `?id=${req.query["id"]}` : "";
-  res.redirect(302, `/proxy/sell/application.html${id}`);
+  res.redirect(302, `/sell/application.html${id}`);
 });
 
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
 router.get(
-  ["/proxy/portal/user/p_login_form.html", "/proxy/login"],
+  ["/portal/user/p_login_form.html", "/login"],
   (req, res): void => {
     if (!loginHtml) {
       res.status(503).send("<html><body><h2>로그인 페이지를 불러올 수 없습니다</h2></body></html>");
@@ -2540,7 +2546,7 @@ router.get(
 );
 
 // 상품권몰 페이지
-router.get(["/proxy/giftcard", "/proxy/portal/giftcard", "/proxy/portal/giftcard/"], (req, res): void => {
+router.get(["/giftcard", "/portal/giftcard", "/portal/giftcard/"], (req, res): void => {
   if (!giftcardHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2551,7 +2557,7 @@ router.get(["/proxy/giftcard", "/proxy/portal/giftcard", "/proxy/portal/giftcard
 });
 
 // 게임 할인충전 페이지
-router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], (req, res): void => {
+router.get(["/game-charge", "/game_charge", "/game_charge/"], (req, res): void => {
   if (!gamechargeHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2563,7 +2569,7 @@ router.get(["/proxy/game-charge", "/proxy/game_charge", "/proxy/game_charge/"], 
 
 // 게임별 상품 목록 페이지 — search_game 쿼리로 분기 (TOP 10 전체)
 router.get(
-  ["/proxy/sell/list.html", "/proxy/sell/lineage-classic", "/proxy/sell/maplestory-world"],
+  ["/sell/list.html", "/sell/lineage-classic", "/sell/maplestory-world"],
   (req, res): void => {
     const game = String(req.query["search_game"] ?? "");
 
@@ -2594,14 +2600,14 @@ router.get(
 router.get("/sell/list.html", (req, res): void => {
   const game = req.query["search_game"];
   if (game) {
-    res.redirect(302, `/proxy/sell/list.html?search_game=${game}`);
+    res.redirect(302, `/sell/list.html?search_game=${game}`);
   } else {
-    res.redirect(302, "/proxy/");
+    res.redirect(302, "/");
   }
 });
 
 // 판매등록 페이지
-router.get(["/proxy/sell/register.html", "/proxy/sell/", "/proxy/sell"], (req, res): void => {
+router.get(["/sell/register.html", "/sell/", "/sell"], (req, res): void => {
   if (!sellRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2612,7 +2618,7 @@ router.get(["/proxy/sell/register.html", "/proxy/sell/", "/proxy/sell"], (req, r
 });
 
 // 구매등록 페이지
-router.get("/proxy/buy/register.html", (req, res): void => {
+router.get("/buy/register.html", (req, res): void => {
   if (!buyRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2623,7 +2629,7 @@ router.get("/proxy/buy/register.html", (req, res): void => {
 });
 
 // 판매 NEW 모드 페이지
-router.get("/proxy/sell/new.html", (_req, res): void => {
+router.get("/sell/new.html", (_req, res): void => {
   if (!sellNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2634,7 +2640,7 @@ router.get("/proxy/sell/new.html", (_req, res): void => {
 });
 
 // 구매 NEW 모드 페이지 (판매 NEW 모드 HTML 재사용 + 구매용 인터셉터)
-router.get("/proxy/buy/new.html", (_req, res): void => {
+router.get("/buy/new.html", (_req, res): void => {
   if (!sellNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2645,7 +2651,7 @@ router.get("/proxy/buy/new.html", (_req, res): void => {
 });
 
 // 물품일괄등록 페이지
-router.get("/proxy/myroom/batch_goods/index.html", (_req, res): void => {
+router.get("/myroom/batch_goods/index.html", (_req, res): void => {
   if (!batchGoodsHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2656,7 +2662,7 @@ router.get("/proxy/myroom/batch_goods/index.html", (_req, res): void => {
 });
 
 // 마이룸 페이지
-router.get(["/proxy/myroom/index.html", "/proxy/myroom/", "/proxy/myroom"], (_req, res): void => {
+router.get(["/myroom/index.html", "/myroom/", "/myroom"], (_req, res): void => {
   if (!myroomHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2667,7 +2673,7 @@ router.get(["/proxy/myroom/index.html", "/proxy/myroom/", "/proxy/myroom"], (_re
 });
 
 // 출금하기 - 은행계좌 출금 내역
-router.get("/proxy/myroom/mileage/payment/payment_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_list.html", (_req, res): void => {
   if (!paymentListHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2678,7 +2684,7 @@ router.get("/proxy/myroom/mileage/payment/payment_list.html", (_req, res): void 
 });
 
 // 출금하기 - 휴대폰번호 출금 내역
-router.get("/proxy/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
   if (!paymentPhoneListHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2689,35 +2695,35 @@ router.get("/proxy/myroom/mileage/payment/payment_phone_list.html", (_req, res):
 });
 
 // payment_switch → payment_list 리다이렉트
-router.get("/proxy/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+router.get("/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
+  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
 router.get("/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
 router.get("/myroom/mileage/payment/payment_list.html", (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/mileage/payment/payment_list.html");
+  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
 router.get("/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/mileage/payment/payment_phone_list.html");
+  res.redirect(302, "/myroom/mileage/payment/payment_phone_list.html");
 });
 
 // 판매등록/구매등록 직접 접근 리다이렉트
 router.get(["/sell/", "/sell"], (_req, res): void => {
-  res.redirect(302, "/proxy/sell/register.html");
+  res.redirect(302, "/sell/register.html");
 });
 router.get("/buy/register.html", (_req, res): void => {
-  res.redirect(302, "/proxy/buy/register.html");
+  res.redirect(302, "/buy/register.html");
 });
 router.get("/sell/new.html", (_req, res): void => {
-  res.redirect(302, "/proxy/sell/new.html");
+  res.redirect(302, "/sell/new.html");
 });
 router.get("/myroom/batch_goods/index.html", (_req, res): void => {
-  res.redirect(302, "/proxy/myroom/batch_goods/index.html");
+  res.redirect(302, "/myroom/batch_goods/index.html");
 });
 
 // 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
-router.get("/proxy/sell/application.html", (req, res): void => {
+router.get("/sell/application.html", (req, res): void => {
   if (!sellApplicationHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2728,7 +2734,7 @@ router.get("/proxy/sell/application.html", (req, res): void => {
 });
 
 // 삽니다 상세 페이지 (/buy/application.html?id=...)
-router.get("/proxy/buy/application.html", (req, res): void => {
+router.get("/buy/application.html", (req, res): void => {
   if (!buyApplicationHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2741,11 +2747,11 @@ router.get("/proxy/buy/application.html", (req, res): void => {
 // 삽니다 상세 리다이렉트
 router.get("/buy/application.html", (req, res): void => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  res.redirect(302, `/proxy/buy/application.html${qs}`);
+  res.redirect(302, `/buy/application.html${qs}`);
 });
 
 // 삽니다 목록 페이지 (/buy/list.html?search_game=...)
-router.get("/proxy/buy/list.html", (req, res): void => {
+router.get("/buy/list.html", (req, res): void => {
   if (!buyLineageClassicHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2758,11 +2764,11 @@ router.get("/proxy/buy/list.html", (req, res): void => {
 // 삽니다 목록 리다이렉트
 router.get(["/buy/list.html", "/buy/"], (req, res): void => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  res.redirect(302, `/proxy/buy/list.html${qs}`);
+  res.redirect(302, `/buy/list.html${qs}`);
 });
 
 // 개별 채팅방 페이지
-router.get("/proxy/myroom/chat/new_chat.html", (req, res): void => {
+router.get("/myroom/chat/new_chat.html", (req, res): void => {
   if (!chatNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2775,11 +2781,11 @@ router.get("/proxy/myroom/chat/new_chat.html", (req, res): void => {
 // 채팅방 직접 접근 리다이렉트
 router.get("/myroom/chat/new_chat.html", (req, res): void => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  res.redirect(302, `/proxy/myroom/chat/new_chat.html${qs}`);
+  res.redirect(302, `/myroom/chat/new_chat.html${qs}`);
 });
 
 // 매니아 채팅 페이지
-router.get(["/proxy/myroom/chat/list.html", "/proxy/myroom/chat/"], (req, res): void => {
+router.get(["/myroom/chat/list.html", "/myroom/chat/"], (req, res): void => {
   const order = req.query["order"];
   const html = order === "1" ? chatOrderedHtml : chatHtml;
   if (!html) {
@@ -2792,7 +2798,7 @@ router.get(["/proxy/myroom/chat/list.html", "/proxy/myroom/chat/"], (req, res): 
 });
 
 // 게임매니아 페이지
-router.get("/proxy/gamemania", (req, res): void => {
+router.get("/gamemania", (req, res): void => {
   if (!gamemanaHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -2803,14 +2809,11 @@ router.get("/proxy/gamemania", (req, res): void => {
 });
 
 // /proxy 및 나머지 하위 경로 → itemmania.html 서빙
-router.get(["/proxy", "/proxy/", "/proxy/{*splat}"], (req, res): void => {
-  if (!staticHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
-    return;
-  }
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
-  res.send(serveItemmania(staticHtml));
+// /proxy/* 구버전 경로 → 새 경로로 301 리다이렉트 (하위호환)
+router.get(["/proxy", "/proxy/{*splat}"], (req, res): void => {
+  const params = req.params as { splat?: string };
+  const splat = params.splat || "";
+  res.redirect(301, splat ? "/" + splat : "/");
 });
 
 export default router;

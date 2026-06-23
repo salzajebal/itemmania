@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/proxy/"
+previewPath = "/"
 title = "아이템마니아 클론"
 version = "1.0.0"
 id = "artifacts/web-app"
