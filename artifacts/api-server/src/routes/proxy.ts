@@ -485,9 +485,28 @@ const INTERCEPT_SCRIPT = `
       }, true);
     }
 
-    // 이미 로그인 여부 확인
+    // 이미 로그인 여부 확인 + 외부 JS 덮어쓰기 방어
     window._IM_auth().then(function(data){
-      if (data && data.id) { currentUser = data; updateHeader(); }
+      if (data && data.id) { currentUser = data; }
+      updateHeader();
+
+      // 원본 itemmania.js가 .header-logins를 덮어쓸 경우 즉시 재적용
+      var loginsTarget = document.querySelector('.header-logins');
+      if (loginsTarget) {
+        var _headerObserver = new MutationObserver(function(){
+          _headerObserver.disconnect();
+          updateHeader();
+          setTimeout(function(){
+            var t = document.querySelector('.header-logins');
+            if (t) _headerObserver.observe(t, { childList: true, subtree: true, characterData: true });
+          }, 50);
+        });
+        _headerObserver.observe(loginsTarget, { childList: true, subtree: true, characterData: true });
+      }
+
+      // 지연 안전장치: 원본 JS가 늦게 실행돼도 최종 상태 보장
+      setTimeout(updateHeader, 300);
+      setTimeout(updateHeader, 800);
     });
   }
 
