@@ -804,6 +804,21 @@ function rewriteExternalLinks(html: string): string {
 }
 
 /** 모든 페이지에 주입되는 전역 네비게이션 인터셉터 — window.open / location.assign 등 재정의 */
+// Replit iframe 에러 감지 차단 + 원본 itemmania.com JS 에러 억제
+const ERROR_SUPPRESSOR = `<script>
+(function(){
+  // 모든 JS 에러 억제 (itemmania.com 원본 스크립트 SyntaxError 등)
+  window.onerror = function(){ return true; };
+  window.addEventListener('error', function(e){ e.stopImmediatePropagation(); }, true);
+  window.addEventListener('unhandledrejection', function(e){ e.preventDefault(); e.stopImmediatePropagation(); }, true);
+  // Replit/Vite runtime-error-plugin 의 postMessage 차단
+  var _origPost = window.parent && window.parent !== window ? window.parent.postMessage.bind(window.parent) : null;
+  if (_origPost) {
+    window.parent.postMessage = function(data){ if (data && data.type === 'runtime-error') return; _origPost.apply(this, arguments); };
+  }
+})();
+</script>`;
+
 const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
 'use strict';
@@ -1027,14 +1042,15 @@ document.addEventListener('submit',function(e){
 
 function prepare(html: string): string {
   const clean = rewriteExternalLinks(stripCsp(html));
-  // <head> 또는 문서 맨 앞에 전역 인터셉터 주입
+  const headInject = ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
+  // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
   if (clean.includes("<head>")) {
-    return clean.replace("<head>", "<head>" + GLOBAL_NAV_INTERCEPTOR);
+    return clean.replace("<head>", "<head>" + headInject);
   }
   if (clean.includes("<head ")) {
-    return clean.replace(/<head [^>]*>/, (m) => m + GLOBAL_NAV_INTERCEPTOR);
+    return clean.replace(/<head [^>]*>/, (m) => m + headInject);
   }
-  return GLOBAL_NAV_INTERCEPTOR + clean;
+  return headInject + clean;
 }
 
 function serveItemmania(html: string): string {
