@@ -1,7 +1,9 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -478,7 +480,7 @@ const INTERCEPT_SCRIPT = `
     }
 
     // 이미 로그인 여부 확인
-    api('GET', '/auth/me').then(function(data){
+    window._IM_auth().then(function(data){
       if (data && data.id) { currentUser = data; updateHeader(); }
     });
   }
@@ -895,7 +897,7 @@ function proxyImFetch(url,init){
   }
   /* 로그인 상태 확인 */
   if(/\/(session|auth|login|member|user)/.test(path)){
-    return fetch('/api/auth/me',{credentials:'include'});
+    return window._IM_auth();
   }
   /* 나머지 → 빈 JSON */
   return Promise.resolve(new Response(JSON.stringify({result:'ok',data:[]}),{status:200,headers:{'Content-Type':'application/json'}}));
@@ -1040,9 +1042,30 @@ document.addEventListener('submit',function(e){
 })();
 </script>`;
 
-function prepare(html: string): string {
+function buildUserScript(user: Record<string, unknown> | null): string {
+  return `<script>window._IM_USER=${user ? JSON.stringify(user) : 'null'};window._IM_auth=function(){return Promise.resolve(window._IM_USER||null);};</script>`;
+}
+
+async function getSessionUser(req: Request): Promise<Record<string, unknown> | null> {
+  const userId = (req.session as { userId?: number })?.userId;
+  if (!userId) return null;
+  try {
+    const [user] = await db.select({
+      id: usersTable.id,
+      email: usersTable.email,
+      nickname: usersTable.nickname,
+      role: usersTable.role,
+    }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) return null;
+    return { id: user.id, email: user.email, nickname: user.nickname, role: user.role };
+  } catch {
+    return null;
+  }
+}
+
+function prepare(html: string, user: Record<string, unknown> | null = null): string {
   const clean = rewriteExternalLinks(stripCsp(html));
-  const headInject = ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
+  const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
   // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
   if (clean.includes("<head>")) {
     return clean.replace("<head>", "<head>" + headInject);
@@ -1053,40 +1076,40 @@ function prepare(html: string): string {
   return headInject + clean;
 }
 
-function serveItemmania(html: string): string {
-  const result = prepare(html);
+function serveItemmania(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", INTERCEPT_SCRIPT + "</body>");
   }
   return result + INTERCEPT_SCRIPT;
 }
 
-function serveLogin(html: string): string {
-  const result = prepare(html);
+function serveLogin(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", LOGIN_INTERCEPT_SCRIPT + "</body>");
   }
   return result + LOGIN_INTERCEPT_SCRIPT;
 }
 
-function serveGiftcard(html: string): string {
-  const result = prepare(html);
+function serveGiftcard(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", GIFTCARD_INTERCEPT_SCRIPT + "</body>");
   }
   return result + GIFTCARD_INTERCEPT_SCRIPT;
 }
 
-function serveGamemania(html: string): string {
-  const result = prepare(html);
+function serveGamemania(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", GAMEMANIA_INTERCEPT_SCRIPT + "</body>");
   }
   return result + GAMEMANIA_INTERCEPT_SCRIPT;
 }
 
-function serveGameCharge(html: string): string {
-  const result = prepare(html);
+function serveGameCharge(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", GAMECHARGE_INTERCEPT_SCRIPT + "</body>");
   }
@@ -1097,7 +1120,7 @@ const SELL_INTERCEPT_SCRIPT = `
 <script>
 (function() {
   function isLoggedIn() {
-    try { return !!JSON.parse(localStorage.getItem('_im_user') || 'null'); } catch(e) { return false; }
+    return !!(window._IM_USER && window._IM_USER.id);
   }
 
   function showLoginModal() {
@@ -1162,8 +1185,8 @@ const SELL_INTERCEPT_SCRIPT = `
 </script>
 `;
 
-function serveLineageClassic(html: string): string {
-  const result = prepare(html);
+function serveLineageClassic(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", SELL_INTERCEPT_SCRIPT + "</body>");
   }
@@ -1200,8 +1223,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1301,8 +1323,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1409,8 +1430,7 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1480,8 +1500,7 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1526,8 +1545,7 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1631,8 +1649,7 @@ const MYROOM_INTERCEPT_SCRIPT = `
       .forEach(function(a) { a.href = '/'; });
 
     // ── 마이룸에 실제 사용자 정보 표시 (API에서 가져와 채우기) ────────
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(function(r) { return r.ok ? r.json() : null; })
+    window._IM_auth()
       .then(function(d) {
         if (!d) return;
         // 닉네임 표시
@@ -1684,8 +1701,7 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1750,8 +1766,7 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
     if (form && form.id !== 'g_searchbar_form') {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        fetch('/api/auth/me', { credentials: 'include' })
-          .then(function(r) { return r.ok ? r.json() : null; })
+        window._IM_auth()
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
@@ -1912,7 +1927,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     }
 
     // ── 로그인 상태 반영 ────────────────────────────────────────────
-    api('GET', '/auth/me').then(function(data) {
+    window._IM_auth().then(function(data) {
       if (data && data.id) {
         var uidEl = document.querySelector('.chat_user .uid');
         // 내 채팅은 "me" 스타일 유지 — 별도 처리 없이 OK
@@ -1932,7 +1947,7 @@ const CHAT_INTERCEPT_SCRIPT = `
 (function() {
   // 로그인 상태 확인
   function isLoggedIn() {
-    return fetch('/api/auth/me', { credentials: 'include' })
+    return window._IM_auth()
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) { return d && d.id; })
       .catch(function() { return false; });
@@ -2074,7 +2089,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        api('GET', '/auth/me').then(function(data){
+        window._IM_auth().then(function(data){
           if (data && data.id) { showPurchaseSuccess(); }
           else { showLoginModal(); }
         });
@@ -2085,7 +2100,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
       if (btn.textContent.trim() === '구매신청') {
         btn.addEventListener('click', function(e) {
           e.preventDefault(); e.stopImmediatePropagation();
-          api('GET', '/auth/me').then(function(data){
+          window._IM_auth().then(function(data){
             if (data && data.id) { showPurchaseSuccess(); }
             else { showLoginModal(); }
           });
@@ -2142,7 +2157,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     });
 
     // 로그인 상태에 따라 헤더 업데이트
-    api('GET', '/auth/me').then(function(data){
+    window._IM_auth().then(function(data){
       if (data && data.id) {
         var loginsDiv = document.querySelector('.header-logins');
         if (loginsDiv) {
@@ -2221,7 +2236,7 @@ const BUY_INTERCEPT_SCRIPT = `
     }, true);
 
     // 로그인 상태 반영
-    api('GET', '/auth/me').then(function(data){
+    window._IM_auth().then(function(data){
       if (data && data.id) {
         var loginsDiv = document.querySelector('.header-logins');
         if (loginsDiv) {
@@ -2291,7 +2306,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
   var _loggedIn = null;
   function checkLogin() {
     if (_loggedIn !== null) return Promise.resolve(_loggedIn);
-    return api('GET', '/auth/me').then(function(d){ _loggedIn = !!(d && d.id); return _loggedIn; });
+    return window._IM_auth().then(function(d){ _loggedIn = !!(d && d.id); return _loggedIn; });
   }
 
   function init() {
@@ -2345,7 +2360,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     }
 
     // 로그인 상태 반영
-    api('GET', '/auth/me').then(function(data){
+    window._IM_auth().then(function(data){
       _loggedIn = !!(data && data.id);
       if (data && data.id) {
         var loginsDiv = document.querySelector('.header-logins');
@@ -2371,30 +2386,30 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
 </script>
 `;
 
-function serveBuyApplication(html: string): string {
-  const result = prepare(html);
+function serveBuyApplication(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", BUY_APPLICATION_INTERCEPT_SCRIPT + "</body>")
     : result + BUY_APPLICATION_INTERCEPT_SCRIPT;
 }
 
-function serveBuy(html: string): string {
-  const result = prepare(html);
+function serveBuy(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", BUY_INTERCEPT_SCRIPT + "</body>")
     : result + BUY_INTERCEPT_SCRIPT;
 }
 
-function serveApplication(html: string): string {
-  const result = prepare(html);
+function serveApplication(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", SELL_APPLICATION_INTERCEPT_SCRIPT + "</body>");
   }
   return result + SELL_APPLICATION_INTERCEPT_SCRIPT;
 }
 
-function serveChat(html: string): string {
-  const result = prepare(html);
+function serveChat(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   if (result.includes("</body>")) {
     return result.replace("</body>", CHAT_INTERCEPT_SCRIPT + "</body>");
   }
@@ -2415,64 +2430,64 @@ function extractBuyCheckLayer(src: string): string | null {
   return null;
 }
 
-function serveSellRegister(html: string): string {
-  const result = prepare(html);
+function serveSellRegister(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", SELL_REGISTER_INTERCEPT_SCRIPT + "</body>")
     : result + SELL_REGISTER_INTERCEPT_SCRIPT;
 }
 
-function serveBuyRegister(html: string): string {
-  const result = prepare(html);
+function serveBuyRegister(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", BUY_REGISTER_INTERCEPT_SCRIPT + "</body>")
     : result + BUY_REGISTER_INTERCEPT_SCRIPT;
 }
 
-function serveSellNew(html: string): string {
-  const result = prepare(html);
+function serveSellNew(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", SELL_NEW_INTERCEPT_SCRIPT + "</body>")
     : result + SELL_NEW_INTERCEPT_SCRIPT;
 }
 
-function serveBuyNew(html: string): string {
-  const result = prepare(html);
+function serveBuyNew(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", BUY_NEW_INTERCEPT_SCRIPT + "</body>")
     : result + BUY_NEW_INTERCEPT_SCRIPT;
 }
 
-function serveBatchGoods(html: string): string {
-  const result = prepare(html);
+function serveBatchGoods(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", BATCH_GOODS_INTERCEPT_SCRIPT + "</body>")
     : result + BATCH_GOODS_INTERCEPT_SCRIPT;
 }
 
-function serveMyroom(html: string): string {
-  const result = prepare(html);
+function serveMyroom(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", MYROOM_INTERCEPT_SCRIPT + "</body>")
     : result + MYROOM_INTERCEPT_SCRIPT;
 }
 
-function servePaymentList(html: string): string {
-  const result = prepare(html);
+function servePaymentList(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", PAYMENT_LIST_INTERCEPT_SCRIPT + "</body>")
     : result + PAYMENT_LIST_INTERCEPT_SCRIPT;
 }
 
-function servePaymentPhoneList(html: string): string {
-  const result = prepare(html);
+function servePaymentPhoneList(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
   return result.includes("</body>")
     ? result.replace("</body>", PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT + "</body>")
     : result + PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT;
 }
 
-function serveChatNew(html: string): string {
-  let result = prepare(html);
+function serveChatNew(html: string, user: Record<string, unknown> | null = null): string {
+  let result = prepare(html, user);
 
   // buy_check_layer: 빈 레이어를 buycheck 파일의 전체 레이어로 교체
   if (chatNewBuycheckHtml) {
@@ -2495,38 +2510,40 @@ function serveChatNew(html: string): string {
 }
 
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
-router.get(["/", ""], (_req, res): void => {
+router.get(["/", ""], async (req, res): Promise<void> => {
   if (!staticHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveItemmania(staticHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveItemmania(staticHtml, user));
 });
 
 // React 앱 경로 → 아이템마니아 클론으로 리다이렉트
-router.get(["/app", "/app/{*path}"], (_req, res): void => {
+router.get(["/app", "/app/{*path}"], async (req, res): Promise<void> => {
   res.redirect(301, "/");
 });
 
 // 원본 itemmania 경로로 JS가 상대경로 이동할 때 → 프록시 경로로 리다이렉트
-router.get(["/game_charge", "/game_charge/"], (_req, res): void => {
+router.get(["/game_charge", "/game_charge/"], async (req, res): Promise<void> => {
   res.redirect(302, "/game-charge");
 });
-router.get(["/portal/giftcard", "/portal/giftcard/"], (_req, res): void => {
+router.get(["/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<void> => {
   res.redirect(302, "/giftcard");
 });
-router.get("/portal/user/p_login_form.html", (_req, res): void => {
+router.get("/portal/user/p_login_form.html", async (req, res): Promise<void> => {
   res.redirect(302, "/portal/user/p_login_form.html");
 });
-router.get(["/myroom", "/myroom/"], (_req, res): void => {
+router.get(["/myroom", "/myroom/"], async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/index.html");
 });
-router.get(["/myroom/chat/list.html", "/myroom/chat/"], (_req, res): void => {
+router.get(["/myroom/chat/list.html", "/myroom/chat/"], async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/chat/list.html");
 });
-router.get("/sell/application.html", (req, res): void => {
+router.get("/sell/application.html", async (req, res): Promise<void> => {
   const id = req.query["id"] ? `?id=${req.query["id"]}` : "";
   res.redirect(302, `/sell/application.html${id}`);
 });
@@ -2534,43 +2551,49 @@ router.get("/sell/application.html", (req, res): void => {
 // 로그인 페이지 라우트 (itemmania 원본 경로 + 단축 경로)
 router.get(
   ["/portal/user/p_login_form.html", "/login"],
-  (req, res): void => {
+  async (req, res): Promise<void> => {
     if (!loginHtml) {
       res.status(503).send("<html><body><h2>로그인 페이지를 불러올 수 없습니다</h2></body></html>");
       return;
     }
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-cache");
-    res.send(serveLogin(loginHtml));
+    const user = await getSessionUser(req);
+
+    res.send(serveLogin(loginHtml, user));
   }
 );
 
 // 상품권몰 페이지
-router.get(["/giftcard", "/portal/giftcard", "/portal/giftcard/"], (req, res): void => {
+router.get(["/giftcard", "/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<void> => {
   if (!giftcardHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveGiftcard(giftcardHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveGiftcard(giftcardHtml, user));
 });
 
 // 게임 할인충전 페이지
-router.get(["/game-charge", "/game_charge", "/game_charge/"], (req, res): void => {
+router.get(["/game-charge", "/game_charge", "/game_charge/"], async (req, res): Promise<void> => {
   if (!gamechargeHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveGameCharge(gamechargeHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveGameCharge(gamechargeHtml, user));
 });
 
 // 게임별 상품 목록 페이지 — search_game 쿼리로 분기 (TOP 10 전체)
 router.get(
   ["/sell/list.html", "/sell/lineage-classic", "/sell/maplestory-world"],
-  (req, res): void => {
+  async (req, res): Promise<void> => {
     const game = String(req.query["search_game"] ?? "");
 
     // 게임 ID → HTML 선택
@@ -2592,12 +2615,14 @@ router.get(
     }
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-cache");
-    res.send(serveLineageClassic(html));
+    const user = await getSessionUser(req);
+
+    res.send(serveLineageClassic(html, user));
   }
 );
 
 // 원본 경로 리다이렉트 — search_game 그대로 전달
-router.get("/sell/list.html", (req, res): void => {
+router.get("/sell/list.html", async (req, res): Promise<void> => {
   const game = req.query["search_game"];
   if (game) {
     res.redirect(302, `/sell/list.html?search_game=${game}`);
@@ -2607,185 +2632,209 @@ router.get("/sell/list.html", (req, res): void => {
 });
 
 // 판매등록 페이지
-router.get(["/sell/register.html", "/sell/", "/sell"], (req, res): void => {
+router.get(["/sell/register.html", "/sell/", "/sell"], async (req, res): Promise<void> => {
   if (!sellRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveSellRegister(sellRegisterHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveSellRegister(sellRegisterHtml, user));
 });
 
 // 구매등록 페이지
-router.get("/buy/register.html", (req, res): void => {
+router.get("/buy/register.html", async (req, res): Promise<void> => {
   if (!buyRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveBuyRegister(buyRegisterHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveBuyRegister(buyRegisterHtml, user));
 });
 
 // 판매 NEW 모드 페이지
-router.get("/sell/new.html", (_req, res): void => {
+router.get("/sell/new.html", async (req, res): Promise<void> => {
   if (!sellNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveSellNew(sellNewHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveSellNew(sellNewHtml, user));
 });
 
 // 구매 NEW 모드 페이지 (판매 NEW 모드 HTML 재사용 + 구매용 인터셉터)
-router.get("/buy/new.html", (_req, res): void => {
+router.get("/buy/new.html", async (req, res): Promise<void> => {
   if (!sellNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveBuyNew(sellNewHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveBuyNew(sellNewHtml, user));
 });
 
 // 물품일괄등록 페이지
-router.get("/myroom/batch_goods/index.html", (_req, res): void => {
+router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => {
   if (!batchGoodsHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveBatchGoods(batchGoodsHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveBatchGoods(batchGoodsHtml, user));
 });
 
 // 마이룸 페이지
-router.get(["/myroom/index.html", "/myroom/", "/myroom"], (_req, res): void => {
+router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Promise<void> => {
   if (!myroomHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveMyroom(myroomHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveMyroom(myroomHtml, user));
 });
 
 // 출금하기 - 은행계좌 출금 내역
-router.get("/myroom/mileage/payment/payment_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promise<void> => {
   if (!paymentListHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(servePaymentList(paymentListHtml));
+  const user = await getSessionUser(req);
+
+  res.send(servePaymentList(paymentListHtml, user));
 });
 
 // 출금하기 - 휴대폰번호 출금 내역
-router.get("/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_phone_list.html", async (req, res): Promise<void> => {
   if (!paymentPhoneListHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(servePaymentPhoneList(paymentPhoneListHtml));
+  const user = await getSessionUser(req);
+
+  res.send(servePaymentPhoneList(paymentPhoneListHtml, user));
 });
 
 // payment_switch → payment_list 리다이렉트
-router.get("/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_switch.html", async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
-router.get("/myroom/mileage/payment/payment_switch.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_switch.html", async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
-router.get("/myroom/mileage/payment/payment_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/mileage/payment/payment_list.html");
 });
-router.get("/myroom/mileage/payment/payment_phone_list.html", (_req, res): void => {
+router.get("/myroom/mileage/payment/payment_phone_list.html", async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/mileage/payment/payment_phone_list.html");
 });
 
 // 판매등록/구매등록 직접 접근 리다이렉트
-router.get(["/sell/", "/sell"], (_req, res): void => {
+router.get(["/sell/", "/sell"], async (req, res): Promise<void> => {
   res.redirect(302, "/sell/register.html");
 });
-router.get("/buy/register.html", (_req, res): void => {
+router.get("/buy/register.html", async (req, res): Promise<void> => {
   res.redirect(302, "/buy/register.html");
 });
-router.get("/sell/new.html", (_req, res): void => {
+router.get("/sell/new.html", async (req, res): Promise<void> => {
   res.redirect(302, "/sell/new.html");
 });
-router.get("/myroom/batch_goods/index.html", (_req, res): void => {
+router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/batch_goods/index.html");
 });
 
 // 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
-router.get("/sell/application.html", (req, res): void => {
+router.get("/sell/application.html", async (req, res): Promise<void> => {
   if (!sellApplicationHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveApplication(sellApplicationHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveApplication(sellApplicationHtml, user));
 });
 
 // 삽니다 상세 페이지 (/buy/application.html?id=...)
-router.get("/buy/application.html", (req, res): void => {
+router.get("/buy/application.html", async (req, res): Promise<void> => {
   if (!buyApplicationHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveBuyApplication(buyApplicationHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveBuyApplication(buyApplicationHtml, user));
 });
 
 // 삽니다 상세 리다이렉트
-router.get("/buy/application.html", (req, res): void => {
+router.get("/buy/application.html", async (req, res): Promise<void> => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   res.redirect(302, `/buy/application.html${qs}`);
 });
 
 // 삽니다 목록 페이지 (/buy/list.html?search_game=...)
-router.get("/buy/list.html", (req, res): void => {
+router.get("/buy/list.html", async (req, res): Promise<void> => {
   if (!buyLineageClassicHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveBuy(buyLineageClassicHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveBuy(buyLineageClassicHtml, user));
 });
 
 // 삽니다 목록 리다이렉트
-router.get(["/buy/list.html", "/buy/"], (req, res): void => {
+router.get(["/buy/list.html", "/buy/"], async (req, res): Promise<void> => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   res.redirect(302, `/buy/list.html${qs}`);
 });
 
 // 개별 채팅방 페이지
-router.get("/myroom/chat/new_chat.html", (req, res): void => {
+router.get("/myroom/chat/new_chat.html", async (req, res): Promise<void> => {
   if (!chatNewHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveChatNew(chatNewHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveChatNew(chatNewHtml, user));
 });
 
 // 채팅방 직접 접근 리다이렉트
-router.get("/myroom/chat/new_chat.html", (req, res): void => {
+router.get("/myroom/chat/new_chat.html", async (req, res): Promise<void> => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   res.redirect(302, `/myroom/chat/new_chat.html${qs}`);
 });
 
 // 매니아 채팅 페이지
-router.get(["/myroom/chat/list.html", "/myroom/chat/"], (req, res): void => {
+router.get(["/myroom/chat/list.html", "/myroom/chat/"], async (req, res): Promise<void> => {
   const order = req.query["order"];
   const html = order === "1" ? chatOrderedHtml : chatHtml;
   if (!html) {
@@ -2794,23 +2843,27 @@ router.get(["/myroom/chat/list.html", "/myroom/chat/"], (req, res): void => {
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveChat(html));
+  const user = await getSessionUser(req);
+
+  res.send(serveChat(html, user));
 });
 
 // 게임매니아 페이지
-router.get("/gamemania", (req, res): void => {
+router.get("/gamemania", async (req, res): Promise<void> => {
   if (!gamemanaHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
-  res.send(serveGamemania(gamemanaHtml));
+  const user = await getSessionUser(req);
+
+  res.send(serveGamemania(gamemanaHtml, user));
 });
 
 // /proxy 및 나머지 하위 경로 → itemmania.html 서빙
 // /proxy/* 구버전 경로 → 새 경로로 301 리다이렉트 (하위호환)
-router.get(["/proxy", "/proxy/{*splat}"], (req, res): void => {
+router.get(["/proxy", "/proxy/{*splat}"], async (req, res): Promise<void> => {
   const params = req.params as { splat?: string };
   const splat = params.splat || "";
   res.redirect(301, splat ? "/" + splat : "/");
