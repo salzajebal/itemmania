@@ -296,6 +296,11 @@ const INTERCEPT_SCRIPT = `
         e.stopImmediatePropagation();
         api('POST','/auth/logout').then(function(){ currentUser=null; location.href='/'; });
       }, true);
+    } else {
+      loginsDiv.innerHTML =
+        '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>' +
+        '<div class="divider"></div>' +
+        '<a href="/login" style="font-size:14px;font-weight:600;color:#159EFD;text-decoration:none">회원가입</a>';
     }
   }
 
