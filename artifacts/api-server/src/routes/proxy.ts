@@ -1265,125 +1265,108 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
-  // 실제 HTML 구조:
-  //  .g_search_wrapper
-  //    .search_wrap > .input_area > #searchRegGameServer
-  //    .g_search_frame.g_hidden#reg_gameserver
-  //      .g_search_frame_wrapper
-  //        .gs_list
-  //          .game > ul > li  (게임 목록)
-  //          .server > ul > li  (서버 목록)
-  //          .goods > ul > li  (거래유형)
+  // .g_search_frame은 height:100% 의존 구조라 높이가 0으로 collapse됨.
+  // .g_search_wrapper(position:relative) 안에 새 드롭다운 div를 직접 생성.
   function setupGameSearch(inp) {
     if (!inp) return;
     var _debounce = null;
 
-    // inp 부모를 최대 6단계까지 올라가며 .g_search_frame 찾기
-    var frame = null;
-    var node = inp.parentElement;
-    for (var i = 0; i < 6 && node; i++) {
-      frame = node.querySelector('.g_search_frame');
-      if (frame) break;
-      node = node.parentElement;
+    // .g_search_wrapper 찾기
+    var wrapper = inp.parentElement;
+    for (var k = 0; k < 8 && wrapper; k++) {
+      if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
+      wrapper = wrapper.parentElement;
     }
-    if (!frame) return;
+    if (!wrapper || !wrapper.classList.contains(\'g_search_wrapper\')) return;
 
-    var gsList = frame.querySelector('.gs_list');
-    if (!gsList) return;
+    // 커스텀 드롭다운 생성
+    var dd = document.getElementById(\'_im_game_dd\');
+    if (dd) dd.remove();
+    dd = document.createElement(\'div\');
+    dd.id = \'_im_game_dd\';
+    dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
+      + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
+      + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
+      + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
+    wrapper.appendChild(dd);
 
-    // .game / .server 서브 div (없으면 생성)
-    var gameDiv = gsList.querySelector('.game');
-    var serverDiv = gsList.querySelector('.server');
-    if (!gameDiv) { gameDiv = document.createElement('div'); gameDiv.className = 'game'; gsList.insertBefore(gameDiv, gsList.firstChild); }
-    if (!serverDiv) { serverDiv = document.createElement('div'); serverDiv.className = 'server'; gsList.appendChild(serverDiv); }
+    function showDd() { dd.style.display = \'block\'; }
+    function hideDd() { dd.style.display = \'none\'; }
 
-    // 가시성 토글: 기존 CSS .g_hidden { visibility:hidden; height:0; opacity:0 } 활용
-    function showFrame() { frame.classList.remove('g_hidden'); }
-    function hideFrame() { frame.classList.add('g_hidden'); }
-
-    // ul > li 목록 생성 (CSS li:hover, sel_on 클래스 활용)
-    function buildUl(items, labelFn, onSelect) {
-      var ul = document.createElement('ul');
-      items.forEach(function(item) {
-        var li = document.createElement('li');
-        li.innerHTML = labelFn(item);
-        li.addEventListener('mousedown', function(e) { e.preventDefault(); });
-        li.addEventListener('click', function() {
-          ul.querySelectorAll('li.sel_on').forEach(function(el) { el.classList.remove('sel_on'); });
-          li.classList.add('sel_on');
-          onSelect(item);
-        });
-        ul.appendChild(li);
+    function makeRow(html, onClick) {
+      var row = document.createElement(\'div\');
+      row.style.cssText = \'line-height:27px;padding:2px 20px 2px 10px;cursor:pointer;font-size:14px;\'
+        + \'white-space:nowrap;overflow:hidden;text-overflow:ellipsis\';
+      row.innerHTML = html;
+      row.addEventListener(\'mouseover\', function() {
+        row.style.fontWeight = \'700\';
+        row.style.borderRadius = \'7px\';
+        row.style.background = \'var(--color-gs-selected-bg,#e8f4ff)\';
       });
-      return ul;
+      row.addEventListener(\'mouseout\', function() {
+        row.style.fontWeight = \'\';
+        row.style.borderRadius = \'\';
+        row.style.background = \'\';
+      });
+      row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+      row.addEventListener(\'click\', onClick);
+      return row;
     }
 
     function renderGames(games) {
-      // 서버 목록 초기화·숨김
-      serverDiv.innerHTML = '';
-      serverDiv.classList.add('g_hidden');
-
+      dd.innerHTML = \'\';
       if (!games.length) {
-        var emptyUl = document.createElement('ul');
-        var emptyLi = document.createElement('li');
-        emptyLi.textContent = '검색 결과가 없습니다';
-        emptyLi.style.color = '#999';
-        emptyUl.appendChild(emptyLi);
-        gameDiv.innerHTML = '';
-        gameDiv.appendChild(emptyUl);
+        dd.appendChild(makeRow(\'<span style="color:#999">검색 결과가 없습니다</span>\', function(){}));
       } else {
-        var ul = buildUl(games,
-          function(g) {
-            return g.name + (g.servers && g.servers.length
-              ? ' <span>' + g.servers.length + '개 서버</span>'
-              : '');
-          },
-          function(g) {
+        games.forEach(function(g) {
+          var label = g.name + (g.servers && g.servers.length
+            ? \' <span style="color:#999;font-size:12px;font-weight:400">(\'  + g.servers.length + \'개 서버)</span>\'
+            : \'\');
+          dd.appendChild(makeRow(label, function() {
             window._IM_sel_game = g;
             window._IM_sel_server = null;
-            if (g.servers && g.servers.length) {
-              renderServers(g);
-            } else {
-              inp.value = g.name;
-              hideFrame();
-            }
-          }
-        );
-        gameDiv.innerHTML = '';
-        gameDiv.appendChild(ul);
+            if (g.servers && g.servers.length) { renderServers(g); }
+            else { inp.value = g.name; hideDd(); }
+          }));
+        });
       }
-      showFrame();
+      showDd();
     }
 
     function renderServers(g) {
-      serverDiv.classList.remove('g_hidden');
-      var ul = buildUl(g.servers,
-        function(s) { return s.name; },
-        function(s) {
+      dd.innerHTML = \'\';
+      var back = makeRow(
+        \'<span style="color:#0070d2;font-weight:600">&#8592; \' + g.name + \' (게임 목록)</span>\',
+        function() { search(inp.value); }
+      );
+      back.style.borderBottom = \'1px solid #eee\';
+      back.style.marginBottom = \'4px\';
+      dd.appendChild(back);
+      g.servers.forEach(function(s) {
+        dd.appendChild(makeRow(s.name, function() {
           window._IM_sel_game = g;
           window._IM_sel_server = s;
-          inp.value = g.name + ' (' + s.name + ')';
-          hideFrame();
-        }
-      );
-      serverDiv.innerHTML = '';
-      serverDiv.appendChild(ul);
+          inp.value = g.name + \' (\' + s.name + \')\';
+          hideDd();
+        }));
+      });
+      showDd();
     }
 
     function search(q) {
       clearTimeout(_debounce);
       _debounce = setTimeout(function() {
-        fetch('/api/games/search?q=' + encodeURIComponent(q || ''), { credentials: 'include' })
+        fetch(\'/api/games/search?q=\' + encodeURIComponent(q || \'\'), { credentials: \'include\' })
           .then(function(r) { return r.json(); })
           .then(function(games) { renderGames(games); })
           .catch(function() {});
       }, q ? 200 : 0);
     }
 
-    inp.addEventListener('focus', function() { search(inp.value); });
-    inp.addEventListener('input', function() { search(inp.value); });
-    document.addEventListener('click', function(e) {
-      if (!frame.contains(e.target) && e.target !== inp) hideFrame();
+    inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
+    inp.addEventListener(\'input\', function() { search(inp.value); }, true);
+    document.addEventListener(\'click\', function(e) {
+      if (e.target !== inp && !dd.contains(e.target)) hideDd();
     });
   }
 
@@ -1494,96 +1477,108 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
+  // .g_search_frame은 height:100% 의존 구조라 높이가 0으로 collapse됨.
+  // .g_search_wrapper(position:relative) 안에 새 드롭다운 div를 직접 생성.
   function setupGameSearch(inp) {
     if (!inp) return;
     var _debounce = null;
 
-    var frame = null;
-    var node = inp.parentElement;
-    for (var i = 0; i < 6 && node; i++) {
-      frame = node.querySelector('.g_search_frame');
-      if (frame) break;
-      node = node.parentElement;
+    // .g_search_wrapper 찾기
+    var wrapper = inp.parentElement;
+    for (var k = 0; k < 8 && wrapper; k++) {
+      if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
+      wrapper = wrapper.parentElement;
     }
-    if (!frame) return;
+    if (!wrapper || !wrapper.classList.contains(\'g_search_wrapper\')) return;
 
-    var gsList = frame.querySelector('.gs_list');
-    if (!gsList) return;
+    // 커스텀 드롭다운 생성
+    var dd = document.getElementById(\'_im_game_dd\');
+    if (dd) dd.remove();
+    dd = document.createElement(\'div\');
+    dd.id = \'_im_game_dd\';
+    dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
+      + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
+      + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
+      + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
+    wrapper.appendChild(dd);
 
-    var gameDiv = gsList.querySelector('.game');
-    var serverDiv = gsList.querySelector('.server');
-    if (!gameDiv) { gameDiv = document.createElement('div'); gameDiv.className = 'game'; gsList.insertBefore(gameDiv, gsList.firstChild); }
-    if (!serverDiv) { serverDiv = document.createElement('div'); serverDiv.className = 'server'; gsList.appendChild(serverDiv); }
+    function showDd() { dd.style.display = \'block\'; }
+    function hideDd() { dd.style.display = \'none\'; }
 
-    function showFrame() { frame.classList.remove('g_hidden'); }
-    function hideFrame() { frame.classList.add('g_hidden'); }
-
-    function buildUl(items, labelFn, onSelect) {
-      var ul = document.createElement('ul');
-      items.forEach(function(item) {
-        var li = document.createElement('li');
-        li.innerHTML = labelFn(item);
-        li.addEventListener('mousedown', function(e) { e.preventDefault(); });
-        li.addEventListener('click', function() {
-          ul.querySelectorAll('li.sel_on').forEach(function(el) { el.classList.remove('sel_on'); });
-          li.classList.add('sel_on');
-          onSelect(item);
-        });
-        ul.appendChild(li);
+    function makeRow(html, onClick) {
+      var row = document.createElement(\'div\');
+      row.style.cssText = \'line-height:27px;padding:2px 20px 2px 10px;cursor:pointer;font-size:14px;\'
+        + \'white-space:nowrap;overflow:hidden;text-overflow:ellipsis\';
+      row.innerHTML = html;
+      row.addEventListener(\'mouseover\', function() {
+        row.style.fontWeight = \'700\';
+        row.style.borderRadius = \'7px\';
+        row.style.background = \'var(--color-gs-selected-bg,#e8f4ff)\';
       });
-      return ul;
+      row.addEventListener(\'mouseout\', function() {
+        row.style.fontWeight = \'\';
+        row.style.borderRadius = \'\';
+        row.style.background = \'\';
+      });
+      row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+      row.addEventListener(\'click\', onClick);
+      return row;
     }
 
     function renderGames(games) {
-      serverDiv.innerHTML = '';
-      serverDiv.classList.add('g_hidden');
+      dd.innerHTML = \'\';
       if (!games.length) {
-        var emptyUl = document.createElement('ul');
-        var emptyLi = document.createElement('li');
-        emptyLi.textContent = '검색 결과가 없습니다';
-        emptyLi.style.color = '#999';
-        emptyUl.appendChild(emptyLi);
-        gameDiv.innerHTML = ''; gameDiv.appendChild(emptyUl);
+        dd.appendChild(makeRow(\'<span style="color:#999">검색 결과가 없습니다</span>\', function(){}));
       } else {
-        var ul = buildUl(games,
-          function(g) { return g.name + (g.servers && g.servers.length ? ' <span>' + g.servers.length + '개 서버</span>' : ''); },
-          function(g) {
-            window._IM_sel_game = g; window._IM_sel_server = null;
+        games.forEach(function(g) {
+          var label = g.name + (g.servers && g.servers.length
+            ? \' <span style="color:#999;font-size:12px;font-weight:400">(\'  + g.servers.length + \'개 서버)</span>\'
+            : \'\');
+          dd.appendChild(makeRow(label, function() {
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
             if (g.servers && g.servers.length) { renderServers(g); }
-            else { inp.value = g.name; hideFrame(); }
-          }
-        );
-        gameDiv.innerHTML = ''; gameDiv.appendChild(ul);
+            else { inp.value = g.name; hideDd(); }
+          }));
+        });
       }
-      showFrame();
+      showDd();
     }
 
     function renderServers(g) {
-      serverDiv.classList.remove('g_hidden');
-      var ul = buildUl(g.servers,
-        function(s) { return s.name; },
-        function(s) {
-          window._IM_sel_game = g; window._IM_sel_server = s;
-          inp.value = g.name + ' (' + s.name + ')'; hideFrame();
-        }
+      dd.innerHTML = \'\';
+      var back = makeRow(
+        \'<span style="color:#0070d2;font-weight:600">&#8592; \' + g.name + \' (게임 목록)</span>\',
+        function() { search(inp.value); }
       );
-      serverDiv.innerHTML = ''; serverDiv.appendChild(ul);
+      back.style.borderBottom = \'1px solid #eee\';
+      back.style.marginBottom = \'4px\';
+      dd.appendChild(back);
+      g.servers.forEach(function(s) {
+        dd.appendChild(makeRow(s.name, function() {
+          window._IM_sel_game = g;
+          window._IM_sel_server = s;
+          inp.value = g.name + \' (\' + s.name + \')\';
+          hideDd();
+        }));
+      });
+      showDd();
     }
 
     function search(q) {
       clearTimeout(_debounce);
       _debounce = setTimeout(function() {
-        fetch('/api/games/search?q=' + encodeURIComponent(q || ''), { credentials: 'include' })
+        fetch(\'/api/games/search?q=\' + encodeURIComponent(q || \'\'), { credentials: \'include\' })
           .then(function(r) { return r.json(); })
           .then(function(games) { renderGames(games); })
           .catch(function() {});
       }, q ? 200 : 0);
     }
 
-    inp.addEventListener('focus', function() { search(inp.value); });
-    inp.addEventListener('input', function() { search(inp.value); });
-    document.addEventListener('click', function(e) {
-      if (!frame.contains(e.target) && e.target !== inp) hideFrame();
+    inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
+    inp.addEventListener(\'input\', function() { search(inp.value); }, true);
+    document.addEventListener(\'click\', function(e) {
+      if (e.target !== inp && !dd.contains(e.target)) hideDd();
     });
   }
 
