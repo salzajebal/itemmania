@@ -908,6 +908,9 @@ const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
 'use strict';
 var ROUTE_MAP=[
+  ['/portal/user/logout_ok.html','/'],
+  ['/portal/user/p_logout_form.html','/'],
+  ['/portal/user/logout.html','/'],
   ['/portal/user/p_login_form.html','/login'],
   ['/myroom/mileage/payment/payment_phone_list.html','/myroom/mileage/payment/payment_phone_list.html'],
   ['/myroom/mileage/payment/payment_switch.html','/myroom/mileage/payment/payment_list.html'],
@@ -3862,6 +3865,16 @@ router.get(["/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<
 });
 router.get("/portal/user/p_login_form.html", async (req, res): Promise<void> => {
   res.redirect(301, "/login");
+});
+// 원본 itemmania 로그아웃 완료 페이지 → 세션 제거 후 홈으로
+router.get([
+  "/portal/user/logout_ok.html",
+  "/portal/user/p_logout_form.html",
+  "/portal/user/logout.html",
+], (req, res): void => {
+  req.session.destroy(() => {
+    res.redirect(302, "/");
+  });
 });
 // 회원가입 1단계 – 약관 동의
 router.get(["/join", "/join/", "/portal/user/join.html", "/portal/user/"], async (req, res): Promise<void> => {
