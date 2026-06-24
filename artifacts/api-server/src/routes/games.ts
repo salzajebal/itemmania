@@ -1,25 +1,16 @@
 import { Router } from "express";
 import { db, gamesTable, gameServersTable } from "@workspace/db";
-import { ilike, or, asc, eq } from "drizzle-orm";
+import { ilike, asc, eq } from "drizzle-orm";
 
 const router = Router();
 
-// GET /api/games/search?q=검색어  → [{id, name, code, servers:[{id,name}]}]
+// GET /api/games/search?q=검색어
 router.get("/games/search", async (req, res): Promise<void> => {
   const q = String(req.query["q"] ?? "").trim();
 
   const games = q
-    ? await db
-        .select()
-        .from(gamesTable)
-        .where(ilike(gamesTable.name, `%${q}%`))
-        .orderBy(asc(gamesTable.sortOrder))
-        .limit(20)
-    : await db
-        .select()
-        .from(gamesTable)
-        .orderBy(asc(gamesTable.sortOrder))
-        .limit(20);
+    ? await db.select().from(gamesTable).where(ilike(gamesTable.name, `%${q}%`)).orderBy(asc(gamesTable.sortOrder)).limit(20)
+    : await db.select().from(gamesTable).orderBy(asc(gamesTable.sortOrder)).limit(20);
 
   const result = await Promise.all(
     games.map(async (game) => {
@@ -33,6 +24,17 @@ router.get("/games/search", async (req, res): Promise<void> => {
   );
 
   res.json(result);
+});
+
+// GET /api/games/bycode/:code  → { id, name, code }
+router.get("/games/bycode/:code", async (req, res): Promise<void> => {
+  const code = req.params["code"] ?? "";
+  if (!code) { res.status(400).json({ error: "code 필요" }); return; }
+
+  const [game] = await db.select().from(gamesTable).where(eq(gamesTable.code, code)).limit(1);
+  if (!game) { res.status(404).json({ error: "게임 없음" }); return; }
+
+  res.json({ id: game.id, name: game.name, code: game.code });
 });
 
 // GET /api/games/:id/servers

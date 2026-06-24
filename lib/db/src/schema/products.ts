@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, bigint, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, bigint, integer, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,7 @@ export const productsTable = pgTable("products", {
   category: text("category"),
   gameName: text("game_name"),
   serverName: text("server_name"),
+  sellerId: integer("seller_id"),
   sellerName: text("seller_name"),
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),

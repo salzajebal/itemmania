@@ -318,8 +318,19 @@ function fmtDate(d){if(!d)return'-';return new Date(d).toLocaleDateString('ko-KR
 function fmtMoney(n){if(n==null)return'-';return Number(n).toLocaleString('ko-KR')+'원';}
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+async function loadStats(){
+  try{
+    var r=await fetch('/api/admin/stats',{credentials:'include'});
+    if(!r.ok)return;
+    var s=await r.json();
+    document.getElementById('statUsers').textContent=s.users;
+    document.getElementById('statProducts').textContent=s.products;
+    document.getElementById('statOrders').textContent=s.orders;
+  }catch(e){}
+}
+
 async function loadAll(){
-  await Promise.all([loadProducts(),loadUsers(),loadOrders(),loadWithdrawals()]);
+  await Promise.all([loadStats(),loadProducts(),loadUsers(),loadOrders(),loadWithdrawals()]);
 }
 
 // ── 상품 ─────────────────────────────────────────────────

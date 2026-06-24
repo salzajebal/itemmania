@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, like, and, sql, desc } from "drizzle-orm";
-import { db, productsTable } from "@workspace/db";
+import { eq, ilike, and, sql, desc } from "drizzle-orm";
+import { db, productsTable, gamesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -13,6 +13,8 @@ function formatProduct(p: typeof productsTable.$inferSelect) {
     price: Number(p.price),
     category: p.category,
     gameName: p.gameName,
+    serverName: p.serverName,
+    sellerId: p.sellerId,
     sellerName: p.sellerName,
     description: p.description,
     thumbnailUrl: p.thumbnailUrl,
@@ -23,67 +25,87 @@ function formatProduct(p: typeof productsTable.$inferSelect) {
   };
 }
 
-// 상품 목록
+// 상품 목록 (게임코드 변환 지원)
 router.get("/products", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10)));
   const offset = (page - 1) * limit;
-  const { category, gameName, keyword } = req.query;
+  const { category, gameName, keyword, gameCode, serverName } = req.query;
 
   const conditions = [eq(productsTable.status, "active")];
+
   if (category && typeof category === "string") {
     conditions.push(eq(productsTable.category, category));
   }
-  if (gameName && typeof gameName === "string") {
+
+  // gameCode → gameName 변환 (itemmania 게임코드를 게임명으로)
+  if (gameCode && typeof gameCode === "string" && gameCode.trim()) {
+    const [game] = await db
+      .select()
+      .from(gamesTable)
+      .where(eq(gamesTable.code, gameCode.trim()))
+      .limit(1);
+    if (game) {
+      conditions.push(eq(productsTable.gameName, game.name));
+    }
+  } else if (gameName && typeof gameName === "string") {
     conditions.push(eq(productsTable.gameName, gameName));
   }
+
+  if (serverName && typeof serverName === "string") {
+    conditions.push(eq(productsTable.serverName, serverName));
+  }
+
   if (keyword && typeof keyword === "string") {
-    conditions.push(like(productsTable.title, `%${keyword}%`));
+    conditions.push(ilike(productsTable.title, `%${keyword}%`));
   }
 
   const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(where);
-  const items = await db.select().from(productsTable).where(where).orderBy(desc(productsTable.createdAt)).limit(limit).offset(offset);
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(productsTable)
+    .where(where);
 
-  res.json({
-    items: items.map(formatProduct),
-    total: count,
-    page,
-    limit,
-  });
+  const items = await db
+    .select()
+    .from(productsTable)
+    .where(where)
+    .orderBy(desc(productsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json({ items: items.map(formatProduct), total: count, page, limit });
 });
 
 // 상품 상세
 router.get("/products/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!product) {
-    res.status(404).json({ error: "상품을 찾을 수 없습니다." });
-    return;
-  }
+  if (!product) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
 
   res.json(formatProduct(product));
 });
 
 // 상품 등록 (로그인 필요)
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
-  const { title, price, gameName, serverName, category, description, sellerName } = req.body as Record<string, string>;
+  const { title, price, gameName, serverName, category, description, sellerName } =
+    req.body as Record<string, string>;
 
   if (!title || !price) {
-    res.status(400).json({ error: "title과 price는 필수입니다." });
-    return;
+    res.status(400).json({ error: "title과 price는 필수입니다." }); return;
   }
 
-  const priceNum = parseInt(String(price), 10);
+  const priceNum = parseInt(String(price).replace(/,/g, ""), 10);
   if (isNaN(priceNum) || priceNum <= 0) {
-    res.status(400).json({ error: "price는 양수 정수여야 합니다." });
-    return;
+    res.status(400).json({ error: "price는 양수 정수여야 합니다." }); return;
   }
 
   const itemmaniaid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const userId = req.session.userId!;
 
   const [inserted] = await db
     .insert(productsTable)
@@ -94,6 +116,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
       gameName: gameName ? String(gameName).trim() : null,
       serverName: serverName ? String(serverName).trim() : null,
       category: category ? String(category).trim() : "sell",
+      sellerId: userId,
       sellerName: sellerName ? String(sellerName).trim() : null,
       description: description ? String(description).trim() : null,
       status: "active",
@@ -101,6 +124,34 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json(formatProduct(inserted));
+});
+
+// 내 상품 목록 (로그인 필요)
+router.get("/products/my/list", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const items = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.sellerId, userId))
+    .orderBy(desc(productsTable.createdAt));
+  res.json(items.map(formatProduct));
+});
+
+// 상품 삭제 / 비활성화 (판매자 본인 또는 관리자)
+router.delete("/products/:id", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
+  const userId = req.session.userId!;
+
+  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id));
+  if (!product) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
+  if (product.sellerId !== userId && req.session.userRole !== "admin") {
+    res.status(403).json({ error: "권한이 없습니다." }); return;
+  }
+
+  await db.update(productsTable).set({ status: "inactive" }).where(eq(productsTable.id, id));
+  res.json({ ok: true });
 });
 
 export default router;

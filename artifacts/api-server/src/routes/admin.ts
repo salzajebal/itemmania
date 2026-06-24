@@ -254,4 +254,23 @@ router.delete("/admin/products/:id", requireAdmin, async (req, res): Promise<voi
   res.json({ ok: true });
 });
 
+// 대시보드 통계
+router.get("/admin/stats", requireAdmin, async (_req, res): Promise<void> => {
+  const [[userCount], [productCount], [orderCount], [pendingOrderCount], [totalRevenue]] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(usersTable),
+    db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(eq(productsTable.status, "active")),
+    db.select({ count: sql<number>`count(*)::int` }).from(ordersTable),
+    db.select({ count: sql<number>`count(*)::int` }).from(ordersTable).where(eq(ordersTable.status, "pending")),
+    db.select({ total: sql<number>`coalesce(sum(amount),0)::bigint` }).from(ordersTable).where(eq(ordersTable.status, "completed")),
+  ]);
+
+  res.json({
+    users: userCount.count,
+    products: productCount.count,
+    orders: orderCount.count,
+    pendingOrders: pendingOrderCount.count,
+    revenue: Number(totalRevenue.total),
+  });
+});
+
 export default router;
