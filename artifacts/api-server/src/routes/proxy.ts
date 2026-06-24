@@ -4634,6 +4634,202 @@ router.get("/gamemania", async (req, res): Promise<void> => {
   res.send(serveGamemania(gamemanaHtml, user));
 });
 
+// ── 팝업 미리보기 테스트 페이지 ─────────────────────────────────────
+router.get("/test-popups", (_req, res): void => {
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang=ko>
+<head>
+<meta charset=utf-8>
+<title>팝업 미리보기</title>
+<style>
+body{font-family:'Apple SD Gothic Neo',맑은고딕,sans-serif;background:#ddd;padding:30px}
+h2{margin-bottom:20px}
+.btn{margin:8px;padding:12px 24px;font-size:15px;cursor:pointer;
+  background:#159EFD;color:#fff;border:none;border-radius:8px;font-weight:700}
+
+/* ─── 팝업 공통 ─── */
+#dvPremium,#receipt_layer,#dvPopup{
+  position:fixed;inset:0;z-index:10000;
+  background:rgba(0,0,0,0.55);
+  display:none;
+  align-items:flex-start;justify-content:center;
+  padding:40px 16px;overflow-y:auto;
+  box-sizing:border-box;
+}
+#dvPremium.im-show,#receipt_layer.im-show,#dvPopup.im-show{display:flex}
+.inner{
+  background:#fff;border-radius:10px;
+  width:100%;max-width:620px;
+  box-shadow:0 8px 40px rgba(0,0,0,.28);
+  overflow:hidden;position:relative;
+}
+.title{
+  font-size:18px;font-weight:700;color:#159EFD;
+  padding:24px 28px 20px;margin:0;
+  border-bottom:2px solid #159EFD;
+}
+.cont{padding:20px 28px}
+.g_btn_new{padding:0 28px 24px;display:flex;gap:10px}
+/* 파란 버튼 */
+#premium_btn,#receipt_ok_btn,#reg_submit{
+  flex:1;padding:15px;background:#159EFD;color:#fff;border:none;
+  border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;
+}
+/* 취소 버튼 */
+#cancel_submit{
+  flex:1;padding:15px;background:#555;color:#fff;border:none;
+  border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;
+}
+/* X 버튼 */
+.close_w{
+  position:absolute;top:18px;right:20px;
+  background:none;border:none;font-size:18px;cursor:pointer;color:#888;padding:4px 8px;
+}
+/* dvPremium 내부 */
+.middle_text{font-size:14px;color:#444;text-align:center;margin-bottom:16px}
+.total_charge{text-align:center;padding:12px 0;margin-bottom:14px;border-top:1px solid #e8e8e8;border-bottom:1px solid #e8e8e8}
+.total_label{font-size:15px;font-weight:700}
+.total_charge_money{font-size:17px;font-weight:700;color:#e53e3e}
+.total_charge .center{font-size:13px;color:#666;margin-top:4px}
+.item_content{border:1px solid #D5E2F2;padding:14px;margin-bottom:12px}
+.f_right{text-align:right;margin-bottom:8px}
+.free_view{font-weight:700;padding:4px 18px;color:#159EFD;border:1px solid #159EFD;border-radius:3px;background:none;cursor:pointer;font-size:13px}
+.premium_box{display:flex;flex-direction:column;gap:10px}
+.charge_price{text-align:center;font-size:13px;margin-bottom:6px}
+.quantity_wrap{display:flex;justify-content:center;gap:8px;margin-bottom:8px}
+.quantity_input{display:flex;flex:1;height:36px;border:1px solid #DDE0E3;border-radius:3px;max-width:200px}
+.quantity_input button{width:40px;height:36px;border:none;background:#F1F2F4;font-size:16px;cursor:pointer}
+.quantity_input input{flex:1;text-align:center;border:none;outline:none;font-size:16px}
+.reset{padding:0 14px;border:1px solid #DDE0E3;border-radius:3px;background:#fff;font-size:13px;cursor:pointer;height:36px}
+.set_amount_list{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.set_amount_list button{flex:1;min-width:36px;height:30px;border:1px solid #DDE0E3;border-radius:3px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#747474}
+.sub_txt{font-size:12px;color:#555;text-align:center;background:#E8F2FF;padding:8px;border-radius:4px;margin-top:6px}
+.sub_notice_txt{font-size:12px;color:#FF2400;margin-top:10px;text-align:center}
+/* dvPopup 내부 */
+.g_blue_table{width:100%;border-collapse:collapse;margin-bottom:6px}
+.g_blue_table th{background:#E8F2FF;font-size:13px;font-weight:700;padding:10px 12px;border:1px solid #D5E2F2;text-align:left}
+.g_blue_table td{padding:10px 12px;border:1px solid #D5E2F2;font-size:13px}
+.attention{font-size:13px;font-weight:700;color:#e53e3e;margin:14px 0 6px}
+.attention_box{padding:12px 16px;border:1px solid #f5c6cb;background:#fff5f5;font-size:13px;line-height:1.7;margin-bottom:10px}
+.attention_box li{margin-bottom:4px;list-style:none}
+.box6{padding:10px 16px;border:1px solid #e0e0e0;background:#f9f9f9;font-size:12px;color:#666;line-height:1.7;margin-bottom:14px}
+.box6 li{list-style:none;margin-bottom:2px}
+.last_txt{text-align:center;font-size:14px;font-weight:700;padding:14px 0 16px;border-top:1px solid #e8e8e8}
+</style>
+</head>
+<body>
+<h2>팝업 미리보기 테스트</h2>
+<button class=btn onclick="show('dvPremium')">① 프리미엄 등록안내</button>
+<button class=btn onclick="show('receipt_layer')">② 현금 영수증</button>
+<button class=btn onclick="show('dvPopup')">③ 물품등록정보</button>
+
+<!-- ① dvPremium -->
+<div id=dvPremium>
+ <div class=inner>
+  <div class=title>프리미엄 등록안내</div>
+  <div class=cont>
+   <div class=middle_text>물품 리스트 상단에 노출되어 더 많은 고객의 관심을 받을 수 있습니다.<br>빠른 거래를 원하신다면 지금 바로 프리미엄 등록 서비스를 이용해 보세요!</div>
+   <div class=total_charge>
+    <strong class=total_label>총 결제금액 : </strong>
+    <strong class=total_charge_money>0원</strong>
+    <div class=center>(내 사용가능한 마일리지 : <strong style=color:#e53e3e>1,280원</strong>)</div>
+   </div>
+   <div class=item_content>
+    <div class=f_right><button type=button class=free_view>무료이용권</button></div>
+    <div class=premium_box>
+     <div class=charge_price><strong>프리미엄등록</strong><br>(이용료 : <strong>100원</strong> / 1시간)</div>
+     <div>
+      <div class=quantity_wrap>
+       <div class=quantity_input>
+        <button>−</button>
+        <input type=number value=0 readonly>
+        <button>+</button>
+       </div>
+       <button class=reset>정정</button>
+      </div>
+      <div class=set_amount_list>
+       시간
+       <button>1</button><button>6</button><button>12</button><button>24</button><button>72</button>
+      </div>
+     </div>
+     <div class=sub_txt>프리미엄 보유 잔여시간이 많을수록 리스트 상단에 노출됩니다.</div>
+    </div>
+   </div>
+   <div class=sub_notice_txt>※ 유료 등록 서비스는 선불로 부과되며, 거래 성사 여부, 금칙어 노출, 이용 정지와 관계없이<br>&nbsp;&nbsp;&nbsp;환불, 취소, 교환이 불가하니 신중하게 구매해 주시기 바랍니다.</div>
+  </div>
+  <div class=g_btn_new><button type=button id=premium_btn onclick="hide('dvPremium');show('receipt_layer')">확인</button></div>
+ </div>
+</div>
+
+<!-- ② receipt_layer -->
+<div id=receipt_layer>
+ <div class=inner>
+  <button type=button class=close_w onclick="hide('receipt_layer')">╳</button>
+  <div class=title>현금 영수증</div>
+  <div class=cont>
+   <div style="background:#EBF5FF;border:1px solid #B0D4F1;border-radius:6px;padding:14px 16px;margin-bottom:18px;font-size:14px;font-weight:600;color:#1a6fb0">
+    잠깐! <span style=color:#e53e3e>판매수수료 현금영수증</span> 발급정보를 확인해주세요
+   </div>
+   <div style="border:1px solid #ddd;border-radius:6px;padding:16px 20px;display:flex;align-items:center;gap:24px;margin-bottom:16px">
+    <span style="font-size:14px;font-weight:600">현금 영수증</span>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type=radio name=receipt_type value=issue> 발급</label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type=radio name=receipt_type value=no_issue checked> 미발급</label>
+   </div>
+   <p style="font-size:13px;color:#666;margin:0 0 4px;line-height:1.6">선택한 발급방식이 앞으로 모든 거래에 자동 적용됩니다.</p>
+   <p style="font-size:13px;color:#666;margin:0;line-height:1.6">발급여부는 언제든지 마이룸 &gt; 현금영수증 &gt; 발급정보 에서 변경할 수 있어요.</p>
+  </div>
+  <div class=g_btn_new><button type=button id=receipt_ok_btn onclick="hide('receipt_layer');show('dvPopup')">물품 등록하기</button></div>
+ </div>
+</div>
+
+<!-- ③ dvPopup -->
+<div id=dvPopup>
+ <div class=inner>
+  <div class=title>물품등록정보</div>
+  <div class=cont>
+   <table class=g_blue_table><colgroup><col width=122><col></colgroup>
+    <tbody><tr><th>카테고리</th><td>메이플스토리월드 &gt; 메이플플래닛 &gt; <span style=color:#159EFD>아이템</span></td></tr></tbody>
+   </table>
+   <table class="g_blue_table" style=margin-bottom:14px><colgroup><col width=122><col width=180><col width=100><col></colgroup>
+    <tbody>
+     <tr><th>물품제목</th><td colspan=3>아이템 팝니다.</td></tr>
+     <tr><th>거래유형</th><td>일반판매</td><th>판매금액</th><td>960,000원</td></tr>
+    </tbody>
+   </table>
+   <div class=attention>거래 사고 주의사항</div>
+   <ul class=attention_box>
+    <li>1. 판매 등록 시 <span style=color:red>본인 정보(게임명/서버/캐릭터)를 등록</span>하세요.</li>
+    <li>2. 반드시 <span style=color:red>구매자 캐릭터에게 거래물품을 전달</span>하세요.</li>
+    <li>3. 입금확인 문자 메시지를 받으신 후 반드시 [홈페이지] &gt; [마이룸]에서 입금 확인 여부를 확인하세요.</li>
+    <li style=color:#159EFD>타인 게임정보 기재 또는, 다른 게임/서버에 물품 등록, 구매자 캐릭터가 아닌 다른 캐릭터에게 물품을 전달할 경우 판매자에게 불이익이 발생할 수 있습니다.</li>
+   </ul>
+   <ul class=box6>
+    <li>분할판매로 등록한 물품은 보유수량이 최소판매수량보다 적어지면 자동으로 숨김상태 됩니다.</li>
+    <li>등록물품의 해킹, 복사, 사기 등의 문제가 발생할 때 민/형사상 책임은 등록자에게 있음을 동의합니다.</li>
+    <li>[물품등록유지기간]</li>
+    <li style=list-style:none;padding-left:12px>등록물품은 7일 후 자동으로 삭제됩니다. (계정거래의 경우 30일)</li>
+    <li style=list-style:none;padding-left:12px>* 팝니다/삽니다 등록물품 모두 포함</li>
+    <li style=list-style:none;padding-left:12px>단, 부가서비스 이용중인 물품의 경우 잔여 시간 경과 후 자동 삭제</li>
+   </ul>
+   <div class=last_txt>등록하시려는 물품이 위와 같습니까?</div>
+   <div class=g_btn_new>
+    <button type=button id=reg_submit onclick="hide('dvPopup')">확인</button>
+    <button type=button id=cancel_submit onclick="hide('dvPopup')">취소</button>
+   </div>
+  </div>
+ </div>
+</div>
+
+<script>
+function show(id){document.getElementById(id).classList.add('im-show')}
+function hide(id){document.getElementById(id).classList.remove('im-show')}
+// 페이지 로드시 첫 번째 팝업 자동 표시
+window.onload = function(){ show('dvPremium'); }
+</script>
+</body></html>`);
+});
+
 // /proxy 및 나머지 하위 경로 → itemmania.html 서빙
 // /proxy/* 구버전 경로 → 새 경로로 301 리다이렉트 (하위호환)
 router.get(["/proxy", "/proxy/{*splat}"], async (req, res): Promise<void> => {
