@@ -1619,9 +1619,14 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       if (!serverUl) { serverUl = document.createElement(\'ul\'); serverDiv.appendChild(serverUl); }
       serverUl.innerHTML = \'\';
       if (g.servers && g.servers.length) {
-        g.servers.forEach(function(s) {
+        g.servers.forEach(function(s, sidx) {
           var li = document.createElement(\'li\');
           li.textContent = s.name;
+          if (sidx === 0) {
+            li.classList.add(\'sel_on\');
+            window._IM_sel_server = s;
+            inp.value = g.name + \' (\' + s.name + \')\';
+          }
           li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
           li.addEventListener(\'click\', function() {
             serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
@@ -1712,6 +1717,39 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   function init() {
+    // 스냅샷에 미리 채워진 폼 값 초기화
+    var priceInp = document.getElementById('user_price');
+    var titleInp = document.getElementById('user_title');
+    var gsInp = document.getElementById('searchRegGameServer');
+    var headerInp = document.getElementById('searchGameServer');
+    if (priceInp) priceInp.value = '';
+    if (titleInp) titleInp.value = '';
+    if (gsInp) gsInp.value = '';
+    if (headerInp) headerInp.value = '';
+    window._IM_sel_game = null;
+    window._IM_sel_server = null;
+    window._IM_sel_category = null;
+
+    // 수수료 영역 초기 숨김
+    var comsArea = document.getElementById('coms_area');
+    if (comsArea) comsArea.style.display = 'none';
+
+    // 가격 입력시 수수료 자동계산
+    if (priceInp) {
+      priceInp.addEventListener('input', function() {
+        var raw = parseInt(priceInp.value.replace(/[^0-9]/g, ''), 10) || 0;
+        var fee = Math.round(raw * 0.05);
+        var recv = raw - fee;
+        var commEl = document.getElementById('commission_price');
+        var recvEl = document.getElementById('receive_price');
+        if (commEl) commEl.textContent = fee.toLocaleString();
+        if (recvEl) recvEl.textContent = recv.toLocaleString();
+        if (comsArea) comsArea.style.display = raw > 0 ? 'block' : 'none';
+        // 천단위 콤마 표시
+        priceInp.value = raw > 0 ? raw.toLocaleString() : '';
+      });
+    }
+
     // 게임 검색 자동완성 활성화
     setupGameSearch(document.getElementById('searchRegGameServer'));
 
@@ -1954,9 +1992,14 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       if (!serverUl) { serverUl = document.createElement(\'ul\'); serverDiv.appendChild(serverUl); }
       serverUl.innerHTML = \'\';
       if (g.servers && g.servers.length) {
-        g.servers.forEach(function(s) {
+        g.servers.forEach(function(s, sidx) {
           var li = document.createElement(\'li\');
           li.textContent = s.name;
+          if (sidx === 0) {
+            li.classList.add(\'sel_on\');
+            window._IM_sel_server = s;
+            inp.value = g.name + \' (\' + s.name + \')\';
+          }
           li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
           li.addEventListener(\'click\', function() {
             serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
