@@ -1483,92 +1483,212 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
-  // .g_search_frame은 height:100% 의존 구조라 높이가 0으로 collapse됨.
-  // .g_search_wrapper(position:relative) 안에 새 드롭다운 div를 직접 생성.
+  // 기존 HTML의 .g_search_frame (#reg_gameserver) 3열 구조 활용:
+  // .game(게임목록) | .server(서버목록) | .goods(카테고리)
   function setupGameSearch(inp) {
     if (!inp) return;
     var _debounce = null;
 
-    // .g_search_wrapper 찾기
-    var wrapper = inp.parentElement;
-    for (var k = 0; k < 8 && wrapper; k++) {
-      if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
-      wrapper = wrapper.parentElement;
-    }
-    if (!wrapper || !wrapper.classList.contains(\'g_search_wrapper\')) return;
-
-    // 커스텀 드롭다운 생성
-    var dd = document.getElementById(\'_im_game_dd\');
-    if (dd) dd.remove();
-    dd = document.createElement(\'div\');
-    dd.id = \'_im_game_dd\';
-    dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
-      + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
-      + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
-      + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
-    wrapper.appendChild(dd);
-
-    function showDd() { dd.style.display = \'block\'; }
-    function hideDd() { dd.style.display = \'none\'; }
-
-    function makeRow(html, onClick) {
-      var row = document.createElement(\'div\');
-      row.style.cssText = \'line-height:27px;padding:2px 20px 2px 10px;cursor:pointer;font-size:14px;\'
-        + \'white-space:nowrap;overflow:hidden;text-overflow:ellipsis\';
-      row.innerHTML = html;
-      row.addEventListener(\'mouseover\', function() {
-        row.style.fontWeight = \'700\';
-        row.style.borderRadius = \'7px\';
-        row.style.background = \'var(--color-gs-selected-bg,#e8f4ff)\';
-      });
-      row.addEventListener(\'mouseout\', function() {
-        row.style.fontWeight = \'\';
-        row.style.borderRadius = \'\';
-        row.style.background = \'\';
-      });
-      row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
-      row.addEventListener(\'click\', onClick);
-      return row;
+    // 기존 #reg_gameserver 드롭다운 찾기
+    var frame = document.getElementById(\'reg_gameserver\');
+    if (!frame) {
+      var p = inp.parentElement;
+      for (var k = 0; k < 10 && p; k++) {
+        var found = p.querySelector(\'.g_search_frame\');
+        if (found) { frame = found; break; }
+        p = p.parentElement;
+      }
     }
 
-    function renderGames(games) {
-      dd.innerHTML = \'\';
+    // fallback: 커스텀 드롭다운
+    var useCustom = !frame;
+    var dd = null;
+    if (useCustom) {
+      var wrapper = inp.parentElement;
+      for (var wk = 0; wk < 8 && wrapper; wk++) {
+        if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
+        wrapper = wrapper.parentElement;
+      }
+      var existDd = document.getElementById(\'_im_game_dd_fb\');
+      if (existDd) existDd.remove();
+      dd = document.createElement(\'div\');
+      dd.id = \'_im_game_dd_fb\';
+      dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
+        + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
+        + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
+        + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
+      if (wrapper) wrapper.appendChild(dd);
+    }
+
+    var listEl = frame ? (document.getElementById(\'reg_gameserver_list\') || frame.querySelector(\'.gs_list\')) : null;
+
+    function showDrop() {
+      if (useCustom && dd) { dd.style.display = \'block\'; }
+      else if (frame) {
+        frame.classList.remove(\'g_hidden\');
+        // .g_search_frame_wrapper{height:100%} collapse 방지 — inline으로 override
+        frame.style.height = \'auto\';
+        frame.style.overflow = \'visible\';
+        var fw = frame.querySelector(\'.g_search_frame_wrapper\');
+        if (fw) fw.style.height = \'auto\';
+        var gl = frame.querySelector(\'.gs_list\');
+        if (gl) { gl.style.minHeight = \'180px\'; gl.style.height = \'180px\'; }
+      }
+    }
+    function hideDrop() {
+      if (useCustom && dd) { dd.style.display = \'none\'; }
+      else if (frame) {
+        frame.classList.add(\'g_hidden\');
+        frame.style.height = \'\';
+        frame.style.overflow = \'\';
+        var fw = frame.querySelector(\'.g_search_frame_wrapper\');
+        if (fw) fw.style.height = \'\';
+        var gl = frame.querySelector(\'.gs_list\');
+        if (gl) { gl.style.minHeight = \'\'; gl.style.height = \'\'; }
+      }
+    }
+    function dropContains(el) {
+      if (useCustom && dd) return dd.contains(el);
+      if (frame) return frame.contains(el);
+      return false;
+    }
+
+    // ─── 구조화된 드롭다운 (기존 HTML 활용) ─────────────────────────
+    function renderStructured(games) {
+      var gameDiv = listEl.querySelector(\'.game\');
+      var serverDiv = listEl.querySelector(\'.server\');
+      if (!gameDiv) return;
+      var gameUl = gameDiv.querySelector(\'ul\');
+      if (!gameUl) { gameUl = document.createElement(\'ul\'); gameDiv.appendChild(gameUl); }
+      gameUl.innerHTML = \'\';
+
       if (!games.length) {
-        dd.appendChild(makeRow(\'<span style="color:#999">검색 결과가 없습니다</span>\', function(){}));
+        var li = document.createElement(\'li\');
+        li.textContent = \'검색 결과가 없습니다\';
+        li.style.cssText = \'color:#999;cursor:default\';
+        gameUl.appendChild(li);
+        if (serverDiv) { var su = serverDiv.querySelector(\'ul\'); if (su) su.innerHTML = \'\'; }
       } else {
-        games.forEach(function(g) {
-          var label = g.name + (g.servers && g.servers.length
-            ? \' <span style="color:#999;font-size:12px;font-weight:400">(\'  + g.servers.length + \'개 서버)</span>\'
-            : \'\');
-          dd.appendChild(makeRow(label, function() {
+        games.forEach(function(g, idx) {
+          var li = document.createElement(\'li\');
+          li.textContent = g.name;
+          if (idx === 0) {
+            li.classList.add(\'sel_on\');
             window._IM_sel_game = g;
             window._IM_sel_server = null;
-            if (g.servers && g.servers.length) { renderServers(g); }
-            else { inp.value = g.name; hideDd(); }
-          }));
+            renderStructuredServers(g, serverDiv);
+          }
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            gameUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
+            renderStructuredServers(g, serverDiv);
+          });
+          gameUl.appendChild(li);
         });
       }
-      showDd();
+
+      // 카테고리(.goods) 클릭 처리
+      var goodsDiv = listEl.querySelector(\'.goods\');
+      if (goodsDiv && !goodsDiv._imBound) {
+        goodsDiv._imBound = true;
+        goodsDiv.querySelectorAll(\'li\').forEach(function(li) {
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            goodsDiv.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_category = li.textContent.replace(/NEW/g, \'\').trim();
+            if (window._IM_sel_game) {
+              inp.value = window._IM_sel_server
+                ? window._IM_sel_game.name + \' (\' + window._IM_sel_server.name + \')\'
+                : window._IM_sel_game.name;
+              hideDrop();
+            }
+          });
+        });
+      }
+
+      showDrop();
     }
 
-    function renderServers(g) {
+    function renderStructuredServers(g, serverDiv) {
+      if (!serverDiv) return;
+      var serverUl = serverDiv.querySelector(\'ul\');
+      if (!serverUl) { serverUl = document.createElement(\'ul\'); serverDiv.appendChild(serverUl); }
+      serverUl.innerHTML = \'\';
+      if (g.servers && g.servers.length) {
+        g.servers.forEach(function(s) {
+          var li = document.createElement(\'li\');
+          li.textContent = s.name;
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_server = s;
+            inp.value = g.name + \' (\' + s.name + \')\';
+          });
+          serverUl.appendChild(li);
+        });
+      } else {
+        inp.value = g.name;
+      }
+    }
+
+    // ─── 커스텀 드롭다운 fallback ────────────────────────────────────
+    function renderCustom(games) {
+      if (!dd) return;
       dd.innerHTML = \'\';
-      var back = makeRow(
-        \'<span style="color:#0070d2;font-weight:600">&#8592; \' + g.name + \' (게임 목록)</span>\',
-        function() { search(inp.value); }
-      );
-      back.style.borderBottom = \'1px solid #eee\';
-      back.style.marginBottom = \'4px\';
+      if (!games.length) {
+        var row = document.createElement(\'div\');
+        row.style.cssText = \'padding:8px 16px;color:#999;font-size:14px\';
+        row.textContent = \'검색 결과가 없습니다\';
+        dd.appendChild(row);
+      } else {
+        games.forEach(function(g) {
+          var row = document.createElement(\'div\');
+          row.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px\';
+          row.textContent = g.name + (g.servers && g.servers.length ? \' (\' + g.servers.length + \'개 서버)\' : \'\');
+          row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          row.addEventListener(\'click\', function() {
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
+            if (g.servers && g.servers.length) {
+              renderCustomServers(g);
+            } else {
+              inp.value = g.name;
+              hideDrop();
+            }
+          });
+          dd.appendChild(row);
+        });
+      }
+      showDrop();
+    }
+
+    function renderCustomServers(g) {
+      if (!dd) return;
+      dd.innerHTML = \'\';
+      var back = document.createElement(\'div\');
+      back.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px;color:#0070d2;font-weight:600;border-bottom:1px solid #eee;margin-bottom:4px\';
+      back.textContent = \'← \' + g.name + \' (게임 목록)\';
+      back.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+      back.addEventListener(\'click\', function() { search(inp.value); });
       dd.appendChild(back);
       g.servers.forEach(function(s) {
-        dd.appendChild(makeRow(s.name, function() {
-          window._IM_sel_game = g;
+        var row = document.createElement(\'div\');
+        row.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px\';
+        row.textContent = s.name;
+        row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+        row.addEventListener(\'click\', function() {
           window._IM_sel_server = s;
           inp.value = g.name + \' (\' + s.name + \')\';
-          hideDd();
-        }));
+          hideDrop();
+        });
+        dd.appendChild(row);
       });
-      showDd();
+      showDrop();
     }
 
     function search(q) {
@@ -1576,7 +1696,10 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       _debounce = setTimeout(function() {
         fetch(\'/api/games/search?q=\' + encodeURIComponent(q || \'\'), { credentials: \'include\' })
           .then(function(r) { return r.json(); })
-          .then(function(games) { renderGames(games); })
+          .then(function(games) {
+            if (!useCustom && listEl) renderStructured(games);
+            else renderCustom(games);
+          })
           .catch(function() {});
       }, q ? 200 : 0);
     }
@@ -1584,7 +1707,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
     inp.addEventListener(\'input\', function() { search(inp.value); }, true);
     document.addEventListener(\'click\', function(e) {
-      if (e.target !== inp && !dd.contains(e.target)) hideDd();
+      if (e.target !== inp && !dropContains(e.target)) hideDrop();
     });
   }
 
@@ -1695,92 +1818,212 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
-  // .g_search_frame은 height:100% 의존 구조라 높이가 0으로 collapse됨.
-  // .g_search_wrapper(position:relative) 안에 새 드롭다운 div를 직접 생성.
+  // 기존 HTML의 .g_search_frame (#reg_gameserver) 3열 구조 활용:
+  // .game(게임목록) | .server(서버목록) | .goods(카테고리)
   function setupGameSearch(inp) {
     if (!inp) return;
     var _debounce = null;
 
-    // .g_search_wrapper 찾기
-    var wrapper = inp.parentElement;
-    for (var k = 0; k < 8 && wrapper; k++) {
-      if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
-      wrapper = wrapper.parentElement;
-    }
-    if (!wrapper || !wrapper.classList.contains(\'g_search_wrapper\')) return;
-
-    // 커스텀 드롭다운 생성
-    var dd = document.getElementById(\'_im_game_dd\');
-    if (dd) dd.remove();
-    dd = document.createElement(\'div\');
-    dd.id = \'_im_game_dd\';
-    dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
-      + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
-      + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
-      + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
-    wrapper.appendChild(dd);
-
-    function showDd() { dd.style.display = \'block\'; }
-    function hideDd() { dd.style.display = \'none\'; }
-
-    function makeRow(html, onClick) {
-      var row = document.createElement(\'div\');
-      row.style.cssText = \'line-height:27px;padding:2px 20px 2px 10px;cursor:pointer;font-size:14px;\'
-        + \'white-space:nowrap;overflow:hidden;text-overflow:ellipsis\';
-      row.innerHTML = html;
-      row.addEventListener(\'mouseover\', function() {
-        row.style.fontWeight = \'700\';
-        row.style.borderRadius = \'7px\';
-        row.style.background = \'var(--color-gs-selected-bg,#e8f4ff)\';
-      });
-      row.addEventListener(\'mouseout\', function() {
-        row.style.fontWeight = \'\';
-        row.style.borderRadius = \'\';
-        row.style.background = \'\';
-      });
-      row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
-      row.addEventListener(\'click\', onClick);
-      return row;
+    // 기존 #reg_gameserver 드롭다운 찾기
+    var frame = document.getElementById(\'reg_gameserver\');
+    if (!frame) {
+      var p = inp.parentElement;
+      for (var k = 0; k < 10 && p; k++) {
+        var found = p.querySelector(\'.g_search_frame\');
+        if (found) { frame = found; break; }
+        p = p.parentElement;
+      }
     }
 
-    function renderGames(games) {
-      dd.innerHTML = \'\';
+    // fallback: 커스텀 드롭다운
+    var useCustom = !frame;
+    var dd = null;
+    if (useCustom) {
+      var wrapper = inp.parentElement;
+      for (var wk = 0; wk < 8 && wrapper; wk++) {
+        if (wrapper.classList && wrapper.classList.contains(\'g_search_wrapper\')) break;
+        wrapper = wrapper.parentElement;
+      }
+      var existDd = document.getElementById(\'_im_game_dd_fb\');
+      if (existDd) existDd.remove();
+      dd = document.createElement(\'div\');
+      dd.id = \'_im_game_dd_fb\';
+      dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
+        + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
+        + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
+        + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
+      if (wrapper) wrapper.appendChild(dd);
+    }
+
+    var listEl = frame ? (document.getElementById(\'reg_gameserver_list\') || frame.querySelector(\'.gs_list\')) : null;
+
+    function showDrop() {
+      if (useCustom && dd) { dd.style.display = \'block\'; }
+      else if (frame) {
+        frame.classList.remove(\'g_hidden\');
+        // .g_search_frame_wrapper{height:100%} collapse 방지 — inline으로 override
+        frame.style.height = \'auto\';
+        frame.style.overflow = \'visible\';
+        var fw = frame.querySelector(\'.g_search_frame_wrapper\');
+        if (fw) fw.style.height = \'auto\';
+        var gl = frame.querySelector(\'.gs_list\');
+        if (gl) { gl.style.minHeight = \'180px\'; gl.style.height = \'180px\'; }
+      }
+    }
+    function hideDrop() {
+      if (useCustom && dd) { dd.style.display = \'none\'; }
+      else if (frame) {
+        frame.classList.add(\'g_hidden\');
+        frame.style.height = \'\';
+        frame.style.overflow = \'\';
+        var fw = frame.querySelector(\'.g_search_frame_wrapper\');
+        if (fw) fw.style.height = \'\';
+        var gl = frame.querySelector(\'.gs_list\');
+        if (gl) { gl.style.minHeight = \'\'; gl.style.height = \'\'; }
+      }
+    }
+    function dropContains(el) {
+      if (useCustom && dd) return dd.contains(el);
+      if (frame) return frame.contains(el);
+      return false;
+    }
+
+    // ─── 구조화된 드롭다운 (기존 HTML 활용) ─────────────────────────
+    function renderStructured(games) {
+      var gameDiv = listEl.querySelector(\'.game\');
+      var serverDiv = listEl.querySelector(\'.server\');
+      if (!gameDiv) return;
+      var gameUl = gameDiv.querySelector(\'ul\');
+      if (!gameUl) { gameUl = document.createElement(\'ul\'); gameDiv.appendChild(gameUl); }
+      gameUl.innerHTML = \'\';
+
       if (!games.length) {
-        dd.appendChild(makeRow(\'<span style="color:#999">검색 결과가 없습니다</span>\', function(){}));
+        var li = document.createElement(\'li\');
+        li.textContent = \'검색 결과가 없습니다\';
+        li.style.cssText = \'color:#999;cursor:default\';
+        gameUl.appendChild(li);
+        if (serverDiv) { var su = serverDiv.querySelector(\'ul\'); if (su) su.innerHTML = \'\'; }
       } else {
-        games.forEach(function(g) {
-          var label = g.name + (g.servers && g.servers.length
-            ? \' <span style="color:#999;font-size:12px;font-weight:400">(\'  + g.servers.length + \'개 서버)</span>\'
-            : \'\');
-          dd.appendChild(makeRow(label, function() {
+        games.forEach(function(g, idx) {
+          var li = document.createElement(\'li\');
+          li.textContent = g.name;
+          if (idx === 0) {
+            li.classList.add(\'sel_on\');
             window._IM_sel_game = g;
             window._IM_sel_server = null;
-            if (g.servers && g.servers.length) { renderServers(g); }
-            else { inp.value = g.name; hideDd(); }
-          }));
+            renderStructuredServers(g, serverDiv);
+          }
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            gameUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
+            renderStructuredServers(g, serverDiv);
+          });
+          gameUl.appendChild(li);
         });
       }
-      showDd();
+
+      // 카테고리(.goods) 클릭 처리
+      var goodsDiv = listEl.querySelector(\'.goods\');
+      if (goodsDiv && !goodsDiv._imBound) {
+        goodsDiv._imBound = true;
+        goodsDiv.querySelectorAll(\'li\').forEach(function(li) {
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            goodsDiv.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_category = li.textContent.replace(/NEW/g, \'\').trim();
+            if (window._IM_sel_game) {
+              inp.value = window._IM_sel_server
+                ? window._IM_sel_game.name + \' (\' + window._IM_sel_server.name + \')\'
+                : window._IM_sel_game.name;
+              hideDrop();
+            }
+          });
+        });
+      }
+
+      showDrop();
     }
 
-    function renderServers(g) {
+    function renderStructuredServers(g, serverDiv) {
+      if (!serverDiv) return;
+      var serverUl = serverDiv.querySelector(\'ul\');
+      if (!serverUl) { serverUl = document.createElement(\'ul\'); serverDiv.appendChild(serverUl); }
+      serverUl.innerHTML = \'\';
+      if (g.servers && g.servers.length) {
+        g.servers.forEach(function(s) {
+          var li = document.createElement(\'li\');
+          li.textContent = s.name;
+          li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          li.addEventListener(\'click\', function() {
+            serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
+            li.classList.add(\'sel_on\');
+            window._IM_sel_server = s;
+            inp.value = g.name + \' (\' + s.name + \')\';
+          });
+          serverUl.appendChild(li);
+        });
+      } else {
+        inp.value = g.name;
+      }
+    }
+
+    // ─── 커스텀 드롭다운 fallback ────────────────────────────────────
+    function renderCustom(games) {
+      if (!dd) return;
       dd.innerHTML = \'\';
-      var back = makeRow(
-        \'<span style="color:#0070d2;font-weight:600">&#8592; \' + g.name + \' (게임 목록)</span>\',
-        function() { search(inp.value); }
-      );
-      back.style.borderBottom = \'1px solid #eee\';
-      back.style.marginBottom = \'4px\';
+      if (!games.length) {
+        var row = document.createElement(\'div\');
+        row.style.cssText = \'padding:8px 16px;color:#999;font-size:14px\';
+        row.textContent = \'검색 결과가 없습니다\';
+        dd.appendChild(row);
+      } else {
+        games.forEach(function(g) {
+          var row = document.createElement(\'div\');
+          row.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px\';
+          row.textContent = g.name + (g.servers && g.servers.length ? \' (\' + g.servers.length + \'개 서버)\' : \'\');
+          row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+          row.addEventListener(\'click\', function() {
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
+            if (g.servers && g.servers.length) {
+              renderCustomServers(g);
+            } else {
+              inp.value = g.name;
+              hideDrop();
+            }
+          });
+          dd.appendChild(row);
+        });
+      }
+      showDrop();
+    }
+
+    function renderCustomServers(g) {
+      if (!dd) return;
+      dd.innerHTML = \'\';
+      var back = document.createElement(\'div\');
+      back.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px;color:#0070d2;font-weight:600;border-bottom:1px solid #eee;margin-bottom:4px\';
+      back.textContent = \'← \' + g.name + \' (게임 목록)\';
+      back.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+      back.addEventListener(\'click\', function() { search(inp.value); });
       dd.appendChild(back);
       g.servers.forEach(function(s) {
-        dd.appendChild(makeRow(s.name, function() {
-          window._IM_sel_game = g;
+        var row = document.createElement(\'div\');
+        row.style.cssText = \'padding:6px 16px;cursor:pointer;font-size:14px\';
+        row.textContent = s.name;
+        row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
+        row.addEventListener(\'click\', function() {
           window._IM_sel_server = s;
           inp.value = g.name + \' (\' + s.name + \')\';
-          hideDd();
-        }));
+          hideDrop();
+        });
+        dd.appendChild(row);
       });
-      showDd();
+      showDrop();
     }
 
     function search(q) {
@@ -1788,7 +2031,10 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       _debounce = setTimeout(function() {
         fetch(\'/api/games/search?q=\' + encodeURIComponent(q || \'\'), { credentials: \'include\' })
           .then(function(r) { return r.json(); })
-          .then(function(games) { renderGames(games); })
+          .then(function(games) {
+            if (!useCustom && listEl) renderStructured(games);
+            else renderCustom(games);
+          })
           .catch(function() {});
       }, q ? 200 : 0);
     }
@@ -1796,7 +2042,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
     inp.addEventListener(\'input\', function() { search(inp.value); }, true);
     document.addEventListener(\'click\', function(e) {
-      if (e.target !== inp && !dd.contains(e.target)) hideDd();
+      if (e.target !== inp && !dropContains(e.target)) hideDrop();
     });
   }
 
