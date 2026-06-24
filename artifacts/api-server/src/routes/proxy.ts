@@ -1934,7 +1934,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     server: server,
                     category: window._IM_sel_category || '기타',
                     title: title,
-                    price: parseInt(price.replace(/[^0-9]/g, ''), 10)
+                    price: parseInt(price.replace(/[^0-9]/g, ''), 10),
+                    tradeType: '일반판매'
                   };
                   // ── 팝업 플로우: dvPremium → receipt_layer → dvPopup → 완료 ──
                   function showOverlay() {
@@ -1954,16 +1955,18 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                   function fillAndShowDvPopup() {
                     var regData = window._IM_reg_data || {};
                     var catEl   = document.getElementById('popup_category');
-                    var titleEl = document.getElementById('popup_title');
-                    var priceEl = document.getElementById('popup_price');
+                    var titleEl     = document.getElementById('popup_title');
+                    var priceEl     = document.getElementById('popup_price');
+                    var tradeTypeEl = document.getElementById('popup_trade_type');
                     if (catEl) {
                       var catStr = regData.game || '';
                       if (regData.server)   catStr += ' &gt; ' + regData.server;
                       if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
                       catEl.innerHTML = catStr;
                     }
-                    if (titleEl) titleEl.textContent = regData.title || '';
-                    if (priceEl) priceEl.textContent = (regData.price || 0).toLocaleString() + '원';
+                    if (titleEl)     titleEl.textContent     = regData.title || '';
+                    if (priceEl)     priceEl.textContent     = (regData.price || 0).toLocaleString() + '원';
+                    if (tradeTypeEl) tradeTypeEl.textContent = regData.tradeType || '일반판매';
                     var dvPopup = document.getElementById('dvPopup');
                     if (dvPopup) {
                       dvPopup.style.display = 'block';
