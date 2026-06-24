@@ -52,6 +52,16 @@ try {
   logger.error({ err: e }, "join.html 로드 실패");
 }
 
+const JOIN_AGREE_HTML_PATH = join(STATIC_DIR, "join-agree.html");
+let joinAgreeHtml = "";
+
+try {
+  joinAgreeHtml = readFileSync(JOIN_AGREE_HTML_PATH, "utf-8");
+  logger.info("join-agree.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "join-agree.html 로드 실패");
+}
+
 const JOIN_FORM_HTML_PATH = join(STATIC_DIR, "join-form.html");
 let joinFormHtml = "";
 
@@ -3835,8 +3845,18 @@ router.get(["/join", "/join/", "/portal/user/join.html", "/portal/user/"], async
   res.set("Cache-Control", "no-cache");
   res.send(joinHtml);
 });
-// 회원가입 2단계 – 정보 입력
-router.get(["/join/form", "/join/form/", "/portal/user/join_form.html", "/portal/user/join_agreement.html"], async (req, res): Promise<void> => {
+// 회원가입 2단계 – 약관 동의
+router.get(["/join/agree", "/join/agree/", "/portal/user/join_agreement.html"], async (req, res): Promise<void> => {
+  if (!joinAgreeHtml) {
+    res.status(503).send("<html><body><h2>회원가입 페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(joinAgreeHtml);
+});
+// 회원가입 3단계 – 정보 입력
+router.get(["/join/form", "/join/form/", "/portal/user/join_form.html"], async (req, res): Promise<void> => {
   if (!joinFormHtml) {
     res.status(503).send("<html><body><h2>회원가입 페이지를 불러올 수 없습니다</h2></body></html>");
     return;

@@ -183,22 +183,35 @@ body{min-width:1100px}
 .join_progress{margin:0 auto;width:100%}
 .join_progress ul{display:flex;align-items:center;justify-content:center}
 .join_progress ul li{display:flex;align-items:center;justify-content:center}
-.join_progress ul li span{width:28px;height:28px;border:2px solid #f0f0f0;border-radius:50%;font-size:15px;color:#c6c6c6;display:flex;justify-content:center;align-items:center}
+.join_progress ul li .step_wrap{display:flex;flex-direction:column;align-items:center}
+.join_progress ul li span{width:28px;height:28px;border:2px solid #f0f0f0;border-radius:50%;font-size:15px;color:#c6c6c6;display:flex;justify-content:center;align-items:center;text-align:center}
 .join_progress ul li.on span{color:#fff;border-color:#159EFD;background-color:#159EFD;font-weight:bold}
-.join_progress ul li.complete span{background-color:#b0dfff;border-color:#b0dfff}
+.join_progress ul li.complete span{background-color:#b0dfff;border-color:#b0dfff;color:#fff}
 .join_progress ul li::after{content:"···";padding:0 8px;color:#c6c6c6}
 .join_progress ul li:last-child::after{content:""}
-.join_progress .step_label{font-size:12px;color:#636363;text-align:center;margin-top:4px}
-.join_progress .step_wrap{display:flex;flex-direction:column;align-items:center}
+.step_label{font-size:12px;color:#636363;text-align:center;margin-top:5px}
+/* type selection */
+.join_type{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:10px}
+.join_type li{display:flex;width:400px;height:85px;align-items:center}
+label.custom_check{display:flex;align-items:center;width:100%;height:100%;cursor:pointer;border:2px solid #ddd;border-radius:10px;font-size:15px;text-align:center;color:#444;padding:0 30px}
+label.custom_check .type_name_wrap{font-size:18px;display:flex;flex-direction:column}
+label.custom_check .type_name_wrap .sub{font-size:14px;color:#636363;font-weight:400}
+label.custom_check input[type=radio]{appearance:none;display:none}
+label.custom_check .checked_img{display:flex;justify-content:center;align-items:center;width:30px;height:30px;background-color:#ddd;border-radius:50%;margin-left:auto}
+label.custom_check .checked_img::after{content:"✓";color:#fff;font-size:14px;font-weight:bold}
+label.custom_check:has(input:checked){border:2px solid #159EFD}
+label.custom_check:has(input:checked) .type_name_wrap .main{color:#159EFD}
+label.custom_check:has(input:checked) .checked_img{background-color:#159EFD}
+.dn_text{margin:15px 0 30px;font-size:14px;color:#767676;text-align:center}
+.dn_text dd{text-align:center}
+#next_btn{display:block;width:400px;line-height:50px;margin:0 auto 50px;text-align:center !important;background-color:#159EFD;border-radius:10px;font-size:17px;color:#fff;cursor:pointer;border:0}
 /* agreement */
-.agree_check{font-size:16px;font-weight:bold;max-width:460px;height:65px;margin:0 auto 30px;display:flex;align-items:center}
+.agree_check{font-size:16px;font-weight:bold;max-width:460px;height:65px;margin:0 auto 20px;display:flex;align-items:center}
 .agree_check input[type=checkbox]{width:18px;height:18px;margin-right:10px;cursor:pointer;accent-color:#159EFD}
 .agree_check_s{font-weight:bold;max-width:460px;margin:0 auto;display:flex;align-items:center;height:40px}
 .agree_check_s input[type=checkbox]{width:16px;height:16px;margin-right:8px;cursor:pointer;accent-color:#159EFD}
 .clause_box{overflow:hidden;overflow-y:auto;box-sizing:border-box;height:120px;padding:10px 15px;border:1px solid #ccc;border-radius:10px;font-size:12px;color:#8A8A8A;max-width:460px;margin:0 auto 20px;line-height:1.6}
 .agree_divider{max-width:460px;margin:0 auto 20px;border:0;border-top:1px solid #eee}
-#next_btn{display:block;width:400px;line-height:50px;margin:30px auto 50px;text-align:center;background-color:#159EFD;border-radius:10px;font-size:17px;color:#fff;cursor:pointer;border:0}
-#next_btn:disabled{background-color:#ccc;cursor:not-allowed}
 /* form */
 .join_form_wrap{max-width:620px;margin:0 auto}
 .join_table{width:100%;border-top:2px solid #ddd}
@@ -213,19 +226,16 @@ body{min-width:1100px}
 .ok_msg{color:#00b45f;font-size:12px;margin-top:4px}
 .phone_wrap{display:flex;align-items:center;gap:6px}
 .phone_select{height:38px;padding:0 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit;background:#fff;cursor:pointer}
-.phone_select:focus{outline:none;border-color:#159EFD}
 .phone_dash{color:#888;font-size:16px}
 .phone_part{width:80px;height:38px;padding:0 6px;border:1px solid #ccc;border-radius:6px;font-size:14px;font-family:inherit;text-align:center}
 .phone_part:focus{outline:none;border-color:#159EFD}
 .email_wrap{display:flex;align-items:center;gap:6px}
 .email_at{color:#444;font-size:15px}
 .email_domain{height:38px;padding:0 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit;background:#fff;cursor:pointer}
-.email_domain:focus{outline:none;border-color:#159EFD}
-.id_wrap{display:flex;align-items:flex-start;flex-direction:column;gap:4px}
 .id_input_row{display:flex;align-items:center;gap:8px}
-.id_check_btn{height:38px;padding:0 14px;background:#fff;border:1px solid #159EFD;border-radius:6px;color:#159EFD;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.id_check_btn{height:38px;padding:0 14px;background:#fff;border:1px solid #159EFD;border-radius:6px;color:#159EFD;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;text-align:center}
 .id_check_btn:hover{background:#f0f8ff}
-.join_submit{display:block;width:300px;height:50px;margin:40px auto 60px;background:#159EFD;border:0;border-radius:10px;font-size:17px;font-family:inherit;font-weight:600;color:#fff;cursor:pointer}
+.join_submit{display:block;width:300px;height:50px;margin:40px auto 60px;background:#159EFD;border:0;border-radius:10px;font-size:17px;font-family:inherit;font-weight:600;color:#fff;cursor:pointer;text-align:center !important}
 .join_submit:hover{background:#0e8de0}
 .sms_note{font-size:12px;color:#636363;margin-left:4px}
 </style>
@@ -233,13 +243,8 @@ body{min-width:1100px}
 
 <div class=content>
 <div class=top_area>
-<h1>회원가입</h1>
-<div class=join_progress>
-<ul>
-<li class=complete><div class=step_wrap><span>✓</span><div class=step_label>약관동의</div></div></li>
-<li class=on><div class=step_wrap><span>2</span><div class=step_label>정보입력</div></div></li>
-</ul>
-</div>
+<h1>정보를 입력해주세요.</h1>
+<div class=join_progress><ul><li class=complete><div class=step_wrap><span>✓</span><div class=step_label>유형선택</div></div></li><li class=complete><div class=step_wrap><span>✓</span><div class=step_label>약관동의</div></div></li><li class=on><div class=step_wrap><span>3</span><div class=step_label>정보입력</div></div></li></ul></div>
 </div>
 
 <div class=join_form_wrap>
@@ -259,7 +264,7 @@ body{min-width:1100px}
 <input type=text id=inp_id class=join_input placeholder="영문/숫자 4~16자" maxlength=16 style="width:220px">
 <button type=button class=id_check_btn id=btn_id_check>중복확인</button>
 </div>
-<div id=err_id class=err_msg>※ 아래 보이는 숫자를 공백 없이 입력해주세요.</div>
+<div id=err_id class=err_msg></div>
 </td>
 </tr>
 <tr>
@@ -301,9 +306,9 @@ body{min-width:1100px}
 <th>이메일</th>
 <td>
 <div class=email_wrap>
-<input type=text id=em1 class="join_input" placeholder="이메일 아이디" style="width:160px">
+<input type=text id=em1 class=join_input placeholder="이메일 아이디" style="width:150px">
 <span class=email_at>@</span>
-<input type=text id=em2 class="join_input" placeholder="도메인" id=em2_text style="width:140px">
+<input type=text id=em2 class=join_input placeholder="도메인" style="width:140px">
 <select class=email_domain id=em2_sel>
 <option value="">직접입력</option>
 <option value=naver.com>naver.com</option>
@@ -322,47 +327,28 @@ body{min-width:1100px}
 <button type=button class=join_submit id=btn_join>회원가입</button>
 </div>
 </div>
-
 <script>
 (function(){
 var idChecked=false;
-
-// Header intercept
 var logoA=document.querySelector('.header-logo a');
 if(logoA){logoA.href='/'; logoA.addEventListener('click',function(e){e.preventDefault();location.href='/';});}
-var loginBtns=document.querySelectorAll('.header-logins button,.header-logins a');
-loginBtns.forEach(function(el){
-  if(el.tagName==='BUTTON'){el.addEventListener('click',function(){location.href='/login';});}
-  else{el.href='/join'; el.addEventListener('click',function(e){e.preventDefault();location.href='/join';});}
-});
-
-// Phone: auto-advance
-function bindPhone(){
-  var ph1=document.getElementById('ph1');
-  var ph2=document.getElementById('ph2');
-  var ph3=document.getElementById('ph3');
-  [ph1,ph2,ph3].forEach(function(el){el.addEventListener('input',function(){el.value=el.value.replace(/[^0-9]/g,'');});});
-  ph1.addEventListener('input',function(){if(ph1.value.length>=3)ph2.focus();});
-  ph2.addEventListener('input',function(){if(ph2.value.length>=4)ph3.focus();});
-}
-bindPhone();
-
-// Email domain select
+var ph1=document.getElementById('ph1');
+var ph2=document.getElementById('ph2');
+var ph3=document.getElementById('ph3');
+[ph1,ph2,ph3].forEach(function(el){el.addEventListener('input',function(){el.value=el.value.replace(/[^0-9]/g,'');});});
+ph1.addEventListener('input',function(){if(ph1.value.length>=3)ph2.focus();});
+ph2.addEventListener('input',function(){if(ph2.value.length>=4)ph3.focus();});
 var em2Sel=document.getElementById('em2_sel');
 var em2=document.getElementById('em2');
 em2Sel.addEventListener('change',function(){
   if(em2Sel.value){em2.value=em2Sel.value;em2.readOnly=true;}
   else{em2.value='';em2.readOnly=false;em2.focus();}
 });
-
-// ID reset on change
 document.getElementById('inp_id').addEventListener('input',function(){
   idChecked=false;
   document.getElementById('err_id').textContent='';
   document.getElementById('inp_id').classList.remove('ok','error');
 });
-
-// Duplicate check
 document.getElementById('btn_id_check').addEventListener('click',function(){
   var id=document.getElementById('inp_id').value.trim();
   var errEl=document.getElementById('err_id');
@@ -373,22 +359,16 @@ document.getElementById('btn_id_check').addEventListener('click',function(){
     .then(function(d){
       if(d.available){
         idChecked=true;
-        document.getElementById('inp_id').classList.add('ok');
-        document.getElementById('inp_id').classList.remove('error');
-        errEl.textContent='사용 가능한 아이디입니다.';
-        errEl.className='ok_msg';
+        document.getElementById('inp_id').classList.add('ok');document.getElementById('inp_id').classList.remove('error');
+        errEl.textContent='사용 가능한 아이디입니다.';errEl.className='ok_msg';
       } else {
         idChecked=false;
-        document.getElementById('inp_id').classList.add('error');
-        document.getElementById('inp_id').classList.remove('ok');
-        errEl.textContent='이미 사용 중인 아이디입니다.';
-        errEl.className='err_msg';
+        document.getElementById('inp_id').classList.add('error');document.getElementById('inp_id').classList.remove('ok');
+        errEl.textContent='이미 사용 중인 아이디입니다.';errEl.className='err_msg';
       }
     })
     .catch(function(){errEl.textContent='확인 중 오류가 발생했습니다.';errEl.className='err_msg';});
 });
-
-// PW confirm
 document.getElementById('inp_pw2').addEventListener('input',function(){
   var pw=document.getElementById('inp_pw').value;
   var pw2=document.getElementById('inp_pw2').value;
@@ -397,53 +377,34 @@ document.getElementById('inp_pw2').addEventListener('input',function(){
   if(pw===pw2){errEl.textContent='비밀번호가 일치합니다.';errEl.className='ok_msg';}
   else{errEl.textContent='비밀번호가 일치하지 않습니다.';errEl.className='err_msg';}
 });
-
-// Submit
 document.getElementById('btn_join').addEventListener('click',function(){
   var name=document.getElementById('inp_name').value.trim();
   var id=document.getElementById('inp_id').value.trim();
   var pw=document.getElementById('inp_pw').value;
   var pw2=document.getElementById('inp_pw2').value;
-  var ph1=document.getElementById('ph1').value;
-  var ph2=document.getElementById('ph2').value;
-  var ph3=document.getElementById('ph3').value;
-  var em1=document.getElementById('em1').value.trim();
-  var em2=document.getElementById('em2').value.trim();
-
+  var ph1v=document.getElementById('ph1').value;
+  var ph2v=document.getElementById('ph2').value;
+  var ph3v=document.getElementById('ph3').value;
+  var em1v=document.getElementById('em1').value.trim();
+  var em2v=document.getElementById('em2').value.trim();
   function err(id,msg){document.getElementById(id).textContent=msg;document.getElementById(id).className='err_msg';}
-
   if(!name){err('err_name','이름을 입력해주세요.');return;}
   if(!id||id.length<4){err('err_id','아이디를 4자 이상 입력해주세요.');return;}
   if(!idChecked){err('err_id','아이디 중복확인을 해주세요.');return;}
   if(!pw||pw.length<8){err('err_pw','비밀번호는 8자 이상이어야 합니다.');return;}
   if(pw!==pw2){err('err_pw2','비밀번호가 일치하지 않습니다.');return;}
-
   var phone='';
-  if(ph1&&ph2&&ph3) phone=ph1+'-'+ph2+'-'+ph3;
-
+  if(ph1v&&ph2v&&ph3v) phone=ph1v+'-'+ph2v+'-'+ph3v;
   var email='';
-  if(em1&&em2) email=em1+'@'+em2;
-
+  if(em1v&&em2v) email=em1v+'@'+em2v;
   fetch('/api/auth/register',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    credentials:'include',
-    body:JSON.stringify({
-      email:id,
-      nickname:name,
-      password:pw,
-      phone:phone||null,
-      emailAddress:email||null
-    })
+    method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+    body:JSON.stringify({email:id,nickname:name,password:pw,phone:phone||null})
   })
   .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
   .then(function(rd){
-    if(rd.ok){
-      alert('회원가입이 완료되었습니다! 로그인 해주세요.');
-      location.href='/login';
-    } else {
-      alert(rd.d.error||'회원가입에 실패했습니다.');
-    }
+    if(rd.ok){alert('회원가입이 완료되었습니다! 로그인 해주세요.');location.href='/login';}
+    else{alert(rd.d.error||'회원가입에 실패했습니다.');}
   })
   .catch(function(){alert('오류가 발생했습니다. 다시 시도해주세요.');});
 });
