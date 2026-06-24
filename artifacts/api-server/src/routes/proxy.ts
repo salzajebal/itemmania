@@ -3849,8 +3849,25 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
       var btnList = document.getElementById('btn_list');
       if (btnList) {
         var links = btnList.querySelectorAll('a');
-        if (links[0]) { links[0].href = '/sell/register.html'; links[0].textContent = '추가 등록하기'; }
-        if (links[1]) { links[1].href = '/sell/list.html'; links[1].textContent = '상품리스트 보기'; links[1].className = 'btn_gray'; }
+        if (links[0]) {
+          links[0].textContent = '추가 등록하기';
+          links[0].removeAttribute('href');
+          links[0].style.cursor = 'pointer';
+          links[0].addEventListener('click', function(e) {
+            e.preventDefault();
+            location.href = '/sell/register.html';
+          });
+        }
+        if (links[1]) {
+          links[1].textContent = '상품리스트 보기';
+          links[1].className = 'btn_gray';
+          links[1].removeAttribute('href');
+          links[1].style.cursor = 'pointer';
+          links[1].addEventListener('click', function(e) {
+            e.preventDefault();
+            location.href = '/sell/list.html';
+          });
+        }
         if (links[2]) { links[2].style.display = 'none'; }
       }
     })
