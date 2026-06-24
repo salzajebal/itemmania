@@ -1446,25 +1446,39 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     });
   }
 
+  // 우리 DB 상품 카드에 뱃지 추가
+  function makeCardWithBadge(p, type) {
+    var li = makeCard(p, type);
+    // 제목 앞에 [이테매니아] 뱃지 삽입
+    var subjectDiv = li.querySelector('.col.subject_info');
+    if (subjectDiv) {
+      var badge = document.createElement('span');
+      badge.style.cssText = 'display:inline-block;margin-bottom:4px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;color:#fff;background:#159EFD;vertical-align:middle;margin-right:4px';
+      badge.textContent = '우리 사이트';
+      subjectDiv.insertBefore(badge, subjectDiv.firstChild);
+    }
+    return li;
+  }
+
   function loadList() {
     var params = getParams();
     var gameCode = params.get('search_game') || '';
     var serverName = params.get('search_server') || '';
     var keyword = params.get('keyword') || '';
     var page = parseInt(params.get('page') || '1', 10);
-    var category = params.get('category') || '';
     var sort = params.get('sort') || '';
     var type = location.pathname.indexOf('/buy/') >= 0 ? 'buy' : 'sell';
 
     var itemCat = params.get('itemCategory') || '';
     var apiQ = [];
+    apiQ.push('category=' + type);
     if (gameCode) apiQ.push('gameCode=' + encodeURIComponent(gameCode));
     if (serverName) apiQ.push('serverName=' + encodeURIComponent(serverName));
     if (keyword) apiQ.push('keyword=' + encodeURIComponent(keyword));
     if (itemCat) apiQ.push('itemCategory=' + encodeURIComponent(itemCat));
     if (sort) apiQ.push('sort=' + encodeURIComponent(sort));
-    apiQ.push('page=' + page);
-    apiQ.push('limit=20');
+    apiQ.push('page=1');
+    apiQ.push('limit=50');
 
     var normalList = document.querySelector('ul.search_list_normal');
     var premiumList = document.querySelector('ul.search_list_premium');
@@ -1472,29 +1486,77 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 
     if (!normalList) return;
 
-    if (premiumList) premiumList.innerHTML = '';
-    normalList.innerHTML = '<li style="padding:50px 0;text-align:center;color:#999;font-size:15px;list-style:none">상품을 불러오는 중...</li>';
+    // ── 아이템매니아 원본 리스팅 저장 (지우기 전에) ──────────────
+    var origNormalItems = Array.from(normalList.querySelectorAll('li.list_item, li[data-tid]'));
+    var origPremiumItems = premiumList ? Array.from(premiumList.querySelectorAll('li.list_item, li[data-tid]')) : [];
+    var origNormalCount = origNormalItems.length;
+
+    // 로딩 표시 (원본 유지하면서 맨 위에 삽입)
+    var loadingEl = document.createElement('li');
+    loadingEl.id = '_im_loading';
+    loadingEl.style.cssText = 'padding:20px 0;text-align:center;color:#999;font-size:14px;list-style:none';
+    loadingEl.textContent = '우리 사이트 상품을 불러오는 중...';
+    normalList.insertBefore(loadingEl, normalList.firstChild);
 
     fetch('/api/products?' + apiQ.join('&'), { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         var items = data.items || [];
-        var total = data.total || 0;
-        if (countEl) countEl.textContent = fmt(total) + '건';
+        var ourTotal = data.total || 0;
 
+        // 로딩 표시 제거
+        var loadEl = document.getElementById('_im_loading');
+        if (loadEl) loadEl.remove();
+
+        // 전체 건수 업데이트 (우리 DB + 아이템매니아 원본)
+        var totalCount = ourTotal + origNormalCount;
+        if (countEl) countEl.textContent = fmt(totalCount) + '건';
+
+        // 기존 원본 아이템매니아 리스팅 제거 (다시 정렬해서 붙일 것)
+        origNormalItems.forEach(function(el) { el.remove(); });
+        if (premiumList) origPremiumItems.forEach(function(el) { el.remove(); });
+
+        // normalList 비우기
         normalList.innerHTML = '';
-        if (!items.length) {
+
+        // ── 우리 DB 상품 먼저 표시 ────────────────────────────────
+        if (items.length > 0) {
+          // 우리 사이트 상품 구분 헤더
+          var ourHeader = document.createElement('li');
+          ourHeader.style.cssText = 'padding:10px 16px;background:#EDF8FF;border-radius:8px;margin-bottom:4px;list-style:none;font-size:13px;font-weight:700;color:#159EFD;border-left:3px solid #159EFD';
+          ourHeader.textContent = '★ 우리 사이트 등록 상품 (' + ourTotal + '건)';
+          normalList.appendChild(ourHeader);
+          items.forEach(function(p) { normalList.appendChild(makeCardWithBadge(p, type)); });
+        }
+
+        // ── 아이템매니아 원본 상품 이어서 표시 ───────────────────
+        if (origNormalCount > 0) {
+          if (items.length > 0) {
+            // 구분선
+            var sep = document.createElement('li');
+            sep.style.cssText = 'padding:10px 16px;background:#f8f8f8;border-radius:8px;margin:8px 0 4px;list-style:none;font-size:13px;font-weight:700;color:#666;border-left:3px solid #ccc';
+            sep.textContent = '아이템매니아 상품 (' + origNormalCount + '건)';
+            normalList.appendChild(sep);
+          }
+          origNormalItems.forEach(function(el) { normalList.appendChild(el); });
+        }
+
+        // 둘 다 없으면 안내 메시지
+        if (items.length === 0 && origNormalCount === 0) {
           normalList.innerHTML =
             '<li style="padding:60px 0;text-align:center;color:#999;font-size:15px;list-style:none">' +
             '등록된 상품이 없습니다.<br><br>' +
             '<a href="/' + type + '/register.html" style="display:inline-block;padding:12px 24px;background:#159EFD;color:#fff;border-radius:8px;font-weight:700;text-decoration:none">+ 첫 번째 상품 등록하기</a>' +
             '</li>';
-          return;
         }
-        items.forEach(function(p) { normalList.appendChild(makeCard(p, type)); });
 
-        // 페이지네이션 업데이트 (ul.g_paging 사용)
-        var totalPages = Math.ceil(total / 20);
+        // 프리미엄 리스트: 원본 복원
+        if (premiumList && origPremiumItems.length > 0) {
+          origPremiumItems.forEach(function(el) { premiumList.appendChild(el); });
+        }
+
+        // 페이지네이션 (우리 DB 기준)
+        var totalPages = Math.ceil(ourTotal / 50);
         var gPaging = document.querySelector('ul.g_paging');
         var dvPaging = document.querySelector('div.dvPaging');
         if (gPaging) {
@@ -1524,7 +1586,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         }
       })
       .catch(function() {
-        normalList.innerHTML = '<li style="padding:40px;text-align:center;color:#e53e3e;list-style:none">상품 로딩 중 오류가 발생했습니다.</li>';
+        var loadEl2 = document.getElementById('_im_loading');
+        if (loadEl2) loadEl2.remove();
+        // 에러 시 원본 아이템매니아 항목만 유지
       });
   }
 
