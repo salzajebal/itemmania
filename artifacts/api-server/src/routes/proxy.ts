@@ -1772,8 +1772,25 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       });
     }
 
-    // 게임 검색 자동완성 활성화 (폼 입력: searchRegGameServer)
-    setupGameSearch(document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer'));
+    // 스냅샷 JS 이벤트 리스너 완전 제거: cloneNode + id 변경으로 스냅샷 JS 재부착 차단
+    (function() {
+      var origIds = ['searchRegGameServer', 'searchGameServer'];
+      var cleanInp = null;
+      for (var _i = 0; _i < origIds.length; _i++) {
+        var orig = document.getElementById(origIds[_i]);
+        if (orig) {
+          var clone = orig.cloneNode(true);
+          // 스냅샷 JS가 id로 재쿼리해 리스너를 붙이지 못하도록 원본 id 제거
+          orig.removeAttribute('id');
+          // 클론에 id 유지 (폼 submit 핸들러 등이 참조)
+          orig.parentNode.replaceChild(clone, orig);
+          cleanInp = clone;
+          break;
+        }
+      }
+      // 게임 검색 자동완성 활성화
+      setupGameSearch(cleanInp);
+    })();
 
     // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
@@ -2197,8 +2214,22 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     _inputs.forEach(function(el) { if (el) el.value = ''; });
     document.querySelectorAll('.ql-editor').forEach(function(el) { el.innerHTML = '<p><br></p>'; });
 
-    // 게임 검색 자동완성 활성화 (구매등록: #searchRegGameServer 또는 #searchGameServer)
-    setupGameSearch(document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer'));
+    // 스냅샷 JS 이벤트 리스너 완전 제거: cloneNode + id 변경으로 스냅샷 JS 재부착 차단
+    (function() {
+      var origIds = ['searchRegGameServer', 'searchGameServer'];
+      var cleanInp = null;
+      for (var _i = 0; _i < origIds.length; _i++) {
+        var orig = document.getElementById(origIds[_i]);
+        if (orig) {
+          var clone = orig.cloneNode(true);
+          orig.removeAttribute('id');
+          orig.parentNode.replaceChild(clone, orig);
+          cleanInp = clone;
+          break;
+        }
+      }
+      setupGameSearch(cleanInp);
+    })();
 
     // 판매등록 링크 → /sell/register.html
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
