@@ -12,6 +12,7 @@ function formatProduct(p: typeof productsTable.$inferSelect) {
     title: p.title,
     price: Number(p.price),
     category: p.category,
+    itemCategory: p.itemCategory,
     gameName: p.gameName,
     serverName: p.serverName,
     sellerId: p.sellerId,
@@ -30,12 +31,18 @@ router.get("/products", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10)));
   const offset = (page - 1) * limit;
-  const { category, gameName, keyword, gameCode, serverName, sort } = req.query;
+  const { category, itemCategory, gameName, keyword, gameCode, serverName, sort } = req.query;
 
   const conditions = [eq(productsTable.status, "active")];
 
+  // category: sell/buy 구분 필터
   if (category && typeof category === "string") {
     conditions.push(eq(productsTable.category, category));
+  }
+
+  // itemCategory: 게임머니/아이템/계정/기타 필터
+  if (itemCategory && typeof itemCategory === "string") {
+    conditions.push(eq(productsTable.itemCategory, itemCategory));
   }
 
   // gameCode → gameName 변환 (itemmania 게임코드를 게임명으로)
@@ -98,7 +105,7 @@ router.get("/products/:id", async (req, res): Promise<void> => {
 
 // 상품 등록 (로그인 필요)
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
-  const { title, price, gameName, serverName, category, description, sellerName } =
+  const { title, price, gameName, serverName, category, itemCategory, description, sellerName } =
     req.body as Record<string, string>;
 
   if (!title || !price) {
@@ -122,6 +129,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
       gameName: gameName ? String(gameName).trim() : null,
       serverName: serverName ? String(serverName).trim() : null,
       category: category ? String(category).trim() : "sell",
+      itemCategory: itemCategory ? String(itemCategory).trim() : null,
       sellerId: userId,
       sellerName: sellerName ? String(sellerName).trim() : null,
       description: description ? String(description).trim() : null,

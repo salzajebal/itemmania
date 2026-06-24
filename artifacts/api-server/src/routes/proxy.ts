@@ -1279,7 +1279,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         '<ul class=server>' +
           '<li><a href="javascript:void(0)" data-search=game>' + (p.gameName||'') + '</a></li>' +
           (p.serverName ? '<li><a href="javascript:void(0)" data-search=server data-title="'+p.serverName+'">' + p.serverName + '</a></li>' : '') +
-          '<li><a href="javascript:void(0)" data-search=goods>게임머니</a></li>' +
+          '<li><a href="javascript:void(0)" data-search=goods>' + (p.itemCategory||'게임머니') + '</a></li>' +
         '</ul>' +
         '<a href="' + href + '" class="subject active">' +
           '<div><span class="text_ellipsis kind_title">' + p.title + '</span></div>' +
@@ -1292,7 +1292,8 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     return li;
   }
 
-  var CATEGORY_MAP = { money:'currency', item:'game-item', character:'account', etc:'service', all:'' };
+  // tab_bx data-value → DB itemCategory 값 매핑
+  var ITEM_CAT_MAP = { all:'', money:'게임머니', item:'아이템', character:'계정', etc:'기타' };
   var SORT_MAP = { '1':'price_asc', '2':'recent', '3':'price_desc' };
 
   function getParams() {
@@ -1311,7 +1312,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 
   function initFilters() {
     var params = getParams();
-    var currentCategory = params.get('category') || '';
+    var currentItemCat = params.get('itemCategory') || '';
     var currentSort = params.get('sort') || 'recent';
     var currentServer = params.get('search_server') || '';
     var currentKeyword = params.get('keyword') || '';
@@ -1319,11 +1320,11 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     // ── 카테고리 탭 ──────────────────────────────────────
     document.querySelectorAll('button.tab_bx[data-value]').forEach(function(btn) {
       var val = btn.getAttribute('data-value');
-      var mapped = CATEGORY_MAP[val] || '';
-      if (mapped === currentCategory) btn.classList.add('selected');
+      var mapped = ITEM_CAT_MAP[val] !== undefined ? ITEM_CAT_MAP[val] : '';
+      if (mapped === currentItemCat) btn.classList.add('selected');
       else btn.classList.remove('selected');
       btn.addEventListener('click', function() {
-        navigate({ category: mapped });
+        navigate({ itemCategory: mapped || null });
       });
     });
 
@@ -1394,11 +1395,12 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var sort = params.get('sort') || '';
     var type = location.pathname.indexOf('/buy/') >= 0 ? 'buy' : 'sell';
 
+    var itemCat = params.get('itemCategory') || '';
     var apiQ = [];
     if (gameCode) apiQ.push('gameCode=' + encodeURIComponent(gameCode));
     if (serverName) apiQ.push('serverName=' + encodeURIComponent(serverName));
     if (keyword) apiQ.push('keyword=' + encodeURIComponent(keyword));
-    if (category) apiQ.push('category=' + encodeURIComponent(category));
+    if (itemCat) apiQ.push('itemCategory=' + encodeURIComponent(itemCat));
     if (sort) apiQ.push('sort=' + encodeURIComponent(sort));
     apiQ.push('page=' + page);
     apiQ.push('limit=20');
@@ -1719,30 +1721,42 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     });
   }
 
-  function init() {
-    // 스냅샷에 미리 채워진 폼 값 초기화
-    var priceInp = document.getElementById('user_price');
-    var titleInp = document.getElementById('user_title');
-    var gsInp = document.getElementById('searchRegGameServer');
-    var headerInp = document.getElementById('searchGameServer');
-    var charInp = document.getElementById('user_character');
-    if (priceInp) priceInp.value = '';
-    if (titleInp) titleInp.value = '';
-    if (gsInp) gsInp.value = '';
-    if (headerInp) headerInp.value = '';
-    if (charInp) charInp.value = '';
-    // Quill 에디터(상세설명) 초기화
+  function clearSnapshot() {
+    // 폼 검색 입력(searchRegGameServer)과 헤더 검색(searchGameServer) 모두 초기화
+    var _clearIds = ['searchRegGameServer','searchGameServer','user_price','user_title','user_character'];
+    _clearIds.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && !el._imUserTouched) el.value = '';
+    });
     var qlEditor = document.querySelector('.ql-editor');
-    if (qlEditor) qlEditor.innerHTML = '<p><br></p>';
+    if (qlEditor && !qlEditor._imUserTouched) qlEditor.innerHTML = '<p><br></p>';
     window._IM_sel_game = null;
     window._IM_sel_server = null;
     window._IM_sel_category = null;
+    document.querySelectorAll('.g_search_frame .goods li, .gs_list .goods li').forEach(function(li) {
+      li.classList.remove('sel_on');
+    });
+  }
+
+  function init() {
+    // 2초간 80ms 인터벌로 스냅샷 JS 값 복원 차단
+    clearSnapshot();
+    var _clearTicker = setInterval(function() {
+      var el = document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer');
+      if (el && el.value && !el._imUserTouched) el.value = '';
+    }, 80);
+    setTimeout(function() { clearInterval(_clearTicker); }, 2000);
+    var _gsInp = document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer');
+    if (_gsInp) {
+      _gsInp.addEventListener('focus', function() { _gsInp._imUserTouched = true; clearInterval(_clearTicker); }, { once: true });
+    }
 
     // 수수료 영역 초기 숨김
     var comsArea = document.getElementById('coms_area');
     if (comsArea) comsArea.style.display = 'none';
 
     // 가격 입력시 수수료 자동계산
+    var priceInp = document.getElementById('user_price');
     if (priceInp) {
       priceInp.addEventListener('input', function() {
         var raw = parseInt(priceInp.value.replace(/[^0-9]/g, ''), 10) || 0;
@@ -1758,8 +1772,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       });
     }
 
-    // 게임 검색 자동완성 활성화
-    setupGameSearch(document.getElementById('searchRegGameServer'));
+    // 게임 검색 자동완성 활성화 (폼 입력: searchRegGameServer)
+    setupGameSearch(document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer'));
 
     // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
@@ -1804,6 +1818,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                 gameName: game,
                 serverName: server,
                 category: 'sell',
+                itemCategory: window._IM_sel_category || '기타',
                 sellerName: d.nickname || d.email
               })
             })
@@ -2227,6 +2242,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
                 gameName: game2,
                 serverName: server2,
                 category: 'buy',
+                itemCategory: window._IM_sel_category || '기타',
                 sellerName: d.nickname || d.email
               })
             })
@@ -3598,15 +3614,23 @@ function extractBuyCheckLayer(src: string): string | null {
   return null;
 }
 
+/** 스냅샷 HTML에서 게임 검색 입력창의 미리 채워진 value 속성 제거 */
+function stripGameSearchValue(html: string): string {
+  // searchGameServer 또는 searchRegGameServer 입력에서 value=... 속성 제거
+  return html
+    .replace(/(<input\b[^>]*\bid=searchGameServer\b[^>]*?)\s+value=(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '$1')
+    .replace(/(<input\b[^>]*\bid=searchRegGameServer\b[^>]*?)\s+value=(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '$1');
+}
+
 function serveSellRegister(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+  const result = stripGameSearchValue(prepare(html, user));
   return result.includes("</body>")
     ? result.replace("</body>", SELL_REGISTER_INTERCEPT_SCRIPT + "</body>")
     : result + SELL_REGISTER_INTERCEPT_SCRIPT;
 }
 
 function serveBuyRegister(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+  const result = stripGameSearchValue(prepare(html, user));
   return result.includes("</body>")
     ? result.replace("</body>", BUY_REGISTER_INTERCEPT_SCRIPT + "</body>")
     : result + BUY_REGISTER_INTERCEPT_SCRIPT;

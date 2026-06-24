@@ -17,6 +17,7 @@ export const productsTable = pgTable("products", {
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),
   detailUrl: text("detail_url"),
+  itemCategory: text("item_category"),
   status: productStatusEnum("status").notNull().default("active"),
   crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
