@@ -1744,8 +1744,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       }, q ? 200 : 0);
     }
 
-    inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
-    inp.addEventListener(\'input\', function() { search(inp.value); }, true);
+    inp.addEventListener(\'focus\', function() { if (inp.value.trim()) search(inp.value); }, true);
+    inp.addEventListener(\'input\', function() { if (inp.value.trim()) search(inp.value); else hideDrop(); }, true);
     document.addEventListener(\'click\', function(e) {
       if (e.target !== inp && !dropContains(e.target)) hideDrop();
     });
@@ -2244,8 +2244,8 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       }, q ? 200 : 0);
     }
 
-    inp.addEventListener(\'focus\', function() { search(inp.value); }, true);
-    inp.addEventListener(\'input\', function() { search(inp.value); }, true);
+    inp.addEventListener(\'focus\', function() { if (inp.value.trim()) search(inp.value); }, true);
+    inp.addEventListener(\'input\', function() { if (inp.value.trim()) search(inp.value); else hideDrop(); }, true);
     document.addEventListener(\'click\', function(e) {
       if (e.target !== inp && !dropContains(e.target)) hideDrop();
     });

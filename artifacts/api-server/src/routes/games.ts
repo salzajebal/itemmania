@@ -8,9 +8,9 @@ const router = Router();
 router.get("/games/search", async (req, res): Promise<void> => {
   const q = String(req.query["q"] ?? "").trim();
 
-  const games = q
-    ? await db.select().from(gamesTable).where(ilike(gamesTable.name, `%${q}%`)).orderBy(asc(gamesTable.sortOrder)).limit(20)
-    : await db.select().from(gamesTable).orderBy(asc(gamesTable.sortOrder)).limit(20);
+  if (!q) { res.json([]); return; }
+
+  const games = await db.select().from(gamesTable).where(ilike(gamesTable.name, `%${q}%`)).orderBy(asc(gamesTable.sortOrder)).limit(20);
 
   const result = await Promise.all(
     games.map(async (game) => {
