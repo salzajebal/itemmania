@@ -1738,7 +1738,27 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     });
   }
 
+  // ── 내 거래정보 섹션 동적 로딩 ───────────────────────────────────
+  function loadUserTradeInfo() {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(me) {
+        if (!me) return;
+        var nameCell = document.getElementById('userNameCell');
+        if (nameCell) nameCell.textContent = me.nickname || me.email || '';
+        var phoneEl = document.getElementById('spnUserPhone');
+        if (phoneEl) phoneEl.textContent = '';
+        var cellEl = document.getElementById('spnUserCell');
+        if (cellEl) cellEl.textContent = '';
+        var mileageEl = document.getElementById('txtCurrentMileage');
+        if (mileageEl && me.balance != null)
+          mileageEl.textContent = Number(me.balance).toLocaleString() + '원';
+      })
+      .catch(function() {});
+  }
+
   function init() {
+    loadUserTradeInfo();
     // 2초간 80ms 인터벌로 스냅샷 JS 값 복원 차단
     clearSnapshot();
     var _clearTicker = setInterval(function() {
@@ -2201,7 +2221,27 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     });
   }
 
+  // ── 내 거래정보 섹션 동적 로딩 ───────────────────────────────────
+  function loadUserTradeInfo() {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(me) {
+        if (!me) return;
+        var nameCell = document.getElementById('userNameCell');
+        if (nameCell) nameCell.textContent = me.nickname || me.email || '';
+        var phoneEl = document.getElementById('spnUserPhone');
+        if (phoneEl) phoneEl.textContent = '';
+        var cellEl = document.getElementById('spnUserCell');
+        if (cellEl) cellEl.textContent = '';
+        var mileageEl = document.getElementById('txtCurrentMileage');
+        if (mileageEl && me.balance != null)
+          mileageEl.textContent = Number(me.balance).toLocaleString() + '원';
+      })
+      .catch(function() {});
+  }
+
   function init() {
+    loadUserTradeInfo();
     // 스냅샷에 미리 채워진 폼 값 초기화
     var _inputs = [
       document.getElementById('searchRegGameServer'),
