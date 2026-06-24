@@ -1536,6 +1536,10 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 `;
 
 const SELL_REGISTER_INTERCEPT_SCRIPT = `
+<style>
+#charge_service,#dvPremium,.premium_info,.g_layer.premium_info,#dv_power,
+.charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
+</style>
 <script>
 (function() {
   function showToast(msg, ok) {
@@ -2036,6 +2040,10 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
 `;
 
 const BUY_REGISTER_INTERCEPT_SCRIPT = `
+<style>
+#charge_service,#dvPremium,.premium_info,.g_layer.premium_info,#dv_power,
+.charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
+</style>
 <script>
 (function() {
   function showToast(msg, ok) {
