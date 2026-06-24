@@ -1537,7 +1537,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 
 const SELL_REGISTER_INTERCEPT_SCRIPT = `
 <style>
-#charge_service,#dvPremium,.premium_info,.g_layer.premium_info,#dv_power,
+#charge_service,#dv_power,
 .charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
 </style>
 <script>
@@ -1936,68 +1936,114 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     title: title,
                     price: parseInt(price.replace(/[^0-9]/g, ''), 10)
                   };
-                  // 프리미엄 등록안내 팝업 표시 (원본과 동일)
-                  var popup = document.getElementById('dvPremium');
-                  if (popup) {
-                    popup.style.display = 'block';
+                  // ── 팝업 플로우: dvPremium → receipt_layer → dvPopup → 완료 ──
+                  function showOverlay() {
                     document.body.classList.add('mask_on');
-                    var overlay = document.getElementById('g_OVERLAY');
-                    var sleep = document.getElementById('g_SLEEP');
-                    if (sleep) sleep.classList.remove('g_hidden');
-                    if (overlay) overlay.style.display = 'block';
-                    // 마일리지 표시 (사용자 잔액 기반)
+                    var ov = document.getElementById('g_OVERLAY');
+                    var sl = document.getElementById('g_SLEEP');
+                    if (sl) sl.classList.remove('g_hidden');
+                    if (ov) ov.style.display = 'block';
+                  }
+                  function hideOverlay() {
+                    document.body.classList.remove('mask_on');
+                    var ov = document.getElementById('g_OVERLAY');
+                    var sl = document.getElementById('g_SLEEP');
+                    if (sl) sl.classList.add('g_hidden');
+                    if (ov) ov.style.display = 'none';
+                  }
+                  function fillAndShowDvPopup() {
+                    var regData = window._IM_reg_data || {};
+                    var catEl   = document.getElementById('popup_category');
+                    var titleEl = document.getElementById('popup_title');
+                    var priceEl = document.getElementById('popup_price');
+                    if (catEl) {
+                      var catStr = regData.game || '';
+                      if (regData.server)   catStr += ' &gt; ' + regData.server;
+                      if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
+                      catEl.innerHTML = catStr;
+                    }
+                    if (titleEl) titleEl.textContent = regData.title || '';
+                    if (priceEl) priceEl.textContent = (regData.price || 0).toLocaleString() + '원';
+                    var dvPopup = document.getElementById('dvPopup');
+                    if (dvPopup) {
+                      dvPopup.style.display = 'block';
+                      dvPopup.classList.remove('sf-hidden');
+                    }
+                    showOverlay();
+                    // reg_submit(확인) → 완료 페이지
+                    var regBtn = document.getElementById('reg_submit');
+                    if (regBtn && !regBtn._imBound) {
+                      regBtn._imBound = true;
+                      regBtn.addEventListener('click', function() {
+                        var pid = (window._IM_reg_data || {}).id || '';
+                        location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
+                      });
+                    }
+                    // cancel_submit(취소) → 팝업 닫기
+                    var cancelBtn = document.getElementById('cancel_submit');
+                    if (cancelBtn && !cancelBtn._imBound) {
+                      cancelBtn._imBound = true;
+                      cancelBtn.addEventListener('click', function() {
+                        if (dvPopup) dvPopup.style.display = 'none';
+                        hideOverlay();
+                      });
+                    }
+                  }
+
+                  // ── STEP 1: dvPremium 표시 ──────────────────────────────
+                  var dvPremium = document.getElementById('dvPremium');
+                  if (dvPremium) {
+                    dvPremium.style.display = 'block';
+                    dvPremium.classList.remove('sf-hidden');
+                    showOverlay();
+                    // 마일리지 표시
                     fetch('/api/auth/me', { credentials: 'include' })
                       .then(function(mr) { return mr.json(); })
                       .then(function(me) {
                         var ml = document.getElementById('my_mileage_layer');
-                        if (ml && me && me.balance != null) {
+                        if (ml && me && me.balance != null)
                           ml.textContent = me.balance.toLocaleString() + '원';
-                        }
                       }).catch(function() {});
-                    // 확인 버튼 → dvPremium 숨기고 dvPopup(물품등록정보) 표시
-                    var btn = document.getElementById('premium_btn');
-                    if (btn) {
-                      btn.addEventListener('click', function() {
-                        // dvPremium 숨기기
-                        popup.style.display = 'none';
-                        // dvPopup에 실제 등록 데이터 채우기
-                        var regData = window._IM_reg_data || {};
-                        var catEl = document.getElementById('popup_category');
-                        var titleEl2 = document.getElementById('popup_title');
-                        var priceEl2 = document.getElementById('popup_price');
-                        if (catEl) {
-                          var catStr = regData.game || '';
-                          if (regData.server) catStr += ' &gt; ' + regData.server;
-                          if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
-                          catEl.innerHTML = catStr;
+
+                    // ── STEP 2: premium_btn 확인 → receipt_layer 표시 ──
+                    var premiumBtn = document.getElementById('premium_btn');
+                    if (premiumBtn && !premiumBtn._imBound) {
+                      premiumBtn._imBound = true;
+                      premiumBtn.addEventListener('click', function() {
+                        dvPremium.style.display = 'none';
+                        var receiptLayer = document.getElementById('receipt_layer');
+                        if (receiptLayer) {
+                          receiptLayer.style.display = 'block';
+                          receiptLayer.classList.remove('sf-hidden');
+                          showOverlay();
+
+                          // ── STEP 3: receipt_ok_btn → dvPopup 표시 ──
+                          var receiptOkBtn = document.getElementById('receipt_ok_btn');
+                          if (receiptOkBtn && !receiptOkBtn._imBound) {
+                            receiptOkBtn._imBound = true;
+                            receiptOkBtn.addEventListener('click', function() {
+                              receiptLayer.style.display = 'none';
+                              fillAndShowDvPopup();
+                            });
+                          }
+                          // receipt_layer 닫기(X) 버튼
+                          var closeBtn = receiptLayer.querySelector('.close_w');
+                          if (closeBtn && !closeBtn._imBound) {
+                            closeBtn._imBound = true;
+                            closeBtn.addEventListener('click', function() {
+                              receiptLayer.style.display = 'none';
+                              hideOverlay();
+                            });
+                          }
+                        } else {
+                          // receipt_layer 없으면 dvPopup 바로 표시
+                          fillAndShowDvPopup();
                         }
-                        if (titleEl2) titleEl2.textContent = regData.title || '';
-                        if (priceEl2) priceEl2.textContent = (regData.price || 0).toLocaleString() + '원';
-                        // dvPopup 표시
-                        var popup2 = document.getElementById('dvPopup');
-                        if (popup2) popup2.style.display = 'block';
-                        // reg_submit(확인) → 등록 완료 페이지
-                        var regBtn = document.getElementById('reg_submit');
-                        if (regBtn) regBtn.addEventListener('click', function() {
-                          var pid = (window._IM_reg_data || {}).id || '';
-                          location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
-                        });
-                        // cancel_submit(취소) → 팝업 닫기
-                        var cancelBtn = document.getElementById('cancel_submit');
-                        if (cancelBtn) cancelBtn.addEventListener('click', function() {
-                          if (popup2) popup2.style.display = 'none';
-                          document.body.classList.remove('mask_on');
-                          var sl = document.getElementById('g_SLEEP');
-                          if (sl) sl.classList.add('g_hidden');
-                        });
                       });
                     }
                   } else {
-                    showToast('판매 등록이 완료되었습니다!', true);
-                    setTimeout(function() {
-                      var pid = (window._IM_reg_data || {}).id || '';
-                      location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
-                    }, 1800);
+                    // dvPremium 없으면 바로 dvPopup
+                    fillAndShowDvPopup();
                   }
                 });
               } else {
