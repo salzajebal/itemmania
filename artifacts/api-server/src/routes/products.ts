@@ -70,7 +70,7 @@ router.get("/products/:id", async (req, res): Promise<void> => {
 
 // 상품 등록 (로그인 필요)
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
-  const { title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
+  const { title, price, gameName, serverName, category, description, sellerName } = req.body as Record<string, string>;
 
   if (!title || !price) {
     res.status(400).json({ error: "title과 price는 필수입니다." });
@@ -92,6 +92,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
       title: String(title).trim(),
       price: priceNum,
       gameName: gameName ? String(gameName).trim() : null,
+      serverName: serverName ? String(serverName).trim() : null,
       category: category ? String(category).trim() : "sell",
       sellerName: sellerName ? String(sellerName).trim() : null,
       description: description ? String(description).trim() : null,

@@ -11,6 +11,7 @@ export const productsTable = pgTable("products", {
   price: bigint("price", { mode: "number" }).notNull(),
   category: text("category"),
   gameName: text("game_name"),
+  serverName: text("server_name"),
   sellerName: text("seller_name"),
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),

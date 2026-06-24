@@ -1264,7 +1264,134 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     setTimeout(function() { t.remove(); }, 3000);
   }
 
+  // ── 게임 검색 자동완성 ───────────────────────────────────────────
+  function setupGameSearch(inp) {
+    if (!inp) return;
+    var _currentGame = null;
+    var _debounce = null;
+
+    // 드롭다운 컨테이너 찾기 또는 생성
+    var frame = null;
+    var node = inp.parentElement;
+    for (var i = 0; i < 6 && node; i++) {
+      frame = node.querySelector('.g_search_frame');
+      if (frame) break;
+      node = node.parentElement;
+    }
+    if (!frame) {
+      frame = document.createElement('div');
+      frame.className = 'g_search_frame im_gs_frame';
+      frame.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;'
+        + 'border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:300px;'
+        + 'max-height:340px;overflow:hidden;top:100%;left:0;display:none';
+      var p = inp.parentElement;
+      if (p.style.position !== 'relative' && p.style.position !== 'absolute') p.style.position = 'relative';
+      p.appendChild(frame);
+    }
+
+    var gsList = frame.querySelector('.gs_list');
+    if (!gsList) { gsList = document.createElement('div'); gsList.className = 'gs_list'; frame.appendChild(gsList); }
+
+    function showFrame() { frame.classList.remove('g_hidden'); frame.style.display = ''; }
+    function hideFrame() { frame.classList.add('g_hidden'); frame.style.display = 'none'; }
+
+    function liHover(li, on) {
+      li.style.background = on ? 'var(--color-gs-selected-bg,#e8f4ff)' : '';
+      li.style.fontWeight = on ? '700' : '';
+      li.style.borderRadius = on ? '7px' : '';
+    }
+
+    function renderGames(games) {
+      _currentGame = null;
+      var ul = document.createElement('ul');
+      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:320px;overflow-y:auto';
+      if (!games.length) {
+        var empty = document.createElement('li');
+        empty.style.cssText = 'padding:12px 16px;color:#999;font-size:14px';
+        empty.textContent = '검색 결과가 없습니다';
+        ul.appendChild(empty);
+      } else {
+        games.forEach(function(g) {
+          var li = document.createElement('li');
+          li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+          li.innerHTML = g.name + (g.servers && g.servers.length
+            ? ' <span style="color:#999;font-size:12px;font-weight:400">(' + g.servers.length + '개 서버)</span>'
+            : '');
+          li.addEventListener('mouseover', function() { liHover(li, true); });
+          li.addEventListener('mouseout', function() { liHover(li, false); });
+          li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+          li.addEventListener('click', function() {
+            _currentGame = g;
+            if (g.servers && g.servers.length) {
+              renderServers(g);
+            } else {
+              window._IM_sel_game = g; window._IM_sel_server = null;
+              inp.value = g.name; hideFrame();
+            }
+          });
+          ul.appendChild(li);
+        });
+      }
+      var inner = document.createElement('div');
+      inner.appendChild(ul);
+      gsList.innerHTML = ''; gsList.appendChild(inner);
+      showFrame();
+    }
+
+    function renderServers(g) {
+      var wrap = document.createElement('div');
+      var back = document.createElement('div');
+      back.style.cssText = 'padding:8px 16px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px;'
+        + 'color:#0070d2;font-weight:600;line-height:27px';
+      back.innerHTML = '&#8592; ' + g.name + ' (목록으로)';
+      back.addEventListener('mouseover', function() { back.style.background = '#f0f7ff'; });
+      back.addEventListener('mouseout', function() { back.style.background = ''; });
+      back.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+      back.addEventListener('click', function() { search(inp.value); });
+      wrap.appendChild(back);
+
+      var ul = document.createElement('ul');
+      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:270px;overflow-y:auto';
+      g.servers.forEach(function(s) {
+        var li = document.createElement('li');
+        li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap';
+        li.textContent = s.name;
+        li.addEventListener('mouseover', function() { liHover(li, true); });
+        li.addEventListener('mouseout', function() { liHover(li, false); });
+        li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+        li.addEventListener('click', function() {
+          window._IM_sel_game = g; window._IM_sel_server = s;
+          inp.value = g.name + ' (' + s.name + ')'; hideFrame();
+        });
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+      gsList.innerHTML = ''; gsList.appendChild(wrap);
+      showFrame();
+    }
+
+    function search(q) {
+      clearTimeout(_debounce);
+      _debounce = setTimeout(function() {
+        fetch('/api/games/search?q=' + encodeURIComponent(q || ''), { credentials: 'include' })
+          .then(function(r) { return r.json(); })
+          .then(function(games) { renderGames(games); })
+          .catch(function() {});
+      }, q ? 200 : 0);
+    }
+
+    inp.addEventListener('focus', function() { search(inp.value); });
+    inp.addEventListener('input', function() { search(inp.value); });
+    document.addEventListener('click', function(e) {
+      if (!frame.contains(e.target) && e.target !== inp) hideFrame();
+    });
+    hideFrame();
+  }
+
   function init() {
+    // 게임 검색 자동완성 활성화
+    setupGameSearch(document.getElementById('searchRegGameServer'));
+
     // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
@@ -1288,12 +1415,14 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
               setTimeout(function() { location.href = '/login'; }, 1200);
               return;
             }
-            var gameEl = form.querySelector('[name=searchGameServer],[name=game_name]');
+            var gameEl = form.querySelector('[name=searchGameServer],[id=searchRegGameServer]');
             var priceEl = form.querySelector('[name=user_price]');
             var titleEl = form.querySelector('[name=user_title],[name=title_name]');
-            var game = gameEl ? gameEl.value.trim() : '';
+            var game = window._IM_sel_game ? window._IM_sel_game.name : (gameEl ? gameEl.value.trim() : '');
+            var server = window._IM_sel_server ? window._IM_sel_server.name : '';
             var price = priceEl ? priceEl.value.trim() : '';
             var title = titleEl ? titleEl.value.trim() : '';
+            if (!game) { showToast('게임을 선택해주세요.', false); return; }
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
             if (!title) { showToast('상품명을 입력해주세요.', false); return; }
             fetch('/api/products', {
@@ -1304,6 +1433,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                 title: title,
                 price: parseInt(price.replace(/[^0-9]/g, ''), 10),
                 gameName: game,
+                serverName: server,
                 category: 'sell',
                 sellerName: d.nickname || d.email
               })
@@ -1364,7 +1494,133 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     setTimeout(function() { t.remove(); }, 3000);
   }
 
+  // ── 게임 검색 자동완성 ───────────────────────────────────────────
+  function setupGameSearch(inp) {
+    if (!inp) return;
+    var _currentGame = null;
+    var _debounce = null;
+
+    var frame = null;
+    var node = inp.parentElement;
+    for (var i = 0; i < 6 && node; i++) {
+      frame = node.querySelector('.g_search_frame');
+      if (frame) break;
+      node = node.parentElement;
+    }
+    if (!frame) {
+      frame = document.createElement('div');
+      frame.className = 'g_search_frame im_gs_frame';
+      frame.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;'
+        + 'border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:300px;'
+        + 'max-height:340px;overflow:hidden;top:100%;left:0;display:none';
+      var p = inp.parentElement;
+      if (p.style.position !== 'relative' && p.style.position !== 'absolute') p.style.position = 'relative';
+      p.appendChild(frame);
+    }
+
+    var gsList = frame.querySelector('.gs_list');
+    if (!gsList) { gsList = document.createElement('div'); gsList.className = 'gs_list'; frame.appendChild(gsList); }
+
+    function showFrame() { frame.classList.remove('g_hidden'); frame.style.display = ''; }
+    function hideFrame() { frame.classList.add('g_hidden'); frame.style.display = 'none'; }
+
+    function liHover(li, on) {
+      li.style.background = on ? 'var(--color-gs-selected-bg,#e8f4ff)' : '';
+      li.style.fontWeight = on ? '700' : '';
+      li.style.borderRadius = on ? '7px' : '';
+    }
+
+    function renderGames(games) {
+      _currentGame = null;
+      var ul = document.createElement('ul');
+      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:320px;overflow-y:auto';
+      if (!games.length) {
+        var empty = document.createElement('li');
+        empty.style.cssText = 'padding:12px 16px;color:#999;font-size:14px';
+        empty.textContent = '검색 결과가 없습니다';
+        ul.appendChild(empty);
+      } else {
+        games.forEach(function(g) {
+          var li = document.createElement('li');
+          li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+          li.innerHTML = g.name + (g.servers && g.servers.length
+            ? ' <span style="color:#999;font-size:12px;font-weight:400">(' + g.servers.length + '개 서버)</span>'
+            : '');
+          li.addEventListener('mouseover', function() { liHover(li, true); });
+          li.addEventListener('mouseout', function() { liHover(li, false); });
+          li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+          li.addEventListener('click', function() {
+            _currentGame = g;
+            if (g.servers && g.servers.length) {
+              renderServers(g);
+            } else {
+              window._IM_sel_game = g; window._IM_sel_server = null;
+              inp.value = g.name; hideFrame();
+            }
+          });
+          ul.appendChild(li);
+        });
+      }
+      var inner = document.createElement('div');
+      inner.appendChild(ul);
+      gsList.innerHTML = ''; gsList.appendChild(inner);
+      showFrame();
+    }
+
+    function renderServers(g) {
+      var wrap = document.createElement('div');
+      var back = document.createElement('div');
+      back.style.cssText = 'padding:8px 16px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px;'
+        + 'color:#0070d2;font-weight:600;line-height:27px';
+      back.innerHTML = '&#8592; ' + g.name + ' (목록으로)';
+      back.addEventListener('mouseover', function() { back.style.background = '#f0f7ff'; });
+      back.addEventListener('mouseout', function() { back.style.background = ''; });
+      back.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+      back.addEventListener('click', function() { search(inp.value); });
+      wrap.appendChild(back);
+
+      var ul = document.createElement('ul');
+      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:270px;overflow-y:auto';
+      g.servers.forEach(function(s) {
+        var li = document.createElement('li');
+        li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap';
+        li.textContent = s.name;
+        li.addEventListener('mouseover', function() { liHover(li, true); });
+        li.addEventListener('mouseout', function() { liHover(li, false); });
+        li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+        li.addEventListener('click', function() {
+          window._IM_sel_game = g; window._IM_sel_server = s;
+          inp.value = g.name + ' (' + s.name + ')'; hideFrame();
+        });
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+      gsList.innerHTML = ''; gsList.appendChild(wrap);
+      showFrame();
+    }
+
+    function search(q) {
+      clearTimeout(_debounce);
+      _debounce = setTimeout(function() {
+        fetch('/api/games/search?q=' + encodeURIComponent(q || ''), { credentials: 'include' })
+          .then(function(r) { return r.json(); })
+          .then(function(games) { renderGames(games); })
+          .catch(function() {});
+      }, q ? 200 : 0);
+    }
+
+    inp.addEventListener('focus', function() { search(inp.value); });
+    inp.addEventListener('input', function() { search(inp.value); });
+    document.addEventListener('click', function(e) {
+      if (!frame.contains(e.target) && e.target !== inp) hideFrame();
+    });
+    hideFrame();
+  }
+
   function init() {
+    // 게임 검색 자동완성 활성화 (구매등록: #searchRegGameServer 또는 #searchGameServer)
+    setupGameSearch(document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer'));
+
     // 판매등록 링크 → /sell/register.html
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
@@ -1389,11 +1645,12 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
               return;
             }
             var priceEl = form.querySelector('[name=user_price]');
-            var price = priceEl ? priceEl.value.trim() : '';
             var titleEl2 = form.querySelector('[name=user_title],[name=title_name],[name=buy_title]');
-            var gameEl2 = form.querySelector('[name=searchGameServer],[name=game_name]');
+            var price = priceEl ? priceEl.value.trim() : '';
             var title2 = titleEl2 ? titleEl2.value.trim() : '';
-            var game2 = gameEl2 ? gameEl2.value.trim() : '';
+            var game2 = window._IM_sel_game ? window._IM_sel_game.name : '';
+            var server2 = window._IM_sel_server ? window._IM_sel_server.name : '';
+            if (!game2) { showToast('게임을 선택해주세요.', false); return; }
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
             if (!title2) { showToast('구매 희망 아이템명을 입력해주세요.', false); return; }
             fetch('/api/products', {
@@ -1404,6 +1661,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
                 title: title2,
                 price: parseInt(price.replace(/[^0-9]/g, ''), 10),
                 gameName: game2,
+                serverName: server2,
                 category: 'buy',
                 sellerName: d.nickname || d.email
               })
