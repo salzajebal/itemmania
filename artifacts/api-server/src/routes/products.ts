@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, desc } from "drizzle-orm";
+import { eq, ilike, and, sql, desc, asc } from "drizzle-orm";
 import { db, productsTable, gamesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
@@ -30,7 +30,7 @@ router.get("/products", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10)));
   const offset = (page - 1) * limit;
-  const { category, gameName, keyword, gameCode, serverName } = req.query;
+  const { category, gameName, keyword, gameCode, serverName, sort } = req.query;
 
   const conditions = [eq(productsTable.status, "active")];
 
@@ -67,11 +67,17 @@ router.get("/products", async (req, res): Promise<void> => {
     .from(productsTable)
     .where(where);
 
+  const sortOrder = sort === "price_asc"
+    ? asc(productsTable.price)
+    : sort === "price_desc"
+      ? desc(productsTable.price)
+      : desc(productsTable.createdAt);
+
   const items = await db
     .select()
     .from(productsTable)
     .where(where)
-    .orderBy(desc(productsTable.createdAt))
+    .orderBy(sortOrder)
     .limit(limit)
     .offset(offset);
 

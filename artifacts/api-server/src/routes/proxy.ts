@@ -1289,19 +1289,114 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     return li;
   }
 
+  var CATEGORY_MAP = { money:'currency', item:'game-item', character:'account', etc:'service', all:'' };
+  var SORT_MAP = { '1':'price_asc', '2':'recent', '3':'price_desc' };
+
+  function getParams() {
+    return new URLSearchParams(location.search);
+  }
+
+  function navigate(updates) {
+    var q = new URLSearchParams(location.search);
+    Object.keys(updates).forEach(function(k) {
+      if (updates[k] === null || updates[k] === '') q.delete(k);
+      else q.set(k, updates[k]);
+    });
+    q.delete('page'); // 필터 변경 시 1페이지로
+    location.search = q.toString();
+  }
+
+  function initFilters() {
+    var params = getParams();
+    var currentCategory = params.get('category') || '';
+    var currentSort = params.get('sort') || 'recent';
+    var currentServer = params.get('search_server') || '';
+    var currentKeyword = params.get('keyword') || '';
+
+    // ── 카테고리 탭 ──────────────────────────────────────
+    document.querySelectorAll('button.tab_bx[data-value]').forEach(function(btn) {
+      var val = btn.getAttribute('data-value');
+      var mapped = CATEGORY_MAP[val] || '';
+      if (mapped === currentCategory) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+      btn.addEventListener('click', function() {
+        navigate({ category: mapped });
+      });
+    });
+
+    // ── 정렬 버튼 (data-type=1/2/3만, sell/buy 탭 제외) ──
+    document.querySelectorAll('button[data-type]').forEach(function(btn) {
+      var t = btn.getAttribute('data-type');
+      if (!SORT_MAP[t]) return; // sell/buy 탭은 스킵
+      var sortVal = SORT_MAP[t];
+      if (sortVal === currentSort || (sortVal === 'recent' && currentSort === 'recent')) {
+        btn.classList.add('active');
+        btn.style.fontWeight = '800';
+        btn.style.color = '#159EFD';
+      }
+      btn.addEventListener('click', function() {
+        navigate({ sort: sortVal === 'recent' ? null : sortVal });
+      });
+    });
+
+    // ── 상품 검색 인풋 ───────────────────────────────────
+    var searchInput = document.querySelector('input#word, input[name=word], input.g_text[placeholder=상품검색]');
+    var searchBtn = document.querySelector('button.btn_search, .search_word button');
+    if (searchInput) {
+      if (currentKeyword) searchInput.value = currentKeyword;
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') navigate({ keyword: searchInput.value.trim() || null });
+      });
+    }
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener('click', function() {
+        navigate({ keyword: searchInput.value.trim() || null });
+      });
+    }
+
+    // ── 서버 탭 (label/input[radio] 또는 button) ─────────
+    document.querySelectorAll('.detail_search input[type=radio][name*=server], .detail_search input[type=radio][name*=Server]').forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        var serverVal = radio.value || radio.getAttribute('data-value') || '';
+        navigate({ search_server: serverVal || null });
+      });
+    });
+    // 서버 버튼 직접 클릭
+    document.querySelectorAll('.search_row button[data-server], .server_filter_btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var sv = btn.getAttribute('data-server') || btn.textContent.trim();
+        navigate({ search_server: sv === '서버전체' ? null : sv });
+      });
+    });
+
+    // ── 초기화 버튼 ──────────────────────────────────────
+    document.querySelectorAll('button.reset_btn, a.reset_btn, .filter_reset').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var q = new URLSearchParams();
+        var game = getParams().get('search_game');
+        if (game) q.set('search_game', game);
+        location.search = q.toString();
+      });
+    });
+  }
+
   function loadList() {
-    var params = new URLSearchParams(location.search);
+    var params = getParams();
     var gameCode = params.get('search_game') || '';
     var serverName = params.get('search_server') || '';
-    var keyword = params.get('search_word') || params.get('keyword') || '';
+    var keyword = params.get('keyword') || '';
     var page = parseInt(params.get('page') || '1', 10);
+    var category = params.get('category') || '';
+    var sort = params.get('sort') || '';
     var type = location.pathname.indexOf('/buy/') >= 0 ? 'buy' : 'sell';
 
     var apiQ = [];
     if (gameCode) apiQ.push('gameCode=' + encodeURIComponent(gameCode));
     if (serverName) apiQ.push('serverName=' + encodeURIComponent(serverName));
     if (keyword) apiQ.push('keyword=' + encodeURIComponent(keyword));
-    // category는 아이템 종류(게임머니/아이템/계정)이므로 목록 필터에서 제외
+    if (category) apiQ.push('category=' + encodeURIComponent(category));
+    if (sort) apiQ.push('sort=' + encodeURIComponent(sort));
     apiQ.push('page=' + page);
     apiQ.push('limit=20');
 
@@ -1367,8 +1462,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadList);
-  else loadList();
+  function init() { loadList(); initFilters(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
 </script>
 `;
