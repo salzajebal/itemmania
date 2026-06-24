@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
 import { db, usersTable } from "@workspace/db";
@@ -20,6 +20,16 @@ const STATIC_DIR = (() => {
   return candidates[0];
 })();
 logger.info({ STATIC_DIR }, "static HTML 디렉토리");
+
+// receipt_layer 캡처 파일 경로
+const CAPTURED_RECEIPT_PATH = join(STATIC_DIR, "receipt-layer-captured.html");
+let capturedReceiptHtml = "";
+try {
+  capturedReceiptHtml = readFileSync(CAPTURED_RECEIPT_PATH, "utf-8");
+  logger.info("receipt-layer-captured.html 로드 완료 (캡처된 원본 사용)");
+} catch {
+  logger.info("receipt-layer-captured.html 없음 → MutationObserver로 자동 캡처 예정");
+}
 
 // 서버 시작 시 정적 HTML 파일을 메모리에 로드
 const STATIC_HTML_PATH = join(STATIC_DIR, "itemmania.html");
@@ -2026,35 +2036,36 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       _gsInp.addEventListener('focus', function() { _gsInp._imUserTouched = true; clearInterval(_clearTicker); }, { once: true });
     }
 
-    // ── receipt_layer 내용 주입 (HTML에 비어있으므로 JS로 생성) ─────
+    // ── receipt_layer: 캡처된 원본 HTML 사용 or MutationObserver로 자동 캡처 ─────
     (function() {
       var rl = document.getElementById('receipt_layer');
-      if (!rl || rl.querySelector('.inner')) return;
-      rl.innerHTML = [
-        '<div class="inner">',
-        '  <button type="button" class="close_w">╳</button>',
-        '  <div class="title">현금 영수증</div>',
-        '  <div class="cont">',
-        '    <div style="background:#EBF5FF;border:1px solid #B0D4F1;border-radius:6px;padding:14px 16px;margin-bottom:18px;font-size:14px;font-weight:600;color:#1a6fb0">',
-        '      잠깐! <span style="color:#e53e3e">판매수수료 현금영수증</span> 발급정보를 확인해주세요',
-        '    </div>',
-        '    <div style="border:1px solid #ddd;border-radius:6px;padding:16px 20px;display:flex;align-items:center;gap:24px;margin-bottom:16px">',
-        '      <span style="font-size:14px;font-weight:600">현금 영수증</span>',
-        '      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">',
-        '        <input type="radio" name="receipt_type" id="receipt_issue" value="issue"> 발급',
-        '      </label>',
-        '      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">',
-        '        <input type="radio" name="receipt_type" id="receipt_no_issue" value="no_issue" checked> 미발급',
-        '      </label>',
-        '    </div>',
-        '    <p style="font-size:13px;color:#666;margin:0 0 4px;line-height:1.6">선택한 발급방식이 앞으로 모든 거래에 자동 적용됩니다.</p>',
-        '    <p style="font-size:13px;color:#666;margin:0;line-height:1.6">발급여부는 언제든지 마이룸 &gt; 현금영수증 &gt; 발급정보 에서 변경할 수 있어요.</p>',
-        '  </div>',
-        '  <div class="g_btn_new">',
-        '    <button type="button" id="receipt_ok_btn">물품 등록하기</button>',
-        '  </div>',
-        '</div>'
-      ].join('');
+      if (!rl) return;
+      var captured = ${JSON.stringify(capturedReceiptHtml)};
+      if (captured) {
+        // 이미 캡처된 원본 HTML 사용
+        if (!rl.querySelector('.inner')) rl.innerHTML = captured;
+      } else {
+        // 아직 캡처 전 → MutationObserver로 itemmania JS가 채울 때 자동 저장
+        var obs = new MutationObserver(function(muts) {
+          for (var i = 0; i < muts.length; i++) {
+            var inner = rl.innerHTML.trim();
+            if (inner && inner.length > 50) {
+              obs.disconnect();
+              fetch('/im-capture-receipt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                body: inner
+              }).then(function(r) {
+                if (r.ok) console.log('[IM] receipt_layer 원본 캡처 완료 ✓');
+              }).catch(function(e) {
+                console.warn('[IM] receipt_layer 캡처 실패:', e);
+              });
+              break;
+            }
+          }
+        });
+        obs.observe(rl, { childList: true, subtree: true, characterData: true });
+      }
     })();
 
     // 수수료 영역 초기 숨김
@@ -4634,6 +4645,29 @@ router.get("/gamemania", async (req, res): Promise<void> => {
   res.send(serveGamemania(gamemanaHtml, user));
 });
 
+// ── receipt_layer 원본 HTML 캡처 저장 엔드포인트 ─────────────────────
+router.post("/im-capture-receipt", async (req, res): Promise<void> => {
+  let body = "";
+  req.setEncoding("utf-8");
+  req.on("data", (chunk: string) => { body += chunk; });
+  req.on("end", () => {
+    const html = body.trim();
+    if (!html || html.length < 50) {
+      res.status(400).send("too short");
+      return;
+    }
+    try {
+      writeFileSync(CAPTURED_RECEIPT_PATH, html, "utf-8");
+      capturedReceiptHtml = html;
+      logger.info({ bytes: html.length }, "receipt_layer 원본 캡처 저장 완료");
+      res.json({ ok: true, bytes: html.length });
+    } catch (e) {
+      logger.error({ err: e }, "receipt_layer 캡처 저장 실패");
+      res.status(500).send("save failed");
+    }
+  });
+});
+
 // ── 팝업 미리보기 테스트 페이지 (원본 HTML 사용) ────────────────────
 router.get("/test-popups", (_req, res): void => {
   if (!sellRegisterHtml) {
@@ -4687,6 +4721,12 @@ input[type=checkbox].g_hidden,input[type=checkbox].sf-hidden{display:none!import
 <body>
 <h2>팝업 미리보기 테스트 <small style="font-size:13px;color:#555">(sell-register.html 원본 HTML 사용)</small></h2>
 <p class=note>버튼을 클릭하면 해당 팝업이 표시됩니다. 폰트는 폴백 적용(5MB 폰트 블록 로딩 생략).</p>
+<p class=note style="color:${capturedReceiptHtml ? '#2a7a2a' : '#b84000'}">
+  ② 현금영수증 팝업: ${capturedReceiptHtml
+    ? `✓ 원본 캡처됨 (${capturedReceiptHtml.length.toLocaleString()}자) — 원본 HTML 사용 중`
+    : '⚠️ 미캡처 — 판매 등록 플로우 1회 실행 시 자동 저장됩니다'
+  }
+</p>
 <button class=btn onclick="showPopup('dvPremium')">① 프리미엄 등록안내</button>
 <button class=btn onclick="showPopup('receipt_layer')">② 현금 영수증</button>
 <button class=btn onclick="showPopup('dvPopup')">③ 물품등록정보</button>
@@ -4694,25 +4734,20 @@ input[type=checkbox].g_hidden,input[type=checkbox].sf-hidden{display:none!import
 <!-- ① dvPremium: 원본 HTML ──────────────────────────────────────── -->
 ${dvPremiumHtml}
 
-<!-- ② receipt_layer: 원본은 빈 div (JS 동적 생성) → 우리 버전 사용 -->
+<!-- ② receipt_layer: 캡처된 원본 HTML 우선, 없으면 임시 안내 -->
 <div id=receipt_layer class="g_layer receipt_layer" style=display:none>
- <div class=inner>
-  <button type=button class=close_w onclick="hidePopup('receipt_layer')">✕</button>
+${capturedReceiptHtml
+  ? capturedReceiptHtml
+  : ` <div class=inner>
   <div class=title>현금 영수증</div>
   <div class=cont>
-   <div class=receipt-notice>잠깐! <span style=color:#e53e3e>판매수수료 현금영수증</span> 발급정보를 확인해주세요</div>
-   <div class=receipt-row>
-    <span>현금 영수증</span>
-    <label><input type=radio name=receipt_type value=issue> 발급</label>
-    <label><input type=radio name=receipt_type value=no_issue checked> 미발급</label>
-   </div>
-   <p class=receipt-hint>선택한 발급방식이 앞으로 모든 거래에 자동 적용됩니다.</p>
-   <p class=receipt-hint>발급여부는 언제든지 마이룸 &gt; 현금영수증 &gt; 발급정보 에서 변경할 수 있어요.</p>
+   <p style="color:#888;font-size:14px;text-align:center;padding:30px 0">
+    ⚠️ 원본 HTML 미캡처 상태<br>
+    판매 등록 플로우를 한 번 거치면 자동 저장됩니다.
+   </p>
   </div>
-  <div class=g_btn_new>
-   <button type=button id=receipt_ok_btn onclick="hidePopup('receipt_layer');showPopup('dvPopup')">물품 등록하기</button>
-  </div>
- </div>
+ </div>`
+}
 </div>
 
 <!-- ③ dvPopup: 원본 HTML ───────────────────────────────────────── -->
