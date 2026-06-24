@@ -11,6 +11,9 @@ import { pool } from "@workspace/db";
 
 const app: Express = express();
 
+// Replit 역방향 프록시(HTTPS 종료) 신뢰: secure 쿠키가 프록시 뒤에서도 정상 발급되도록 필수
+app.set("trust proxy", 1);
+
 const PgSession = ConnectPgSimple(session);
 
 app.use(
