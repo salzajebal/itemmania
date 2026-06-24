@@ -110,6 +110,7 @@ const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
 const chatNewHtml             = loadSellHtml("chat-new.html");
 const chatNewBuycheckHtml     = loadSellHtml("chat-new-buycheck.html");
 const sellRegisterHtml        = loadSellHtml("sell-register.html");
+const sellIndexViewHtml       = loadSellHtml("sell/index_view.html");
 const buyRegisterHtml         = loadSellHtml("buy-register.html");
 const sellNewHtml             = loadSellHtml("sell-new.html");
 const batchGoodsHtml          = loadSellHtml("batch-goods.html");
@@ -812,6 +813,7 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/sell/list'))                             return '/sell/list.html' + qs;
   if (base.startsWith('/sell/application'))                      return '/sell/application.html' + qs;
   if (base.startsWith('/sell/new'))                              return '/sell/new.html' + qs;
+  if (base.startsWith('/sell/index_view'))                       return '/sell/index_view.html' + qs;
   if (base === '/sell' || base === '/sell/')                     return '/sell/register.html';
   if (base.startsWith('/sell/'))                                 return '/sell/list.html' + qs;
   if (base.startsWith('/buy/register'))                          return '/buy/register.html' + qs;
@@ -885,6 +887,7 @@ var ROUTE_MAP=[
   ['/sell/application.html','/sell/application.html'],
   ['/sell/new.html','/sell/new.html'],
   ['/sell/list.html','/sell/list.html'],
+  ['/sell/index_view.html','/sell/index_view.html'],
   ['/sell/','/sell/register.html'],
   ['/sell','/sell/register.html'],
   ['/buy/register.html','/buy/register.html'],
@@ -1806,73 +1809,80 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             })
             .then(function(r) {
               if (r.ok) {
-                // 등록된 데이터 저장 (dvPopup 표시에 사용)
-                window._IM_reg_data = {
-                  game: game,
-                  server: server,
-                  category: window._IM_sel_category || '기타',
-                  title: title,
-                  price: parseInt(price.replace(/[^0-9]/g, ''), 10)
-                };
-                // 프리미엄 등록안내 팝업 표시 (원본과 동일)
-                var popup = document.getElementById('dvPremium');
-                if (popup) {
-                  popup.style.display = 'block';
-                  document.body.classList.add('mask_on');
-                  var overlay = document.getElementById('g_OVERLAY');
-                  var sleep = document.getElementById('g_SLEEP');
-                  if (sleep) sleep.classList.remove('g_hidden');
-                  if (overlay) overlay.style.display = 'block';
-                  // 마일리지 표시 (사용자 잔액 기반)
-                  fetch('/api/auth/me', { credentials: 'include' })
-                    .then(function(mr) { return mr.json(); })
-                    .then(function(me) {
-                      var ml = document.getElementById('my_mileage_layer');
-                      if (ml && me && me.balance != null) {
-                        ml.textContent = me.balance.toLocaleString() + '원';
-                      }
-                    }).catch(function() {});
-                  // 확인 버튼 → dvPremium 숨기고 dvPopup(물품등록정보) 표시
-                  var btn = document.getElementById('premium_btn');
-                  if (btn) {
-                    btn.addEventListener('click', function() {
-                      // dvPremium 숨기기
-                      popup.style.display = 'none';
-                      // dvPopup에 실제 등록 데이터 채우기
-                      var regData = window._IM_reg_data || {};
-                      var catEl = document.getElementById('popup_category');
-                      var titleEl2 = document.getElementById('popup_title');
-                      var priceEl2 = document.getElementById('popup_price');
-                      if (catEl) {
-                        var catStr = regData.game || '';
-                        if (regData.server) catStr += ' &gt; ' + regData.server;
-                        if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
-                        catEl.innerHTML = catStr;
-                      }
-                      if (titleEl2) titleEl2.textContent = regData.title || '';
-                      if (priceEl2) priceEl2.textContent = (regData.price || 0).toLocaleString() + '원';
-                      // dvPopup 표시
-                      var popup2 = document.getElementById('dvPopup');
-                      if (popup2) popup2.style.display = 'block';
-                      // reg_submit(확인) → 목록으로
-                      var regBtn = document.getElementById('reg_submit');
-                      if (regBtn) regBtn.addEventListener('click', function() {
-                        location.href = '/sell/list.html';
+                return r.json().then(function(created) {
+                  // 등록된 데이터 저장 (dvPopup 표시에 사용)
+                  window._IM_reg_data = {
+                    id: created.id || created.productId || '',
+                    game: game,
+                    server: server,
+                    category: window._IM_sel_category || '기타',
+                    title: title,
+                    price: parseInt(price.replace(/[^0-9]/g, ''), 10)
+                  };
+                  // 프리미엄 등록안내 팝업 표시 (원본과 동일)
+                  var popup = document.getElementById('dvPremium');
+                  if (popup) {
+                    popup.style.display = 'block';
+                    document.body.classList.add('mask_on');
+                    var overlay = document.getElementById('g_OVERLAY');
+                    var sleep = document.getElementById('g_SLEEP');
+                    if (sleep) sleep.classList.remove('g_hidden');
+                    if (overlay) overlay.style.display = 'block';
+                    // 마일리지 표시 (사용자 잔액 기반)
+                    fetch('/api/auth/me', { credentials: 'include' })
+                      .then(function(mr) { return mr.json(); })
+                      .then(function(me) {
+                        var ml = document.getElementById('my_mileage_layer');
+                        if (ml && me && me.balance != null) {
+                          ml.textContent = me.balance.toLocaleString() + '원';
+                        }
+                      }).catch(function() {});
+                    // 확인 버튼 → dvPremium 숨기고 dvPopup(물품등록정보) 표시
+                    var btn = document.getElementById('premium_btn');
+                    if (btn) {
+                      btn.addEventListener('click', function() {
+                        // dvPremium 숨기기
+                        popup.style.display = 'none';
+                        // dvPopup에 실제 등록 데이터 채우기
+                        var regData = window._IM_reg_data || {};
+                        var catEl = document.getElementById('popup_category');
+                        var titleEl2 = document.getElementById('popup_title');
+                        var priceEl2 = document.getElementById('popup_price');
+                        if (catEl) {
+                          var catStr = regData.game || '';
+                          if (regData.server) catStr += ' &gt; ' + regData.server;
+                          if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
+                          catEl.innerHTML = catStr;
+                        }
+                        if (titleEl2) titleEl2.textContent = regData.title || '';
+                        if (priceEl2) priceEl2.textContent = (regData.price || 0).toLocaleString() + '원';
+                        // dvPopup 표시
+                        var popup2 = document.getElementById('dvPopup');
+                        if (popup2) popup2.style.display = 'block';
+                        // reg_submit(확인) → 등록 완료 페이지
+                        var regBtn = document.getElementById('reg_submit');
+                        if (regBtn) regBtn.addEventListener('click', function() {
+                          var pid = (window._IM_reg_data || {}).id || '';
+                          location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
+                        });
+                        // cancel_submit(취소) → 팝업 닫기
+                        var cancelBtn = document.getElementById('cancel_submit');
+                        if (cancelBtn) cancelBtn.addEventListener('click', function() {
+                          if (popup2) popup2.style.display = 'none';
+                          document.body.classList.remove('mask_on');
+                          var sl = document.getElementById('g_SLEEP');
+                          if (sl) sl.classList.add('g_hidden');
+                        });
                       });
-                      // cancel_submit(취소) → 팝업 닫기
-                      var cancelBtn = document.getElementById('cancel_submit');
-                      if (cancelBtn) cancelBtn.addEventListener('click', function() {
-                        if (popup2) popup2.style.display = 'none';
-                        document.body.classList.remove('mask_on');
-                        var sl = document.getElementById('g_SLEEP');
-                        if (sl) sl.classList.add('g_hidden');
-                      });
-                    });
+                    }
+                  } else {
+                    showToast('판매 등록이 완료되었습니다!', true);
+                    setTimeout(function() {
+                      var pid = (window._IM_reg_data || {}).id || '';
+                      location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
+                    }, 1800);
                   }
-                } else {
-                  showToast('판매 등록이 완료되었습니다!', true);
-                  setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
-                }
+                });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
               }
@@ -3788,6 +3798,70 @@ router.get(["/sell/register.html", "/sell/", "/sell"], async (req, res): Promise
   const user = await getSessionUser(req);
 
   res.send(serveSellRegister(sellRegisterHtml, user));
+});
+
+// 판매 등록 완료 페이지
+router.get("/sell/index_view.html", async (req, res): Promise<void> => {
+  if (!sellIndexViewHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  const productId = req.query.id as string | undefined;
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+
+  const SELL_INDEX_VIEW_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  var productId = new URLSearchParams(location.search).get('id');
+  if (!productId) return;
+
+  fetch('/api/products/' + productId, { credentials: 'include' })
+    .then(function(r) { return r.json(); })
+    .then(function(p) {
+      document.querySelectorAll('#table_wrapper table tbody tr').forEach(function(row) {
+        var th = row.querySelector('th');
+        var td = row.querySelector('td');
+        if (!th || !td) return;
+        var label = th.textContent.trim();
+        if (label === '거래번호') {
+          td.textContent = '#' + p.id;
+        } else if (label === '카테고리') {
+          var cat = p.gameName || '';
+          if (p.serverName) cat += ' > ' + p.serverName;
+          td.textContent = cat;
+        } else if (label === '거래유형') {
+          td.textContent = '일반판매';
+        } else if (label === '판매금액') {
+          td.textContent = Number(p.price || 0).toLocaleString() + '원';
+        } else if (label === '제목') {
+          td.textContent = p.title || '';
+        } else if (label === '상품종류') {
+          td.textContent = '기타';
+        } else if (label === '판매수량') {
+          td.textContent = '-';
+        } else if (label.includes('상품등록정보')) {
+          td.innerHTML = '상품이 정상 등록되었습니다.';
+        }
+      });
+
+      // 버튼 링크 패치
+      var btnList = document.getElementById('btn_list');
+      if (btnList) {
+        var links = btnList.querySelectorAll('a');
+        if (links[0]) { links[0].href = '/sell/register.html'; links[0].textContent = '추가 등록하기'; }
+        if (links[1]) { links[1].href = '/sell/list.html'; links[1].textContent = '상품리스트 보기'; links[1].className = 'btn_gray'; }
+        if (links[2]) { links[2].style.display = 'none'; }
+      }
+    })
+    .catch(function(err) { console.error('완료 페이지 오류', err); });
+})();
+</script>`;
+
+  const patched = sellIndexViewHtml
+    .replace(/<meta[^>]+content-security-policy[^>]*>/gi, '')
+    .replace('</main>', SELL_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
+  res.send(patched);
 });
 
 // 구매등록 페이지
