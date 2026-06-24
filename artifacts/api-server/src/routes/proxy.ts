@@ -42,6 +42,26 @@ try {
   logger.error({ err: e }, "login.html 로드 실패");
 }
 
+const JOIN_HTML_PATH = join(STATIC_DIR, "join.html");
+let joinHtml = "";
+
+try {
+  joinHtml = readFileSync(JOIN_HTML_PATH, "utf-8");
+  logger.info("join.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "join.html 로드 실패");
+}
+
+const JOIN_FORM_HTML_PATH = join(STATIC_DIR, "join-form.html");
+let joinFormHtml = "";
+
+try {
+  joinFormHtml = readFileSync(JOIN_FORM_HTML_PATH, "utf-8");
+  logger.info("join-form.html 로드 완료");
+} catch (e) {
+  logger.error({ err: e }, "join-form.html 로드 실패");
+}
+
 const GIFTCARD_HTML_PATH = join(STATIC_DIR, "giftcard.html");
 let giftcardHtml = "";
 
@@ -301,7 +321,7 @@ const INTERCEPT_SCRIPT = `
       loginsDiv.innerHTML =
         '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>' +
         '<div class="divider"></div>' +
-        '<a href="/login" style="font-size:14px;font-weight:600;color:#159EFD;text-decoration:none">회원가입</a>';
+        '<a href="/join" style="font-size:14px;font-weight:600;color:#159EFD;text-decoration:none">회원가입</a>';
     }
   }
 
@@ -3804,6 +3824,26 @@ router.get(["/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<
 });
 router.get("/portal/user/p_login_form.html", async (req, res): Promise<void> => {
   res.redirect(301, "/login");
+});
+// 회원가입 1단계 – 약관 동의
+router.get(["/join", "/join/", "/portal/user/join.html", "/portal/user/"], async (req, res): Promise<void> => {
+  if (!joinHtml) {
+    res.status(503).send("<html><body><h2>회원가입 페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(joinHtml);
+});
+// 회원가입 2단계 – 정보 입력
+router.get(["/join/form", "/join/form/", "/portal/user/join_form.html", "/portal/user/join_agreement.html"], async (req, res): Promise<void> => {
+  if (!joinFormHtml) {
+    res.status(503).send("<html><body><h2>회원가입 페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  res.send(joinFormHtml);
 });
 router.get(["/myroom", "/myroom/"], async (req, res): Promise<void> => {
   res.redirect(302, "/myroom/index.html");

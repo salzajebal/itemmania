@@ -98,6 +98,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   });
 });
 
+router.get("/auth/check-id", async (req, res): Promise<void> => {
+  const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+  if (!id || id.length < 4) {
+    res.status(400).json({ available: false, error: "아이디는 4자 이상이어야 합니다." });
+    return;
+  }
+  if (!/^[a-zA-Z0-9]{4,16}$/.test(id)) {
+    res.status(400).json({ available: false, error: "영문자와 숫자만 사용 가능합니다." });
+    return;
+  }
+  const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, id));
+  res.json({ available: !existing });
+});
+
 router.post("/auth/logout", (req, res): void => {
   req.session.destroy(() => {
     res.json({ ok: true });
