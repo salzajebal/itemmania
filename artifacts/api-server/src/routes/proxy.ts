@@ -331,7 +331,7 @@ const INTERCEPT_SCRIPT = `
       loginsDiv.innerHTML =
         '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>' +
         '<div class="divider"></div>' +
-        '<a href="/join" style="font-size:14px;font-weight:600;color:#159EFD;text-decoration:none">회원가입</a>';
+        '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
     }
   }
 
@@ -1142,7 +1142,7 @@ function _imUpdateHeaderAuth(){
       loginsDiv.innerHTML=
         '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>'+
         '<div class="divider"></div>'+
-        '<a href="/join" style="font-size:14px;font-weight:600;color:#159EFD;text-decoration:none">회원가입</a>';
+        '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
     }
   });
 }
@@ -3290,7 +3290,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
           loginsDiv.innerHTML =
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
-            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
           document.getElementById('_im_logout_btn').addEventListener('click', function(e){
             e.stopImmediatePropagation();
             api('POST', '/auth/logout').then(function(){ location.href='/'; });
@@ -3551,7 +3551,7 @@ const BUY_INTERCEPT_SCRIPT = `
           loginsDiv.innerHTML =
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
-            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
           document.getElementById('_im_logout_btn').addEventListener('click', function(e){
             e.stopImmediatePropagation();
             api('POST', '/auth/logout').then(function(){ location.href='/'; });
@@ -3677,7 +3677,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
           loginsDiv.innerHTML =
             '<span style="font-size:14px;font-weight:600;color:#2e2e2e">' + (data.nickname || data.email) + '님</span>' +
             '<div class="divider"></div>' +
-            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#159EFD">로그아웃</button>';
+            '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
           document.getElementById('_im_logout_btn').addEventListener('click', function(e){
             e.stopImmediatePropagation();
             api('POST', '/auth/logout').then(function(){ location.href='/'; });
