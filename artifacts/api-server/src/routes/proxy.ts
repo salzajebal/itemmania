@@ -1603,6 +1603,132 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
 <style>
 #charge_service,#dv_power,
 .charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
+
+/* ─── 팝업 오버레이 공통 ─────────────────────────── */
+#dvPremium,#receipt_layer,#dvPopup{
+  position:fixed!important;inset:0!important;z-index:10000!important;
+  background:rgba(0,0,0,0.55)!important;
+  display:none!important;
+  align-items:flex-start!important;justify-content:center!important;
+  padding:40px 16px!important;overflow-y:auto!important;
+  box-sizing:border-box!important;text-align:left!important;
+}
+#dvPremium.im-show,#receipt_layer.im-show,#dvPopup.im-show{
+  display:flex!important;
+}
+/* 흰 박스 */
+#dvPremium .inner,#receipt_layer .inner,#dvPopup .inner{
+  background:#fff!important;border-radius:10px!important;
+  width:100%!important;max-width:620px!important;
+  box-shadow:0 8px 40px rgba(0,0,0,.28)!important;
+  overflow:hidden!important;position:relative!important;
+  text-align:left!important;
+}
+/* 제목 */
+#dvPremium .title,#receipt_layer .title,#dvPopup .title{
+  font-size:18px!important;font-weight:700!important;color:#159EFD!important;
+  padding:24px 28px 20px!important;margin:0!important;
+  border-bottom:2px solid #159EFD!important;
+}
+/* 본문 */
+#dvPremium .cont,#receipt_layer .cont,#dvPopup .cont{
+  padding:20px 28px!important;
+}
+/* 버튼 영역 */
+#dvPremium .g_btn_new,#receipt_layer .g_btn_new,#dvPopup .g_btn_new{
+  padding:0 28px 24px!important;display:flex!important;gap:10px!important;
+}
+/* 파란 버튼 */
+#premium_btn,#receipt_ok_btn,#reg_submit{
+  flex:1!important;width:auto!important;padding:15px!important;
+  background:#159EFD!important;color:#fff!important;border:none!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;
+  cursor:pointer!important;
+}
+/* 취소(회색) 버튼 */
+#cancel_submit{
+  flex:1!important;width:auto!important;padding:15px!important;
+  background:#555!important;color:#fff!important;border:none!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;
+  cursor:pointer!important;
+}
+/* X 닫기 버튼 */
+#receipt_layer .close_w{
+  position:absolute!important;top:18px!important;right:20px!important;
+  background:none!important;border:none!important;font-size:18px!important;
+  cursor:pointer!important;color:#888!important;padding:4px 8px!important;
+}
+/* dvPremium 내부 요소 */
+#dvPremium .middle_text{font-size:14px;color:#444;text-align:center;margin-bottom:16px}
+#dvPremium .total_charge{
+  text-align:center;padding:12px 0;margin-bottom:14px;
+  border-top:1px solid #e8e8e8;border-bottom:1px solid #e8e8e8;
+}
+#dvPremium .total_label{font-size:15px;font-weight:700}
+#dvPremium .total_charge_money{font-size:17px;font-weight:700;color:#e53e3e}
+#dvPremium .total_charge .center{font-size:13px;color:#666;margin-top:4px}
+#dvPremium .item_content{border:1px solid #D5E2F2;padding:14px;margin-bottom:12px}
+#dvPremium .f_right{text-align:right;margin-bottom:8px}
+#dvPremium .free_view{
+  font-weight:700;padding:4px 18px;color:#159EFD;
+  border:1px solid #159EFD;border-radius:3px;background:none;cursor:pointer;font-size:13px;
+}
+#dvPremium .premium_box{display:flex;flex-direction:column;gap:10px}
+#dvPremium .charge_price{text-align:center;font-size:13px;margin-bottom:6px}
+#dvPremium .quantity_wrap{display:flex;justify-content:center;gap:8px;margin-bottom:8px}
+#dvPremium .quantity_input{
+  display:flex;flex:1;height:36px;border:1px solid #DDE0E3;border-radius:3px;max-width:200px;
+}
+#dvPremium .quantity_input button{
+  width:40px;height:36px;border:none;background:#F1F2F4;
+  font-size:16px;cursor:pointer;border-radius:0;
+}
+#dvPremium .quantity_input input{
+  flex:1;text-align:center;border:none;outline:none;font-size:16px;
+}
+#dvPremium .reset{
+  padding:0 14px;border:1px solid #DDE0E3;border-radius:3px;
+  background:#fff;font-size:13px;cursor:pointer;height:36px;
+}
+#dvPremium .set_amount_list{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;
+}
+#dvPremium .set_amount_list button[name=set_amount]{
+  flex:1;min-width:36px;height:30px;border:1px solid #DDE0E3;
+  border-radius:3px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#747474;
+}
+#dvPremium .sub_txt{
+  font-size:12px;color:#555;text-align:center;
+  background:#E8F2FF;padding:8px;border-radius:4px;margin-top:6px;
+}
+#dvPremium .sub_notice_txt{font-size:12px;color:#FF2400;margin-top:10px;text-align:center}
+/* dvPopup 내부 */
+#dvPopup .g_blue_table{width:100%;border-collapse:collapse;margin-bottom:6px}
+#dvPopup .g_blue_table th{
+  background:#E8F2FF;font-size:13px;font-weight:700;
+  padding:10px 12px;border:1px solid #D5E2F2;text-align:left;
+}
+#dvPopup .g_blue_table td{
+  padding:10px 12px;border:1px solid #D5E2F2;font-size:13px;
+}
+#dvPopup .attention{
+  font-size:13px;font-weight:700;color:#e53e3e;
+  margin:14px 0 6px;
+}
+#dvPopup .attention_box{
+  padding:12px 16px;border:1px solid #f5c6cb;background:#fff5f5;
+  font-size:13px;line-height:1.7;margin-bottom:10px;
+}
+#dvPopup .attention_box li{margin-bottom:4px;list-style:none}
+#dvPopup .box6{
+  padding:10px 16px;border:1px solid #e0e0e0;background:#f9f9f9;
+  font-size:12px;color:#666;line-height:1.7;margin-bottom:14px;
+}
+#dvPopup .box6 li{list-style:none;margin-bottom:2px}
+#dvPopup .last_txt{
+  text-align:center;font-size:14px;font-weight:700;
+  padding:14px 0 16px;border-top:1px solid #e8e8e8;
+}
 </style>
 <script>
 (function() {
@@ -1900,6 +2026,37 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       _gsInp.addEventListener('focus', function() { _gsInp._imUserTouched = true; clearInterval(_clearTicker); }, { once: true });
     }
 
+    // ── receipt_layer 내용 주입 (HTML에 비어있으므로 JS로 생성) ─────
+    (function() {
+      var rl = document.getElementById('receipt_layer');
+      if (!rl || rl.querySelector('.inner')) return;
+      rl.innerHTML = [
+        '<div class="inner">',
+        '  <button type="button" class="close_w">╳</button>',
+        '  <div class="title">현금 영수증</div>',
+        '  <div class="cont">',
+        '    <div style="background:#EBF5FF;border:1px solid #B0D4F1;border-radius:6px;padding:14px 16px;margin-bottom:18px;font-size:14px;font-weight:600;color:#1a6fb0">',
+        '      잠깐! <span style="color:#e53e3e">판매수수료 현금영수증</span> 발급정보를 확인해주세요',
+        '    </div>',
+        '    <div style="border:1px solid #ddd;border-radius:6px;padding:16px 20px;display:flex;align-items:center;gap:24px;margin-bottom:16px">',
+        '      <span style="font-size:14px;font-weight:600">현금 영수증</span>',
+        '      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">',
+        '        <input type="radio" name="receipt_type" id="receipt_issue" value="issue"> 발급',
+        '      </label>',
+        '      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">',
+        '        <input type="radio" name="receipt_type" id="receipt_no_issue" value="no_issue" checked> 미발급',
+        '      </label>',
+        '    </div>',
+        '    <p style="font-size:13px;color:#666;margin:0 0 4px;line-height:1.6">선택한 발급방식이 앞으로 모든 거래에 자동 적용됩니다.</p>',
+        '    <p style="font-size:13px;color:#666;margin:0;line-height:1.6">발급여부는 언제든지 마이룸 &gt; 현금영수증 &gt; 발급정보 에서 변경할 수 있어요.</p>',
+        '  </div>',
+        '  <div class="g_btn_new">',
+        '    <button type="button" id="receipt_ok_btn">물품 등록하기</button>',
+        '  </div>',
+        '</div>'
+      ].join('');
+    })();
+
     // 수수료 영역 초기 숨김
     var comsArea = document.getElementById('coms_area');
     if (comsArea) comsArea.style.display = 'none';
@@ -2032,11 +2189,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     if (priceEl)     priceEl.textContent     = (regData.price || 0).toLocaleString() + '원';
                     if (tradeTypeEl) tradeTypeEl.textContent = regData.tradeType || '일반판매';
                     var dvPopup = document.getElementById('dvPopup');
-                    if (dvPopup) {
-                      dvPopup.style.display = 'block';
-                      dvPopup.classList.remove('sf-hidden');
-                    }
-                    showOverlay();
+                    showLayer(dvPopup);
                     // reg_submit(확인) → 완료 페이지
                     var regBtn = document.getElementById('reg_submit');
                     if (regBtn && !regBtn._imBound) {
@@ -2060,45 +2213,27 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     if (cancelBtn && !cancelBtn._imBound) {
                       cancelBtn._imBound = true;
                       cancelBtn.addEventListener('click', function() {
-                        if (dvPopup) dvPopup.style.display = 'none';
-                        hideOverlay();
+                        hideLayer(dvPopup);
                       });
                     }
+                  }
+
+                  // ── 팝업 show/hide 헬퍼 ──────────────────────────────────
+                  function showLayer(el) {
+                    if (!el) return;
+                    el.classList.remove('sf-hidden');
+                    el.classList.add('im-show');
+                  }
+                  function hideLayer(el) {
+                    if (!el) return;
+                    el.classList.remove('im-show');
                   }
 
                   // ── STEP 1: dvPremium 표시 ──────────────────────────────
                   var dvPremium = document.getElementById('dvPremium');
                   if (dvPremium) {
-                    // g_layer CSS에 배경이 없어서 투명하게 보이는 문제 수정
-                    dvPremium.style.cssText = [
-                      'display:block',
-                      'position:fixed',
-                      'z-index:10000',
-                      'top:0','left:0',
-                      'width:100%','height:100%',
-                      'overflow:auto',
-                      'box-sizing:border-box',
-                      'padding:20px',
-                      'text-align:center',
-                      'background:rgba(0,0,0,0.55)'
-                    ].join(';');
-                    dvPremium.classList.remove('sf-hidden');
-                    // .inner 흰 배경 강제
-                    var pInner = dvPremium.querySelector('.inner');
-                    if (pInner) {
-                      pInner.style.cssText = [
-                        'display:inline-block',
-                        'background:#fff',
-                        'border-radius:10px',
-                        'padding:28px 32px',
-                        'max-width:900px',
-                        'width:100%',
-                        'text-align:left',
-                        'box-shadow:0 8px 32px rgba(0,0,0,0.2)',
-                        'margin-top:40px'
-                      ].join(';');
-                    }
-                    showOverlay();
+                    showLayer(dvPremium);
+
                     // 마일리지 표시
                     fetch('/api/auth/me', { credentials: 'include' })
                       .then(function(mr) { return mr.json(); })
@@ -2113,19 +2248,17 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     if (premiumBtn && !premiumBtn._imBound) {
                       premiumBtn._imBound = true;
                       premiumBtn.addEventListener('click', function() {
-                        dvPremium.style.display = 'none';
+                        hideLayer(dvPremium);
                         var receiptLayer = document.getElementById('receipt_layer');
                         if (receiptLayer) {
-                          receiptLayer.style.display = 'block';
-                          receiptLayer.classList.remove('sf-hidden');
-                          showOverlay();
+                          showLayer(receiptLayer);
 
                           // ── STEP 3: receipt_ok_btn → dvPopup 표시 ──
                           var receiptOkBtn = document.getElementById('receipt_ok_btn');
                           if (receiptOkBtn && !receiptOkBtn._imBound) {
                             receiptOkBtn._imBound = true;
                             receiptOkBtn.addEventListener('click', function() {
-                              receiptLayer.style.display = 'none';
+                              hideLayer(receiptLayer);
                               fillAndShowDvPopup();
                             });
                           }
@@ -2134,8 +2267,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                           if (closeBtn && !closeBtn._imBound) {
                             closeBtn._imBound = true;
                             closeBtn.addEventListener('click', function() {
-                              receiptLayer.style.display = 'none';
-                              hideOverlay();
+                              hideLayer(receiptLayer);
                             });
                           }
                         } else {
