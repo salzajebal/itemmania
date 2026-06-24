@@ -2069,8 +2069,35 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                   // ── STEP 1: dvPremium 표시 ──────────────────────────────
                   var dvPremium = document.getElementById('dvPremium');
                   if (dvPremium) {
-                    dvPremium.style.display = 'block';
+                    // g_layer CSS에 배경이 없어서 투명하게 보이는 문제 수정
+                    dvPremium.style.cssText = [
+                      'display:block',
+                      'position:fixed',
+                      'z-index:10000',
+                      'top:0','left:0',
+                      'width:100%','height:100%',
+                      'overflow:auto',
+                      'box-sizing:border-box',
+                      'padding:20px',
+                      'text-align:center',
+                      'background:rgba(0,0,0,0.55)'
+                    ].join(';');
                     dvPremium.classList.remove('sf-hidden');
+                    // .inner 흰 배경 강제
+                    var pInner = dvPremium.querySelector('.inner');
+                    if (pInner) {
+                      pInner.style.cssText = [
+                        'display:inline-block',
+                        'background:#fff',
+                        'border-radius:10px',
+                        'padding:28px 32px',
+                        'max-width:900px',
+                        'width:100%',
+                        'text-align:left',
+                        'box-shadow:0 8px 32px rgba(0,0,0,0.2)',
+                        'margin-top:40px'
+                      ].join(';');
+                    }
                     showOverlay();
                     // 마일리지 표시
                     fetch('/api/auth/me', { credentials: 'include' })
