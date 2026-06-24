@@ -1806,6 +1806,14 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             })
             .then(function(r) {
               if (r.ok) {
+                // 등록된 데이터 저장 (dvPopup 표시에 사용)
+                window._IM_reg_data = {
+                  game: game,
+                  server: server,
+                  category: window._IM_sel_category || '기타',
+                  title: title,
+                  price: parseInt(price.replace(/[^0-9]/g, ''), 10)
+                };
                 // 프리미엄 등록안내 팝업 표시 (원본과 동일)
                 var popup = document.getElementById('dvPremium');
                 if (popup) {
@@ -1824,11 +1832,41 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                         ml.textContent = me.balance.toLocaleString() + '원';
                       }
                     }).catch(function() {});
-                  // 확인 버튼 → 목록으로 이동
+                  // 확인 버튼 → dvPremium 숨기고 dvPopup(물품등록정보) 표시
                   var btn = document.getElementById('premium_btn');
                   if (btn) {
                     btn.addEventListener('click', function() {
-                      location.href = '/sell/list.html';
+                      // dvPremium 숨기기
+                      popup.style.display = 'none';
+                      // dvPopup에 실제 등록 데이터 채우기
+                      var regData = window._IM_reg_data || {};
+                      var catEl = document.getElementById('popup_category');
+                      var titleEl2 = document.getElementById('popup_title');
+                      var priceEl2 = document.getElementById('popup_price');
+                      if (catEl) {
+                        var catStr = regData.game || '';
+                        if (regData.server) catStr += ' &gt; ' + regData.server;
+                        if (regData.category) catStr += ' &gt; <span class=f_blue3>' + regData.category + '</span>';
+                        catEl.innerHTML = catStr;
+                      }
+                      if (titleEl2) titleEl2.textContent = regData.title || '';
+                      if (priceEl2) priceEl2.textContent = (regData.price || 0).toLocaleString() + '원';
+                      // dvPopup 표시
+                      var popup2 = document.getElementById('dvPopup');
+                      if (popup2) popup2.style.display = 'block';
+                      // reg_submit(확인) → 목록으로
+                      var regBtn = document.getElementById('reg_submit');
+                      if (regBtn) regBtn.addEventListener('click', function() {
+                        location.href = '/sell/list.html';
+                      });
+                      // cancel_submit(취소) → 팝업 닫기
+                      var cancelBtn = document.getElementById('cancel_submit');
+                      if (cancelBtn) cancelBtn.addEventListener('click', function() {
+                        if (popup2) popup2.style.display = 'none';
+                        document.body.classList.remove('mask_on');
+                        var sl = document.getElementById('g_SLEEP');
+                        if (sl) sl.classList.add('g_hidden');
+                      });
                     });
                   }
                 } else {

@@ -676,8 +676,54 @@
  </div>
  </div>
  </div>
- <div id=dvPopup class="g_layer reg_info sf-hidden">
- 
+ <div id=dvPopup class="g_layer reg_info" style=display:none>
+ <div class=inner>
+ <div class=title>물품등록정보</div>
+ <div class=cont>
+ <table class=g_blue_table>
+ <colgroup><col width=122><col width=180><col width=122><col width=180></colgroup>
+ <tbody><tr>
+ <th>카테고리</th>
+ <td colspan=3 id=popup_category></td>
+ </tr></tbody>
+ </table>
+ <table class="g_blue_table g_blue_table2">
+ <colgroup><col width=122><col width=180><col width=122><col width=180></colgroup>
+ <tbody>
+ <tr><th>물품제목</th><td colspan=3 id=popup_title></td></tr>
+ <tr>
+ <th>거래유형</th><td id=popup_trade_type>일반판매</td>
+ <th>판매금액</th><td id=popup_price></td>
+ </tr>
+ </tbody>
+ </table>
+ <div class=attention>거래 사고 주의사항</div>
+ <ul class=attention_box>
+ <li>1. 판매 등록 시 <span class=deco style=color:red>본인 정보(게임명/서버/캐릭터)를 등록</span>하세요.<br></li>
+ <li>2. 반드시 <span class=deco style=color:red>구매자 캐릭터에게 거래물품을 전달</span>하세요.</li>
+ <li>3. 입금확인 문자 메시지를 받으신 후 반드시 [홈페이지] &gt; [마이룸]에서 입금 확인 여부를 확인하세요.</li>
+ <li class=f_blue3>타인 게임정보 기재 또는, 다른 게임/서버에 물품 등록, 구매자 캐릭터가 아닌 다른 캐릭터에게 물품을 전달할 경우 판매자에게 불이익이 발생할 수 있습니다.</li>
+ </ul>
+ <ul class="box6 g_list">
+ <li>분할판매로 등록한 물품은 보유수량이 최소판매수량보다 적어지면 자동으로 숨김상태 됩니다.</li>
+ <li>등록물품의 해킹, 복사, 사기 등의 문제가 발생할 때 민/형사상 책임은 등록자에게 있음을 동의합니다.</li>
+ <li>[물품등록유지기간]<br></li>
+ <li class=list_non>등록물품은 7일 후 자동으로 삭제됩니다. (계정거래의 경우 30일)<br></li>
+ <li class=list_non>* 팝니다/삽니다 등록물품 모두 포함</li>
+ <li class=list_non>단, 부가서비스 이용중인 물품의 경우 잔여 시간 경과 후 자동 삭제</li>
+ </ul>
+ <div class=warning_txt_layer>
+ <label class="warning_txt_label custom_check">
+ <input type=checkbox name=market_price_agree id=market_price_agree checked class="g_hidden sf-hidden" value=on>
+ </label>
+ </div>
+ <div class=last_txt>등록하시려는 물품이 위와 같습니까?</div>
+ <div class=g_btn_new>
+ <button type=button id=reg_submit>확인</button>
+ <button type=button class=btn_gray id=cancel_submit>취소</button>
+ </div>
+ </div>
+ </div>
  </div>
  <div id=dvSignboard class="g_layer layer_signboard sf-hidden">
  
