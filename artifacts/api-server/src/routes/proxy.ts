@@ -1722,10 +1722,15 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     var titleInp = document.getElementById('user_title');
     var gsInp = document.getElementById('searchRegGameServer');
     var headerInp = document.getElementById('searchGameServer');
+    var charInp = document.getElementById('user_character');
     if (priceInp) priceInp.value = '';
     if (titleInp) titleInp.value = '';
     if (gsInp) gsInp.value = '';
     if (headerInp) headerInp.value = '';
+    if (charInp) charInp.value = '';
+    // Quill 에디터(상세설명) 초기화
+    var qlEditor = document.querySelector('.ql-editor');
+    if (qlEditor) qlEditor.innerHTML = '<p><br></p>';
     window._IM_sel_game = null;
     window._IM_sel_server = null;
     window._IM_sel_category = null;
@@ -1801,8 +1806,35 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             })
             .then(function(r) {
               if (r.ok) {
-                showToast('판매 등록이 완료되었습니다!', true);
-                setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
+                // 프리미엄 등록안내 팝업 표시 (원본과 동일)
+                var popup = document.getElementById('dvPremium');
+                if (popup) {
+                  popup.style.display = 'block';
+                  document.body.classList.add('mask_on');
+                  var overlay = document.getElementById('g_OVERLAY');
+                  var sleep = document.getElementById('g_SLEEP');
+                  if (sleep) sleep.classList.remove('g_hidden');
+                  if (overlay) overlay.style.display = 'block';
+                  // 마일리지 표시 (사용자 잔액 기반)
+                  fetch('/api/auth/me', { credentials: 'include' })
+                    .then(function(mr) { return mr.json(); })
+                    .then(function(me) {
+                      var ml = document.getElementById('my_mileage_layer');
+                      if (ml && me && me.balance != null) {
+                        ml.textContent = me.balance.toLocaleString() + '원';
+                      }
+                    }).catch(function() {});
+                  // 확인 버튼 → 목록으로 이동
+                  var btn = document.getElementById('premium_btn');
+                  if (btn) {
+                    btn.addEventListener('click', function() {
+                      location.href = '/sell/list.html';
+                    });
+                  }
+                } else {
+                  showToast('판매 등록이 완료되었습니다!', true);
+                  setTimeout(function() { location.href = '/sell/list.html'; }, 1800);
+                }
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
               }
