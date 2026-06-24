@@ -1803,7 +1803,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       .then(function(me) {
         if (!me) return;
         var nameCell = document.getElementById('userNameCell');
-        if (nameCell) nameCell.textContent = me.nickname || me.email || '';
+        if (nameCell) nameCell.textContent = me.email || me.nickname || '';
         var phoneEl = document.getElementById('spnUserPhone');
         if (phoneEl) phoneEl.textContent = '';
         var cellEl = document.getElementById('spnUserCell');
@@ -2286,7 +2286,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       .then(function(me) {
         if (!me) return;
         var nameCell = document.getElementById('userNameCell');
-        if (nameCell) nameCell.textContent = me.nickname || me.email || '';
+        if (nameCell) nameCell.textContent = me.email || me.nickname || '';
         var phoneEl = document.getElementById('spnUserPhone');
         if (phoneEl) phoneEl.textContent = '';
         var cellEl = document.getElementById('spnUserCell');
