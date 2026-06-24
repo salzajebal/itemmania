@@ -2170,6 +2170,18 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   function init() {
+    // 스냅샷에 미리 채워진 폼 값 초기화
+    var _inputs = [
+      document.getElementById('searchRegGameServer'),
+      document.getElementById('searchGameServer'),
+      document.getElementById('user_price'),
+      document.getElementById('user_title'),
+      document.getElementById('buy_title'),
+      document.getElementById('user_character')
+    ];
+    _inputs.forEach(function(el) { if (el) el.value = ''; });
+    document.querySelectorAll('.ql-editor').forEach(function(el) { el.innerHTML = '<p><br></p>'; });
+
     // 게임 검색 자동완성 활성화 (구매등록: #searchRegGameServer 또는 #searchGameServer)
     setupGameSearch(document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer'));
 
