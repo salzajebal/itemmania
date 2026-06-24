@@ -1734,23 +1734,41 @@ const MYROOM_INTERCEPT_SCRIPT = `
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
       .forEach(function(a) { a.href = '/'; });
 
-    // ── 마이룸에 실제 사용자 정보 표시 (API에서 가져와 채우기) ────────
+    // ── 마이룸에 실제 사용자 정보 표시 ────────────────────────────────
     window._IM_auth()
       .then(function(d) {
         if (!d) return;
-        // 닉네임 표시
-        var nickEls = document.querySelectorAll('.mr_user_name,.user_name,.nick_name');
-        nickEls.forEach(function(el) { if (el.textContent.trim()) el.textContent = d.nickname || d.email || ''; });
-        // 잔액 표시
-        fetch('/api/users/me/balance', { credentials: 'include' })
+        var nick = d.nickname || d.email || '';
+
+        // 닉네임: level_desc 안의 텍스트 노드 교체 ("OOO 회원님의..." 형태)
+        var levelDesc = document.querySelector('.level_desc > div');
+        if (levelDesc) {
+          levelDesc.childNodes.forEach(function(node) {
+            if (node.nodeType === 3 && node.textContent && node.textContent.includes('회원님의')) {
+              node.textContent = node.textContent.replace(/^[^\s]+/, nick);
+            }
+          });
+        }
+        // 혹시 다른 닉네임 셀렉터도 갱신
+        document.querySelectorAll('.mr_user_name,.user_name,.nick_name').forEach(function(el) {
+          if (el.textContent.trim()) el.textContent = nick;
+        });
+
+        // 쿠폰·포인트 값 초기화 (스냅샷에 다른 유저 값이 박혀 있음)
+        document.querySelectorAll('.coupon_result').forEach(function(el) { el.textContent = '0'; });
+
+        // 잔액 표시 (사용가능 마일리지: .over_mile, 총 마일리지: .total_mile)
+        fetch('/api/wallet', { credentials: 'include' })
           .then(function(r) { return r.ok ? r.json() : null; })
           .then(function(b) {
             if (!b) return;
-            var balEls = document.querySelectorAll('.mileage_amount,.user_mileage,.mr_mileage_num');
-            balEls.forEach(function(el) {
-              el.textContent = Number(b.balance || 0).toLocaleString('ko-KR') + '원';
-            });
+            var amount = Number(b.balance || 0).toLocaleString('ko-KR');
+            var avail = document.querySelector('.over_mile');
+            var total = document.querySelector('.total_mile');
+            if (avail) avail.textContent = amount;
+            if (total) total.textContent = amount;
           });
+
         // 인증 배지 상태 반영
         applyAuthBadges(d.authStates);
       });
@@ -2557,7 +2575,12 @@ function serveBatchGoods(html: string, user: Record<string, unknown> | null = nu
 }
 
 function serveMyroom(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+  let result = prepare(html, user);
+  // 스냅샷에 하드코딩된 이전 유저 이름 → 실제 로그인 유저 닉네임으로 교체
+  if (user) {
+    const nick = (user.nickname as string) || (user.email as string) || '';
+    if (nick) result = result.replace(/기우혁/g, nick);
+  }
   return result.includes("</body>")
     ? result.replace("</body>", MYROOM_INTERCEPT_SCRIPT + "</body>")
     : result + MYROOM_INTERCEPT_SCRIPT;
