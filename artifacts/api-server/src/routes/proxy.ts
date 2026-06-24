@@ -1265,12 +1265,20 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
   }
 
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
+  // 실제 HTML 구조:
+  //  .g_search_wrapper
+  //    .search_wrap > .input_area > #searchRegGameServer
+  //    .g_search_frame.g_hidden#reg_gameserver
+  //      .g_search_frame_wrapper
+  //        .gs_list
+  //          .game > ul > li  (게임 목록)
+  //          .server > ul > li  (서버 목록)
+  //          .goods > ul > li  (거래유형)
   function setupGameSearch(inp) {
     if (!inp) return;
-    var _currentGame = null;
     var _debounce = null;
 
-    // 드롭다운 컨테이너 찾기 또는 생성
+    // inp 부모를 최대 6단계까지 올라가며 .g_search_frame 찾기
     var frame = null;
     var node = inp.parentElement;
     for (var i = 0; i < 6 && node; i++) {
@@ -1278,96 +1286,88 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       if (frame) break;
       node = node.parentElement;
     }
-    if (!frame) {
-      frame = document.createElement('div');
-      frame.className = 'g_search_frame im_gs_frame';
-      frame.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;'
-        + 'border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:300px;'
-        + 'max-height:340px;overflow:hidden;top:100%;left:0;display:none';
-      var p = inp.parentElement;
-      if (p.style.position !== 'relative' && p.style.position !== 'absolute') p.style.position = 'relative';
-      p.appendChild(frame);
-    }
+    if (!frame) return;
 
     var gsList = frame.querySelector('.gs_list');
-    if (!gsList) { gsList = document.createElement('div'); gsList.className = 'gs_list'; frame.appendChild(gsList); }
+    if (!gsList) return;
 
-    function showFrame() { frame.classList.remove('g_hidden'); frame.style.display = ''; }
-    function hideFrame() { frame.classList.add('g_hidden'); frame.style.display = 'none'; }
+    // .game / .server 서브 div (없으면 생성)
+    var gameDiv = gsList.querySelector('.game');
+    var serverDiv = gsList.querySelector('.server');
+    if (!gameDiv) { gameDiv = document.createElement('div'); gameDiv.className = 'game'; gsList.insertBefore(gameDiv, gsList.firstChild); }
+    if (!serverDiv) { serverDiv = document.createElement('div'); serverDiv.className = 'server'; gsList.appendChild(serverDiv); }
 
-    function liHover(li, on) {
-      li.style.background = on ? 'var(--color-gs-selected-bg,#e8f4ff)' : '';
-      li.style.fontWeight = on ? '700' : '';
-      li.style.borderRadius = on ? '7px' : '';
+    // 가시성 토글: 기존 CSS .g_hidden { visibility:hidden; height:0; opacity:0 } 활용
+    function showFrame() { frame.classList.remove('g_hidden'); }
+    function hideFrame() { frame.classList.add('g_hidden'); }
+
+    // ul > li 목록 생성 (CSS li:hover, sel_on 클래스 활용)
+    function buildUl(items, labelFn, onSelect) {
+      var ul = document.createElement('ul');
+      items.forEach(function(item) {
+        var li = document.createElement('li');
+        li.innerHTML = labelFn(item);
+        li.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        li.addEventListener('click', function() {
+          ul.querySelectorAll('li.sel_on').forEach(function(el) { el.classList.remove('sel_on'); });
+          li.classList.add('sel_on');
+          onSelect(item);
+        });
+        ul.appendChild(li);
+      });
+      return ul;
     }
 
     function renderGames(games) {
-      _currentGame = null;
-      var ul = document.createElement('ul');
-      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:320px;overflow-y:auto';
+      // 서버 목록 초기화·숨김
+      serverDiv.innerHTML = '';
+      serverDiv.classList.add('g_hidden');
+
       if (!games.length) {
-        var empty = document.createElement('li');
-        empty.style.cssText = 'padding:12px 16px;color:#999;font-size:14px';
-        empty.textContent = '검색 결과가 없습니다';
-        ul.appendChild(empty);
+        var emptyUl = document.createElement('ul');
+        var emptyLi = document.createElement('li');
+        emptyLi.textContent = '검색 결과가 없습니다';
+        emptyLi.style.color = '#999';
+        emptyUl.appendChild(emptyLi);
+        gameDiv.innerHTML = '';
+        gameDiv.appendChild(emptyUl);
       } else {
-        games.forEach(function(g) {
-          var li = document.createElement('li');
-          li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-          li.innerHTML = g.name + (g.servers && g.servers.length
-            ? ' <span style="color:#999;font-size:12px;font-weight:400">(' + g.servers.length + '개 서버)</span>'
-            : '');
-          li.addEventListener('mouseover', function() { liHover(li, true); });
-          li.addEventListener('mouseout', function() { liHover(li, false); });
-          li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-          li.addEventListener('click', function() {
-            _currentGame = g;
+        var ul = buildUl(games,
+          function(g) {
+            return g.name + (g.servers && g.servers.length
+              ? ' <span>' + g.servers.length + '개 서버</span>'
+              : '');
+          },
+          function(g) {
+            window._IM_sel_game = g;
+            window._IM_sel_server = null;
             if (g.servers && g.servers.length) {
               renderServers(g);
             } else {
-              window._IM_sel_game = g; window._IM_sel_server = null;
-              inp.value = g.name; hideFrame();
+              inp.value = g.name;
+              hideFrame();
             }
-          });
-          ul.appendChild(li);
-        });
+          }
+        );
+        gameDiv.innerHTML = '';
+        gameDiv.appendChild(ul);
       }
-      var inner = document.createElement('div');
-      inner.appendChild(ul);
-      gsList.innerHTML = ''; gsList.appendChild(inner);
       showFrame();
     }
 
     function renderServers(g) {
-      var wrap = document.createElement('div');
-      var back = document.createElement('div');
-      back.style.cssText = 'padding:8px 16px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px;'
-        + 'color:#0070d2;font-weight:600;line-height:27px';
-      back.innerHTML = '&#8592; ' + g.name + ' (목록으로)';
-      back.addEventListener('mouseover', function() { back.style.background = '#f0f7ff'; });
-      back.addEventListener('mouseout', function() { back.style.background = ''; });
-      back.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-      back.addEventListener('click', function() { search(inp.value); });
-      wrap.appendChild(back);
-
-      var ul = document.createElement('ul');
-      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:270px;overflow-y:auto';
-      g.servers.forEach(function(s) {
-        var li = document.createElement('li');
-        li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap';
-        li.textContent = s.name;
-        li.addEventListener('mouseover', function() { liHover(li, true); });
-        li.addEventListener('mouseout', function() { liHover(li, false); });
-        li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-        li.addEventListener('click', function() {
-          window._IM_sel_game = g; window._IM_sel_server = s;
-          inp.value = g.name + ' (' + s.name + ')'; hideFrame();
-        });
-        ul.appendChild(li);
-      });
-      wrap.appendChild(ul);
-      gsList.innerHTML = ''; gsList.appendChild(wrap);
-      showFrame();
+      serverDiv.classList.remove('g_hidden');
+      var ul = buildUl(g.servers,
+        function(s) { return s.name; },
+        function(s) {
+          window._IM_sel_game = g;
+          window._IM_sel_server = s;
+          inp.value = g.name + ' (' + s.name + ')';
+          hideFrame();
+        }
+      );
+      serverDiv.innerHTML = '';
+      serverDiv.appendChild(ul);
     }
 
     function search(q) {
@@ -1385,7 +1385,6 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     document.addEventListener('click', function(e) {
       if (!frame.contains(e.target) && e.target !== inp) hideFrame();
     });
-    hideFrame();
   }
 
   function init() {
@@ -1497,7 +1496,6 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   // ── 게임 검색 자동완성 ───────────────────────────────────────────
   function setupGameSearch(inp) {
     if (!inp) return;
-    var _currentGame = null;
     var _debounce = null;
 
     var frame = null;
@@ -1507,96 +1505,69 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       if (frame) break;
       node = node.parentElement;
     }
-    if (!frame) {
-      frame = document.createElement('div');
-      frame.className = 'g_search_frame im_gs_frame';
-      frame.style.cssText = 'position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;'
-        + 'border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:300px;'
-        + 'max-height:340px;overflow:hidden;top:100%;left:0;display:none';
-      var p = inp.parentElement;
-      if (p.style.position !== 'relative' && p.style.position !== 'absolute') p.style.position = 'relative';
-      p.appendChild(frame);
-    }
+    if (!frame) return;
 
     var gsList = frame.querySelector('.gs_list');
-    if (!gsList) { gsList = document.createElement('div'); gsList.className = 'gs_list'; frame.appendChild(gsList); }
+    if (!gsList) return;
 
-    function showFrame() { frame.classList.remove('g_hidden'); frame.style.display = ''; }
-    function hideFrame() { frame.classList.add('g_hidden'); frame.style.display = 'none'; }
+    var gameDiv = gsList.querySelector('.game');
+    var serverDiv = gsList.querySelector('.server');
+    if (!gameDiv) { gameDiv = document.createElement('div'); gameDiv.className = 'game'; gsList.insertBefore(gameDiv, gsList.firstChild); }
+    if (!serverDiv) { serverDiv = document.createElement('div'); serverDiv.className = 'server'; gsList.appendChild(serverDiv); }
 
-    function liHover(li, on) {
-      li.style.background = on ? 'var(--color-gs-selected-bg,#e8f4ff)' : '';
-      li.style.fontWeight = on ? '700' : '';
-      li.style.borderRadius = on ? '7px' : '';
+    function showFrame() { frame.classList.remove('g_hidden'); }
+    function hideFrame() { frame.classList.add('g_hidden'); }
+
+    function buildUl(items, labelFn, onSelect) {
+      var ul = document.createElement('ul');
+      items.forEach(function(item) {
+        var li = document.createElement('li');
+        li.innerHTML = labelFn(item);
+        li.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        li.addEventListener('click', function() {
+          ul.querySelectorAll('li.sel_on').forEach(function(el) { el.classList.remove('sel_on'); });
+          li.classList.add('sel_on');
+          onSelect(item);
+        });
+        ul.appendChild(li);
+      });
+      return ul;
     }
 
     function renderGames(games) {
-      _currentGame = null;
-      var ul = document.createElement('ul');
-      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:320px;overflow-y:auto';
+      serverDiv.innerHTML = '';
+      serverDiv.classList.add('g_hidden');
       if (!games.length) {
-        var empty = document.createElement('li');
-        empty.style.cssText = 'padding:12px 16px;color:#999;font-size:14px';
-        empty.textContent = '검색 결과가 없습니다';
-        ul.appendChild(empty);
+        var emptyUl = document.createElement('ul');
+        var emptyLi = document.createElement('li');
+        emptyLi.textContent = '검색 결과가 없습니다';
+        emptyLi.style.color = '#999';
+        emptyUl.appendChild(emptyLi);
+        gameDiv.innerHTML = ''; gameDiv.appendChild(emptyUl);
       } else {
-        games.forEach(function(g) {
-          var li = document.createElement('li');
-          li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-          li.innerHTML = g.name + (g.servers && g.servers.length
-            ? ' <span style="color:#999;font-size:12px;font-weight:400">(' + g.servers.length + '개 서버)</span>'
-            : '');
-          li.addEventListener('mouseover', function() { liHover(li, true); });
-          li.addEventListener('mouseout', function() { liHover(li, false); });
-          li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-          li.addEventListener('click', function() {
-            _currentGame = g;
-            if (g.servers && g.servers.length) {
-              renderServers(g);
-            } else {
-              window._IM_sel_game = g; window._IM_sel_server = null;
-              inp.value = g.name; hideFrame();
-            }
-          });
-          ul.appendChild(li);
-        });
+        var ul = buildUl(games,
+          function(g) { return g.name + (g.servers && g.servers.length ? ' <span>' + g.servers.length + '개 서버</span>' : ''); },
+          function(g) {
+            window._IM_sel_game = g; window._IM_sel_server = null;
+            if (g.servers && g.servers.length) { renderServers(g); }
+            else { inp.value = g.name; hideFrame(); }
+          }
+        );
+        gameDiv.innerHTML = ''; gameDiv.appendChild(ul);
       }
-      var inner = document.createElement('div');
-      inner.appendChild(ul);
-      gsList.innerHTML = ''; gsList.appendChild(inner);
       showFrame();
     }
 
     function renderServers(g) {
-      var wrap = document.createElement('div');
-      var back = document.createElement('div');
-      back.style.cssText = 'padding:8px 16px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px;'
-        + 'color:#0070d2;font-weight:600;line-height:27px';
-      back.innerHTML = '&#8592; ' + g.name + ' (목록으로)';
-      back.addEventListener('mouseover', function() { back.style.background = '#f0f7ff'; });
-      back.addEventListener('mouseout', function() { back.style.background = ''; });
-      back.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-      back.addEventListener('click', function() { search(inp.value); });
-      wrap.appendChild(back);
-
-      var ul = document.createElement('ul');
-      ul.style.cssText = 'list-style:none;margin:0;padding:4px 0;max-height:270px;overflow-y:auto';
-      g.servers.forEach(function(s) {
-        var li = document.createElement('li');
-        li.style.cssText = 'line-height:27px;padding:2px 16px;cursor:pointer;font-size:14px;white-space:nowrap';
-        li.textContent = s.name;
-        li.addEventListener('mouseover', function() { liHover(li, true); });
-        li.addEventListener('mouseout', function() { liHover(li, false); });
-        li.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
-        li.addEventListener('click', function() {
+      serverDiv.classList.remove('g_hidden');
+      var ul = buildUl(g.servers,
+        function(s) { return s.name; },
+        function(s) {
           window._IM_sel_game = g; window._IM_sel_server = s;
           inp.value = g.name + ' (' + s.name + ')'; hideFrame();
-        });
-        ul.appendChild(li);
-      });
-      wrap.appendChild(ul);
-      gsList.innerHTML = ''; gsList.appendChild(wrap);
-      showFrame();
+        }
+      );
+      serverDiv.innerHTML = ''; serverDiv.appendChild(ul);
     }
 
     function search(q) {
@@ -1614,7 +1585,6 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     document.addEventListener('click', function(e) {
       if (!frame.contains(e.target) && e.target !== inp) hideFrame();
     });
-    hideFrame();
   }
 
   function init() {
