@@ -817,7 +817,7 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/buy/register'))                          return '/buy/register.html' + qs;
   if (base.startsWith('/buy/application'))                       return '/buy/application.html' + qs;
   if (base.startsWith('/buy/list'))                              return '/buy/list.html' + qs;
-  if (base === '/buy' || base === '/buy/')                       return '/buy/list.html';
+  if (base === '/buy' || base === '/buy/')                       return '/buy/register.html';
   if (base.startsWith('/myroom/mileage/payment/payment_phone_list')) return '/myroom/mileage/payment/payment_phone_list.html' + qs;
   if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/myroom/mileage/payment/payment_phone_list.html';
   if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/myroom/mileage/payment/payment_list.html';
@@ -890,8 +890,8 @@ var ROUTE_MAP=[
   ['/buy/register.html','/buy/register.html'],
   ['/buy/application.html','/buy/application.html'],
   ['/buy/list.html','/buy/list.html'],
-  ['/buy/','/buy/list.html'],
-  ['/buy','/buy/list.html'],
+  ['/buy/','/buy/register.html'],
+  ['/buy','/buy/register.html'],
   ['/myroom/chat/new_chat.html','/myroom/chat/new_chat.html'],
   ['/myroom/chat/list.html','/myroom/chat/list.html'],
   ['/myroom/chat/','/myroom/chat/list.html'],
@@ -2967,6 +2967,16 @@ const BUY_INTERCEPT_SCRIPT = `
   }
 
   function init() {
+    // ── 상품등록(구매등록) 버튼 → /buy/register.html ──────────────────
+    // trade-btn-blue 클릭: buy list에서는 모달 없이 바로 구매등록으로
+    document.querySelectorAll('a.trade-btn-blue, .trade-btn a').forEach(function(a) {
+      a.setAttribute('href', '/buy/register.html');
+      a.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        location.href = '/buy/register.html';
+      }, true);
+    });
+
     // 팝니다 탭 → 판매 목록으로 이동 (search_game 유지)
     document.querySelectorAll('button[data-type="sell"]').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
@@ -3581,9 +3591,14 @@ router.get("/buy/list.html", async (req, res): Promise<void> => {
 });
 
 // 삽니다 목록 리다이렉트
-router.get(["/buy/list.html", "/buy/"], async (req, res): Promise<void> => {
+router.get("/buy/list.html", async (req, res): Promise<void> => {
   const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   res.redirect(302, `/buy/list.html${qs}`);
+});
+
+// 구매등록 리다이렉트 (/buy/ 단독 → 구매등록 페이지)
+router.get("/buy/", async (req, res): Promise<void> => {
+  res.redirect(302, `/buy/register.html`);
 });
 
 // 개별 채팅방 페이지
