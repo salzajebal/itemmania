@@ -1978,8 +1978,17 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     if (regBtn && !regBtn._imBound) {
                       regBtn._imBound = true;
                       regBtn.addEventListener('click', function() {
-                        var pid = (window._IM_reg_data || {}).id || '';
-                        location.href = '/sell/index_view.html' + (pid ? '?id=' + pid : '');
+                        var rd  = window._IM_reg_data || {};
+                        var pid = rd.id || '';
+                        var gid = (window._IM_sel_game && window._IM_sel_game.id) ? window._IM_sel_game.id : '';
+                        var cat = encodeURIComponent(rd.category || '');
+                        var url = '/sell/index_view.html';
+                        if (pid) {
+                          url += '?id=' + pid;
+                          if (gid) url += '&gid=' + gid;
+                          if (cat) url += '&cat=' + cat;
+                        }
+                        location.href = url;
                       });
                     }
                     // cancel_submit(취소) → 팝업 닫기
@@ -4078,12 +4087,58 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
   const SELL_INDEX_VIEW_INTERCEPT_SCRIPT = `
 <script>
 (function() {
-  var productId = new URLSearchParams(location.search).get('id');
-  if (!productId) return;
+  var params    = new URLSearchParams(location.search);
+  var productId = params.get('id');
+  var gid       = params.get('gid');  // 게임 ID (sell-register에서 전달)
+  var catParam  = params.get('cat');  // 카테고리 (sell-register에서 전달)
+
+  // 상품리스트 보기 URL 구성: gid 있으면 게임별 리스트, 없으면 기본 리스트
+  function buildListUrl(gameId, catLabel) {
+    var url = '/sell/list.html';
+    if (gameId) url += '?search_game=' + encodeURIComponent(gameId);
+    return url;
+  }
+
+  // 버튼 패치 공통 함수
+  function patchButtons(listUrl) {
+    var btnList = document.getElementById('btn_list');
+    if (!btnList) return;
+    var links = btnList.querySelectorAll('a');
+    // links[0] → 추가 등록하기
+    if (links[0]) {
+      links[0].textContent = '추가 등록하기';
+      links[0].removeAttribute('href');
+      links[0].style.cursor = 'pointer';
+      links[0].addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/sell/register.html';
+      });
+    }
+    // links[1] → 등록 상품 보기 (숨김)
+    if (links[1]) links[1].style.display = 'none';
+    // links[2] → 상품리스트 보기 → 해당 게임 팝니다 목록
+    if (links[2]) {
+      links[2].textContent = '상품리스트 보기';
+      links[2].className = 'btn_gray';
+      links[2].removeAttribute('href');
+      links[2].style.cursor = 'pointer';
+      links[2].addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = listUrl;
+      });
+    }
+  }
+
+  if (!productId) {
+    // productId 없어도 버튼은 패치
+    patchButtons(buildListUrl(gid, catParam));
+    return;
+  }
 
   fetch('/api/products/' + productId, { credentials: 'include' })
     .then(function(r) { return r.json(); })
     .then(function(p) {
+      // 테이블 데이터 채우기
       document.querySelectorAll('#table_wrapper table tbody tr').forEach(function(row) {
         var th = row.querySelector('th');
         var td = row.querySelector('td');
@@ -4093,7 +4148,8 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
           td.textContent = '#' + p.id;
         } else if (label === '카테고리') {
           var cat = p.gameName || '';
-          if (p.serverName) cat += ' > ' + p.serverName;
+          if (p.serverName)    cat += ' > ' + p.serverName;
+          if (p.itemCategory)  cat += ' > ' + p.itemCategory;
           td.textContent = cat;
         } else if (label === '거래유형') {
           td.textContent = '일반판매';
@@ -4102,7 +4158,7 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
         } else if (label === '제목') {
           td.textContent = p.title || '';
         } else if (label === '상품종류') {
-          td.textContent = '기타';
+          td.textContent = p.itemCategory || '기타';
         } else if (label === '판매수량') {
           td.textContent = '-';
         } else if (label.includes('상품등록정보')) {
@@ -4110,33 +4166,25 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
         }
       });
 
-      // 버튼 링크 패치
-      var btnList = document.getElementById('btn_list');
-      if (btnList) {
-        var links = btnList.querySelectorAll('a');
-        if (links[0]) {
-          links[0].textContent = '추가 등록하기';
-          links[0].removeAttribute('href');
-          links[0].style.cursor = 'pointer';
-          links[0].addEventListener('click', function(e) {
-            e.preventDefault();
-            location.href = '/sell/register.html';
-          });
-        }
-        if (links[1]) {
-          links[1].textContent = '상품리스트 보기';
-          links[1].className = 'btn_gray';
-          links[1].removeAttribute('href');
-          links[1].style.cursor = 'pointer';
-          links[1].addEventListener('click', function(e) {
-            e.preventDefault();
-            location.href = '/sell/list.html';
-          });
-        }
-        if (links[2]) { links[2].style.display = 'none'; }
+      // URL에 gid 없으면 products API 응답에서 게임 검색
+      var resolvedGid = gid;
+      if (!resolvedGid && p.gameName) {
+        // 게임명으로 gid 조회
+        fetch('/api/games/search?q=' + encodeURIComponent(p.gameName), { credentials: 'include' })
+          .then(function(r2) { return r2.json(); })
+          .then(function(games) {
+            if (games && games.length > 0) resolvedGid = games[0].id;
+            patchButtons(buildListUrl(resolvedGid, p.itemCategory));
+          })
+          .catch(function() { patchButtons(buildListUrl(null, p.itemCategory)); });
+      } else {
+        patchButtons(buildListUrl(resolvedGid, p.itemCategory));
       }
     })
-    .catch(function(err) { console.error('완료 페이지 오류', err); });
+    .catch(function(err) {
+      console.error('완료 페이지 오류', err);
+      patchButtons(buildListUrl(gid, catParam));
+    });
 })();
 </script>`;
 
