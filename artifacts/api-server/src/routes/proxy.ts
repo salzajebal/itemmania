@@ -4391,10 +4391,14 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         var r = data.room;
         var isBuyer = r.buyerId === myId;
         var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
-        var titleEl = document.querySelector('.nick_name, .chat_user_name');
-        if (titleEl) titleEl.textContent = partnerName;
-        var prodEl = document.querySelector('.trade_goods_name, .goods_name');
-        if (prodEl && r.productTitle) prodEl.textContent = r.productTitle;
+        var uidEl = document.querySelector('.chat_user .uid');
+        if (uidEl) uidEl.textContent = partnerName;
+        if (r.productTitle) {
+          var subjectA = document.querySelector('.chat_user2 .subject a');
+          if (subjectA) subjectA.textContent = r.productTitle;
+          var subjectDiv = document.querySelector('.chat_user2 .subject');
+          if (!subjectA && subjectDiv) subjectDiv.textContent = r.productTitle;
+        }
         if (r.productPrice) {
           var priceEl = document.querySelector('.trade_price_num, .goods_price');
           if (priceEl) priceEl.textContent = Number(r.productPrice).toLocaleString() + '원';
@@ -4785,28 +4789,37 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
             location.href = '/login?redirect=' + encodeURIComponent(location.href);
             return;
           }
-          var params = new URLSearchParams(location.search);
-          var productId = params.get('id');
-          if (!productId) { location.href = '/myroom/chat/list.html'; return; }
-          fetch('/api/products/' + productId, { credentials: 'include' })
-            .then(function(r) { return r.json(); })
-            .then(function(p) {
-              if (!p || !p.sellerId) { location.href = '/myroom/chat/list.html'; return; }
-              if (Number(p.sellerId) === Number(user.id)) {
-                location.href = '/myroom/chat/list.html'; return;
-              }
-              return fetch('/api/chat/rooms', {
-                method: 'POST', credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sellerId: Number(p.sellerId), productId: Number(productId) })
-              }).then(function(r) { return r.json(); })
-              .then(function(room) {
-                if (room && room.id) {
-                  window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
-                } else { location.href = '/myroom/chat/list.html'; }
-              });
-            })
-            .catch(function() { location.href = '/myroom/chat/list.html'; });
+          var params2 = new URLSearchParams(location.search);
+          var productId2 = params2.get('id') || (window._IM_PRODUCT && String(window._IM_PRODUCT.id)) || null;
+          var knownProduct = window._IM_PRODUCT || null;
+
+          function openChatWithProduct(prod) {
+            if (!prod || !prod.sellerId) { window.open('/myroom/chat/list.html', '_self'); return; }
+            if (Number(prod.sellerId) === Number(user.id)) {
+              alert('자신의 상품에는 채팅할 수 없습니다.'); return;
+            }
+            fetch('/api/chat/rooms', {
+              method: 'POST', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sellerId: Number(prod.sellerId), productId: prod.id ? Number(prod.id) : undefined })
+            }).then(function(r) { return r.json(); })
+            .then(function(room) {
+              if (room && room.id) {
+                window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+              } else { location.href = '/myroom/chat/list.html'; }
+            }).catch(function() { location.href = '/myroom/chat/list.html'; });
+          }
+
+          if (knownProduct) {
+            openChatWithProduct(knownProduct);
+          } else if (productId2) {
+            fetch('/api/products/' + productId2, { credentials: 'include' })
+              .then(function(r) { return r.json(); })
+              .then(function(prod) { openChatWithProduct(prod); })
+              .catch(function() { location.href = '/myroom/chat/list.html'; });
+          } else {
+            location.href = '/myroom/chat/list.html';
+          }
         });
       }, true);
     });
@@ -5116,6 +5129,7 @@ const APPLICATION_DYNAMIC_SCRIPT = `
 
   // snapshot JS가 DOM을 덮어쓸 때 즉시 재주입 (MutationObserver + retry)
   function runInject(p) {
+    window._IM_PRODUCT = p;
     injectProduct(p);
 
     // 주요 요소를 감시하다가 snapshot JS가 바꾸면 즉시 재주입
