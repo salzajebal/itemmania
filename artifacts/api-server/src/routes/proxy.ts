@@ -4668,6 +4668,38 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
       }, true);
     }
 
+    // 링크복사 버튼 → 현재 URL 클립보드 복사
+    var linkCopyBtn = document.getElementById('link_copy');
+    if (linkCopyBtn) {
+      linkCopyBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var url = location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function() {
+            linkCopyBtn.textContent = '복사완료!';
+            setTimeout(function() { linkCopyBtn.textContent = '링크복사'; }, 2000);
+          }).catch(function() {
+            fallbackCopy(url);
+          });
+        } else {
+          fallbackCopy(url);
+        }
+        function fallbackCopy(text) {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand('copy');
+            linkCopyBtn.textContent = '복사완료!';
+            setTimeout(function() { linkCopyBtn.textContent = '링크복사'; }, 2000);
+          } catch(ex) {}
+          ta.remove();
+        }
+      }, true);
+    }
+
     // 차단 마커 링크
     document.body.addEventListener('click', function(e) {
       var a = e.target.closest && e.target.closest('a[data-blocked]');
@@ -4866,6 +4898,18 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       } else {
         descEl.innerHTML = '<p>상세 설명이 없습니다.</p>';
       }
+    }
+
+    // ── 구매수량/구매할인 섹션 처리 ──────────────────────
+    // 게임머니 카테고리 여부: 아데나·골드·머니·코인 등 → true → 수량 섹션 유지
+    // 아이템·계정·파워레벨링 등 → false → 섹션 숨김
+    var moneyKws = ['머니', '아데나', '골드', '재화', '코인', '냥', '젠', '실버', '크로나', '베릴', '금화'];
+    var cat = (p.itemCategory || '').toString();
+    var isGameMoney = moneyKws.some(function(kw) { return cat.indexOf(kw) >= 0; });
+    if (!isGameMoney) {
+      // DB 상품 또는 아이템마니아 아이템 카테고리 → buy_info 숨김
+      var buyInfo = document.querySelector('.buy_info');
+      if (buyInfo) buyInfo.style.setProperty('display', 'none', 'important');
     }
 
     // ── 구매 박스 렌더링 ──────────────────────────────────
