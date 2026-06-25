@@ -1215,14 +1215,30 @@ const BALANCE_SSE_SCRIPT = `<script>
     var b = Number(balance || 0);
     var formatted = b.toLocaleString('ko-KR');
     var formattedWon = formatted + '원';
-    // 마이룸: .over_mile, .total_mile (스냅샷 JS가 대체하기 전 원본 구조)
+    // 원본 구조가 살아있으면 해당 span만 업데이트
     var avail = document.querySelector('.over_mile');
     var total = document.querySelector('.total_mile');
     if (avail) avail.textContent = formatted;
     if (total) total.textContent = formatted;
-    // 마이룸: .mr_user_mileage_txt (스냅샷 JS가 내부를 "0원" 텍스트로 대체한 경우)
-    var mileageTxt = document.querySelector('.mr_user_mileage_txt');
-    if (mileageTxt) mileageTxt.textContent = formattedWon;
+    // 스냅샷 JS가 .mr_user_mileage_txt 내부를 날린 경우 → 원래 구조 복원
+    if (!avail || !total) {
+      var mileageTxt = document.querySelector('.mr_user_mileage_txt');
+      if (mileageTxt) {
+        mileageTxt.innerHTML =
+          '<div class="mileage_area">'
+          + '<div class="mileage_area_content available_mileage">사용가능 마일리지</div>'
+          + '<div class="mileage_result"><span class="over_mile">' + formatted + '</span> 원</div>'
+          + '</div>'
+          + '<div class="mileage_area">'
+          + '<div class="mileage_area_content all_mileage">총 마일리지</div>'
+          + '<div class="mileage_result"><span class="total_mile">' + formatted + '</span> 원</div>'
+          + '</div>'
+          + '<div class="mileage_area mileage_btn_area">'
+          + '<button type="button" class="mileage_btn mileage_charge_btn">충전하기</button>'
+          + '<a href="/myroom/mileage/payment/index.html" class="mileage_btn mileage_withdraw_btn">출금하기</a>'
+          + '</div>';
+      }
+    }
     // 충전 페이지 등: #txtCurrentMileage
     document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]')
       .forEach(function(el){ el.textContent = formattedWon; });
