@@ -2,13 +2,33 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, walletsTable, withdrawalsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { pushToUser } from "../lib/sse";
 
 const router: IRouter = Router();
+
+// 수단별 수수료 (서버 측 계산)
+const FEE_RATES: Record<string, { rate: number; flat: number; min: number }> = {
+  kakaopay:    { rate: 0.055, flat: 0,    min: 0 },
+  naverpay:    { rate: 0.055, flat: 0,    min: 0 },
+  creditcard:  { rate: 0.055, flat: 0,    min: 0 },
+  "phone-ars": { rate: 0.195, flat: 0,    min: 0 },
+  onlyculture: { rate: 0.12,  flat: 0,    min: 0 },
+  gift24:      { rate: 0,     flat: 0,    min: 0 },
+  mileage:     { rate: 0.06,  flat: 0,    min: 0 },
+  mybank:      { rate: 0.02,  flat: 0,    min: 500 },
+  account:     { rate: 0,     flat: 1000, min: 0 },
+};
+
+function calcNet(gross: number, method: string): number {
+  const f = FEE_RATES[method] ?? { rate: 0, flat: 0, min: 0 };
+  let net = Math.floor(gross * (1 - f.rate)) - f.flat;
+  if (f.min > 0 && gross - Math.floor(gross * f.rate) < f.min) net = gross - f.min;
+  return Math.max(0, net);
+}
 
 router.get("/wallet", requireAuth, async (req, res): Promise<void> => {
   const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.session.userId!));
   if (!wallet) {
-    // 지갑이 없으면 자동 생성
     const [created] = await db.insert(walletsTable).values({ userId: req.session.userId!, balance: 0 }).returning();
     res.json({ id: created.id, userId: created.userId, balance: Number(created.balance), updatedAt: created.updatedAt });
     return;
@@ -17,13 +37,19 @@ router.get("/wallet", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/wallet/charge", requireAuth, async (req, res): Promise<void> => {
-  const amount = Number(req.body.amount);
-  if (!amount || amount < 1000) {
+  const gross = Number(req.body.amount);
+  const method = String(req.body.method || "");
+  if (!gross || gross < 1000) {
     res.status(400).json({ error: "최소 충전금액은 1,000원입니다." });
     return;
   }
 
-  // 지갑이 없으면 생성
+  const net = calcNet(gross, method);
+  if (net <= 0) {
+    res.status(400).json({ error: "수수료 적용 후 충전 금액이 0원입니다." });
+    return;
+  }
+
   let [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.session.userId!));
   if (!wallet) {
     [wallet] = await db.insert(walletsTable).values({ userId: req.session.userId!, balance: 0 }).returning();
@@ -31,11 +57,16 @@ router.post("/wallet/charge", requireAuth, async (req, res): Promise<void> => {
 
   const [updated] = await db
     .update(walletsTable)
-    .set({ balance: sql`${walletsTable.balance} + ${amount}` })
+    .set({ balance: sql`${walletsTable.balance} + ${net}` })
     .where(eq(walletsTable.userId, req.session.userId!))
     .returning();
 
-  res.json({ id: updated.id, userId: updated.userId, balance: Number(updated.balance), updatedAt: updated.updatedAt });
+  const newBalance = Number(updated.balance);
+
+  // SSE로 마이룸/다른 탭에도 즉시 반영
+  pushToUser(req.session.userId!, "balance", { balance: newBalance });
+
+  res.json({ id: updated.id, userId: updated.userId, balance: newBalance, updatedAt: updated.updatedAt });
 });
 
 router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => {
@@ -57,7 +88,6 @@ router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => 
     return;
   }
 
-  // 원자적으로 잔액 차감 + 출금 신청 생성
   const result = await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(walletsTable)

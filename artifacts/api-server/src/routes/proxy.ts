@@ -155,6 +155,15 @@ const buyRegisterHtml         = loadSellHtml("buy-register.html");
 const sellNewHtml             = loadSellHtml("sell-new.html");
 const batchGoodsHtml          = loadSellHtml("batch-goods.html");
 const myroomHtml              = loadSellHtml("myroom.html");
+const chargeKakaopayHtml      = loadSellHtml("charge-kakaopay.html");
+const chargeNaverpayHtml      = loadSellHtml("charge-naverpay.html");
+const chargePhoneArsHtml      = loadSellHtml("charge-phone-ars.html");
+const chargeCreditcardHtml    = loadSellHtml("charge-creditcard.html");
+const chargeOnlycultureHtml   = loadSellHtml("charge-onlyculture.html");
+const chargeAccountHtml       = loadSellHtml("charge-account.html");
+const chargeMileageHtml       = loadSellHtml("charge-mileage.html");
+const chargeMybankHtml        = loadSellHtml("charge-mybank.html");
+const chargeGift24Html        = loadSellHtml("charge-gift24.html");
 const paymentListHtml         = loadSellHtml("payment-list.html");
 const paymentPhoneListHtml    = loadSellHtml("payment-phone-list.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
@@ -3142,6 +3151,306 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const CHARGE_INTERCEPT_SCRIPT = `<script>
+(function(){
+  var FEE_MAP = {
+    kakaopay:    {rate: 0.055, flat: 0,    min: 0},
+    naverpay:    {rate: 0.055, flat: 0,    min: 0},
+    creditcard:  {rate: 0.055, flat: 0,    min: 0},
+    'phone-ars': {rate: 0.195, flat: 0,    min: 0},
+    onlyculture: {rate: 0.12,  flat: 0,    min: 0},
+    gift24:      {rate: 0,     flat: 0,    min: 0},
+    mileage:     {rate: 0.06,  flat: 0,    min: 0},
+    mybank:      {rate: 0.02,  flat: 0,    min: 500},
+    account:     {rate: 0,     flat: 1000, min: 0},
+  };
+
+  // ── 네비게이션 맵 (메뉴 텍스트 키워드 → 충전 URL) ─────────────────────
+  var NAV_MAP = [
+    {kw: 'ARS',       url: '/myroom/mileage/charge/charge-phone-ars.html'},
+    {kw: '신용카드',  url: '/myroom/mileage/charge/charge-creditcard.html'},
+    {kw: '네이버페이',url: '/myroom/mileage/charge/charge-naverpay.html'},
+    {kw: '카카오페이',url: '/myroom/mileage/charge/charge-kakaopay.html'},
+    {kw: '토스',      url: '/myroom/mileage/charge/charge-kakaopay.html'},
+    {kw: '컬쳐랜드',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '도서문화',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '에그머니',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '스마트문상',url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '틴캐시',    url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '전용계좌',  url: '/myroom/mileage/charge/charge-account.html'},
+    {kw: '마일리지 상품권', url: '/myroom/mileage/charge/charge-mileage.html'},
+    {kw: '이벤트 쿠폰',    url: '/myroom/mileage/charge/charge-mileage.html'},
+    {kw: '내통장결제',url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '케이뱅크',  url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '자동이체',  url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '기프트24',  url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: 'TCash',     url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '모바일팝',  url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '모바일티머니', url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '카드포인트',url: '/myroom/mileage/charge/charge-gift24.html'},
+  ];
+
+  // 현재 페이지 수수료
+  var slug = location.pathname.split('/').pop().replace('.html','').replace('charge-','');
+  var fee = FEE_MAP[slug] || {rate: 0, flat: 0, min: 0};
+  var curBalance = 0;
+
+  function calcNet(gross) {
+    if (!gross) return 0;
+    var net = Math.floor(gross * (1 - fee.rate)) - fee.flat;
+    if (fee.min > 0 && (gross - Math.floor(gross * fee.rate)) < fee.min) net = gross - fee.min;
+    return Math.max(0, net);
+  }
+  function fmt(n) { return Number(n).toLocaleString('ko-KR'); }
+
+  function updatePriceDisplay(gross) {
+    var net = calcNet(gross);
+    var sp = document.getElementById('spnPrice');
+    var tm = document.getElementById('total_mileage');
+    if (sp) sp.textContent = fmt(net);
+    if (tm) tm.textContent = fmt(curBalance + net);
+  }
+
+  // ── 모든 조상 overflow 강제 해제 (CSS cascade 우회) ──────────────────────
+  function fixOverflow(el) {
+    while (el && el !== document.body) {
+      el.style.setProperty('overflow', 'visible', 'important');
+      el.style.setProperty('clip', 'auto', 'important');
+      el.style.setProperty('max-height', 'none', 'important');
+      var h = el.style.height;
+      if (h && h !== 'auto' && !h.includes('%')) {
+        el.style.setProperty('height', 'auto', 'important');
+      }
+      el = el.parentElement;
+    }
+  }
+
+  // ── 충전 UI 동적 생성 및 삽입 ───────────────────────────────────────────
+  function buildChargeUI() {
+    // 기존 폼에서 금액 옵션 수집
+    var amounts = [];
+    var radios = document.querySelectorAll('input[name=selectPrice]');
+    radios.forEach(function(r) { amounts.push(Number(r.value)); });
+    if (!amounts.length) amounts = [5000,10000,20000,30000,50000,100000];
+
+    // #g_POPUP 찾기
+    var popup = document.getElementById('g_POPUP');
+    if (!popup) return;
+
+    // 기존 #charge_main 숨김 (overflow 문제 있는 영역)
+    var cm = document.getElementById('charge_main');
+    if (cm) cm.style.setProperty('display', 'none', 'important');
+    // 기존 .m_button 숨김
+    var oldBtn = document.querySelector('.m_button');
+    if (oldBtn) oldBtn.style.setProperty('display', 'none', 'important');
+
+    // overflow 강제 해제
+    fixOverflow(popup);
+
+    // 새 충전 패널 생성
+    var panel = document.createElement('div');
+    panel.id = 'im-charge-panel';
+    panel.style.cssText = [
+      'display:block', 'width:100%', 'background:#fff',
+      'padding:0 20px 40px', 'box-sizing:border-box',
+      'border-bottom-left-radius:10px', 'border-bottom-right-radius:10px',
+    ].join(';');
+
+    // 충전한도 정보 (기존 mile_detail 복사)
+    var mileDetail = cm ? cm.querySelector('.mile_detail') : null;
+    if (mileDetail) {
+      var infoCopy = mileDetail.cloneNode(true);
+      panel.appendChild(infoCopy);
+    }
+
+    // 구분선
+    var sep = document.createElement('hr');
+    sep.style.cssText = 'border:none;border-top:1px solid #edeff2;margin:0';
+    panel.appendChild(sep);
+
+    // 금액 선택 헤더
+    var amtTitle = document.createElement('p');
+    amtTitle.style.cssText = 'font-size:14px;color:#888;margin:16px 0 8px;font-weight:600';
+    amtTitle.textContent = '충전금액 선택';
+    panel.appendChild(amtTitle);
+
+    // 금액 라디오 그리드
+    var grid = document.createElement('ul');
+    grid.style.cssText = [
+      'display:flex', 'flex-wrap:wrap', 'gap:8px', 'list-style:none',
+      'padding:0', 'margin:0 0 20px',
+    ].join(';');
+
+    var selectedAmt = amounts[0];
+    amounts.forEach(function(amt, i) {
+      var li = document.createElement('li');
+      li.style.cssText = 'width:calc(33.3% - 6px)';
+      var lbl = document.createElement('label');
+      lbl.style.cssText = [
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'border:1px solid #dcdee0', 'border-radius:5px', 'padding:10px 6px',
+        'cursor:pointer', 'font-size:15px', 'color:#333', 'gap:6px',
+        'user-select:none',
+      ].join(';');
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'imSelectPrice';
+      radio.value = String(amt);
+      radio.style.cssText = 'accent-color:#159EFD;width:15px;height:15px;cursor:pointer';
+      if (i === 0) { radio.checked = true; lbl.style.borderColor = '#159EFD'; lbl.style.outline = '1px solid #159EFD'; }
+      var txt = document.createTextNode(fmt(amt) + ' 원');
+      lbl.appendChild(radio);
+      lbl.appendChild(txt);
+      li.appendChild(lbl);
+      grid.appendChild(li);
+    });
+    panel.appendChild(grid);
+
+    // 가격 표시 구분선
+    var sep2 = document.createElement('hr');
+    sep2.style.cssText = 'border:none;border-top:1px solid #edeff2;margin:0 0 16px';
+    panel.appendChild(sep2);
+
+    // 보유/실충전/충전후 표시
+    var priceBox = document.createElement('div');
+    priceBox.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;font-size:15px;color:#333';
+
+    function makeRow(label, id) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+      var lspan = document.createElement('span');
+      lspan.textContent = label;
+      lspan.style.cssText = 'font-weight:600;color:#555';
+      var rspan = document.createElement('span');
+      rspan.id = id;
+      rspan.textContent = '0';
+      rspan.style.cssText = 'color:#159EFD;font-weight:700';
+      var unit = document.createElement('span');
+      unit.textContent = ' 원';
+      unit.style.color = '#555';
+      row.appendChild(lspan);
+      var right = document.createElement('span');
+      right.appendChild(rspan);
+      right.appendChild(unit);
+      row.appendChild(right);
+      return row;
+    }
+    priceBox.appendChild(makeRow('보유 마일리지', 'im-my-mileage'));
+    priceBox.appendChild(makeRow('실충전 마일리지', 'im-spn-price'));
+    priceBox.appendChild(makeRow('충전 후 마일리지', 'im-total-mileage'));
+    panel.appendChild(priceBox);
+
+    // 충전하기 버튼
+    var btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;justify-content:center;padding-top:8px';
+    var chargeBtn = document.createElement('button');
+    chargeBtn.type = 'button';
+    chargeBtn.id = 'im-btn-charge';
+    chargeBtn.textContent = '충전하기';
+    chargeBtn.style.cssText = [
+      'width:240px', 'line-height:55px', 'height:55px',
+      'background:#159EFD', 'color:#fff', 'border:none',
+      'border-radius:10px', 'font-size:18px', 'font-weight:700',
+      'cursor:pointer',
+    ].join(';');
+    btnWrap.appendChild(chargeBtn);
+    panel.appendChild(btnWrap);
+
+    // popup 뒤에 삽입
+    popup.parentNode.insertBefore(panel, popup.nextSibling);
+
+    // ── 라디오 변경 이벤트 ──────────────────────────────────────────────
+    function updateUI(gross) {
+      var net = calcNet(gross);
+      var sp = document.getElementById('im-spn-price');
+      var tm = document.getElementById('im-total-mileage');
+      if (sp) sp.textContent = fmt(net);
+      if (tm) tm.textContent = fmt(curBalance + net);
+      // 선택된 라디오 테두리 강조
+      grid.querySelectorAll('label').forEach(function(l) {
+        var r = l.querySelector('input');
+        if (r && r.checked) {
+          l.style.borderColor = '#159EFD';
+          l.style.outline = '1px solid #159EFD';
+        } else {
+          l.style.borderColor = '#dcdee0';
+          l.style.outline = 'none';
+        }
+      });
+    }
+    grid.addEventListener('change', function(e) {
+      if (e.target && e.target.name === 'imSelectPrice') {
+        updateUI(Number(e.target.value));
+      }
+    });
+    updateUI(selectedAmt);
+
+    // ── 충전하기 버튼 클릭 ─────────────────────────────────────────────
+    chargeBtn.addEventListener('click', function() {
+      var checked = grid.querySelector('input[name=imSelectPrice]:checked');
+      var gross = checked ? Number(checked.value) : 0;
+      if (!gross || gross < 1000) { alert('충전 금액을 선택해주세요.'); return; }
+      var net = calcNet(gross);
+      if (!confirm(fmt(gross) + '원을 충전하시겠습니까?\\n\\n실충전 마일리지: ' + fmt(net) + '원')) return;
+      chargeBtn.disabled = true;
+      chargeBtn.textContent = '처리중...';
+      fetch('/api/wallet/charge', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({amount: gross, method: slug})
+      }).then(function(r){ return r.json(); })
+        .then(function(d){
+          if (d.error) { alert(d.error); return; }
+          curBalance = Number(d.balance || 0);
+          var el = document.getElementById('im-my-mileage');
+          if (el) el.textContent = fmt(curBalance);
+          updateUI(gross);
+          alert('충전이 완료되었습니다!\\n현재 마일리지: ' + fmt(curBalance) + '원');
+        })
+        .catch(function(){ alert('충전 처리 중 오류가 발생했습니다.'); })
+        .finally(function(){ chargeBtn.disabled = false; chargeBtn.textContent = '충전하기'; });
+    });
+
+    return panel;
+  }
+
+  // ── 잔액 로드 후 UI 초기화 ───────────────────────────────────────────────
+  var panel = buildChargeUI();
+
+  fetch('/api/wallet', {credentials:'include'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d) return;
+      curBalance = Number(d.balance || 0);
+      var el = document.getElementById('im-my-mileage');
+      if (el) el.textContent = fmt(curBalance);
+      // 현재 선택된 금액으로 업데이트
+      var checked = panel ? panel.querySelector('input[name=imSelectPrice]:checked') : null;
+      if (checked) {
+        var net = calcNet(Number(checked.value));
+        var tm = document.getElementById('im-total-mileage');
+        if (tm) tm.textContent = fmt(curBalance + net);
+      }
+    }).catch(function(){});
+
+  // ── 메뉴 클릭 네비게이션 ────────────────────────────────────────────────
+  function attachNavigation(el) {
+    var txt = el.textContent || '';
+    for (var i = 0; i < NAV_MAP.length; i++) {
+      if (txt.indexOf(NAV_MAP[i].kw) !== -1) {
+        (function(url){ el.addEventListener('click', function(e){
+          e.preventDefault(); e.stopPropagation();
+          location.href = url;
+        }); })(NAV_MAP[i].url);
+        return;
+      }
+    }
+  }
+  document.querySelectorAll('#charge_menu li, #child_menu_wrapper li').forEach(attachNavigation);
+})();
+</script>`;
+
 const MYROOM_INTERCEPT_SCRIPT = `
 <style>
 /* 인증 배지 비활성 상태 */
@@ -3184,6 +3493,37 @@ const MYROOM_INTERCEPT_SCRIPT = `
   }
 
   function init() {
+    // ── 충전하기 버튼 → 충전 팝업 ─────────────────────────────────────
+    document.querySelectorAll('button.mileage_charge_btn,.mileage_charge_btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var w = window.open(
+          '/myroom/mileage/charge/charge-kakaopay.html',
+          'charge_popup',
+          'width=660,height=900,resizable=yes,scrollbars=yes,left=' +
+          Math.round((screen.width - 660) / 2) + ',top=' + Math.round((screen.height - 900) / 2)
+        );
+        if (w) w.focus();
+      });
+    });
+
+    // ── 사이드 메뉴 마일리지충전 링크 ──────────────────────────────────
+    document.querySelectorAll('a[href="javascript:void(0)"]').forEach(function(a) {
+      if ((a.textContent||'').trim() === '마일리지충전') {
+        a.href = '#';
+        a.addEventListener('click', function(e) {
+          e.preventDefault();
+          var w = window.open(
+            '/myroom/mileage/charge/charge-kakaopay.html',
+            'charge_popup',
+            'width=660,height=900,resizable=yes,scrollbars=yes,left=' +
+            Math.round((screen.width - 660) / 2) + ',top=' + Math.round((screen.height - 900) / 2)
+          );
+          if (w) w.focus();
+        });
+      }
+    });
+
     // ── 출금하기 버튼 → 출금 목록 페이지 ───────────────────────────
     document.querySelectorAll('a[href*="payment_switch"],a.mileage_withdraw_btn').forEach(function(a) {
       a.href = '/myroom/mileage/payment/payment_list.html';
@@ -4360,6 +4700,43 @@ function serveBatchGoods(html: string, user: Record<string, unknown> | null = nu
     : result + BATCH_GOODS_INTERCEPT_SCRIPT;
 }
 
+const CHARGE_FORCE_STYLE = `<style id="charge-force-style">
+#charge_main{display:block!important}
+#charge_main form{display:block!important}
+.m_chargelist{display:flex!important;flex-wrap:wrap!important}
+.m_chargelist li{display:block!important;opacity:1!important;visibility:visible!important}
+.real_price{display:block!important;opacity:1!important;visibility:visible!important}
+.real_price .price_table{display:flex!important}
+.m_button{display:flex!important;opacity:1!important;visibility:visible!important}
+#btn_charge{display:inline-block!important;opacity:1!important;visibility:visible!important}
+#g_POPUP{overflow:visible!important;height:auto!important}
+</style>`;
+
+function serveCharge(html: string, user: Record<string, unknown> | null = null): string {
+  // 원본 JS 제거 (로그인 체크로 요소 숨김 방지)
+  let stripped = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  // CSP 메타태그 제거 (fetch/XHR 차단 방지)
+  stripped = stripped.replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
+  // 핵심 요소에 인라인 스타일 직접 삽입
+  stripped = stripped
+    .replace(/<ul class=m_chargelist>/gi,
+      '<ul class=m_chargelist style="display:flex!important;flex-wrap:wrap;gap:1%;padding:20px 0;border-top:1px solid #edeff2;border-bottom:1px solid #edeff2;min-height:30px">')
+    .replace(/<div class=real_price>/gi,
+      '<div class=real_price style="display:block!important;padding:20px 0;width:100%;min-height:20px">')
+    .replace(/<div class=m_button>/gi,
+      '<div class=m_button style="display:flex!important;justify-content:center;padding:20px 0 40px;width:100%;min-height:60px">')
+    .replace(/id=g_POPUP\b/gi,
+      'id=g_POPUP style="overflow:visible!important;height:auto!important;min-height:0!important"');
+  // head에 강제 표시 스타일 주입
+  const withStyle = stripped.includes("</head>")
+    ? stripped.replace("</head>", CHARGE_FORCE_STYLE + "</head>")
+    : CHARGE_FORCE_STYLE + stripped;
+  const result = prepare(withStyle, user);
+  return result.includes("</body>")
+    ? result.replace("</body>", CHARGE_INTERCEPT_SCRIPT + "</body>")
+    : result + CHARGE_INTERCEPT_SCRIPT;
+}
+
 function serveMyroom(html: string, user: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
   // 스냅샷에 하드코딩된 이전 유저 이름 → 실제 로그인 유저 닉네임으로 교체
@@ -4749,6 +5126,32 @@ router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => 
   const user = await getSessionUser(req);
 
   res.send(serveBatchGoods(batchGoodsHtml, user));
+});
+
+// 마일리지 충전 팝업 페이지들
+const CHARGE_PAGES: Array<{paths: string[], html: string | null}> = [
+  {paths: ["/myroom/mileage/charge/charge-kakaopay.html"],    html: chargeKakaopayHtml},
+  {paths: ["/myroom/mileage/charge/charge-naverpay.html"],    html: chargeNaverpayHtml},
+  {paths: ["/myroom/mileage/charge/charge-phone-ars.html"],   html: chargePhoneArsHtml},
+  {paths: ["/myroom/mileage/charge/charge-creditcard.html"],  html: chargeCreditcardHtml},
+  {paths: ["/myroom/mileage/charge/charge-onlyculture.html"], html: chargeOnlycultureHtml},
+  {paths: ["/myroom/mileage/charge/charge-account.html"],     html: chargeAccountHtml},
+  {paths: ["/myroom/mileage/charge/charge-mileage.html"],     html: chargeMileageHtml},
+  {paths: ["/myroom/mileage/charge/charge-mybank.html"],      html: chargeMybankHtml},
+  {paths: ["/myroom/mileage/charge/charge-gift24.html"],      html: chargeGift24Html},
+];
+for (const page of CHARGE_PAGES) {
+  router.get(page.paths, async (req, res): Promise<void> => {
+    if (!page.html) { res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>"); return; }
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-cache");
+    const user = await getSessionUser(req);
+    res.send(serveCharge(page.html, user));
+  });
+}
+// 충전 기본 경로 → 카카오페이
+router.get(["/myroom/mileage/charge/", "/myroom/mileage/charge"], async (req, res): Promise<void> => {
+  res.redirect(302, "/myroom/mileage/charge/charge-kakaopay.html");
 });
 
 // 마이룸 페이지

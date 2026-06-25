@@ -3,3 +3,4 @@
 - [Orval path+query collision](orval-collision.md) — having both path param AND query param on same route causes GetXxxParams TS2308 collision; remove query param from spec or rename operationId.
 - [Snapshot JS listener interference](snapshot-js-listener-interference.md) — snapshot JS attaches listeners to #searchRegGameServer; always cloneNode+removeAttribute('id') before setupGameSearch.
 - [Template literal JS escaping](template-literal-js-escaping.md) — single-quote escapes in JS embedded inside TS template literals must use \\\\ not \\; use node --check to verify.
+- [SingleFile charge page clipping](singlefile-charge-clipping.md) — #g_POPUP inner anonymous div clips content after .mile_detail; fix by dynamically injecting charge UI after #g_POPUP via JS, not inside clipped area.
