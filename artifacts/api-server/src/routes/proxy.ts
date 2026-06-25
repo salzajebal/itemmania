@@ -876,6 +876,7 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/myroom/mileage/payment/index.html';
   if (base.startsWith('/myroom/mileage/payment/payment_list'))   return '/myroom/mileage/payment/payment_list.html' + qs;
   if (base.startsWith('/myroom/mileage/payment/index') || base === '/myroom/mileage/payment/') return '/myroom/mileage/payment/index.html';
+  if (base.startsWith('/myroom/mileage/my_mileage'))             return '/myroom/index.html';
   if (base.startsWith('/myroom/batch_goods'))                    return '/myroom/batch_goods/index.html';
   if (base.startsWith('/myroom/chat/new_chat'))                  return '/myroom/chat/new_chat.html';
   if (base.startsWith('/myroom/chat/list'))                      return '/myroom/chat/list.html' + qs;
@@ -939,6 +940,8 @@ var ROUTE_MAP=[
   ['/myroom/mileage/payment/payment_phone.html','/myroom/mileage/payment/payment_phone.html'],
   ['/myroom/mileage/payment/payment_list.html','/myroom/mileage/payment/payment_list.html'],
   ['/myroom/mileage/payment/index.html','/myroom/mileage/payment/index.html'],
+  ['/myroom/mileage/my_mileage/','/myroom/index.html'],
+  ['/myroom/mileage/my_mileage','/myroom/index.html'],
   ['/myroom/batch_goods/index.html','/myroom/batch_goods/index.html'],
   ['/sell/application.html','/sell/application.html'],
   ['/sell/new.html','/sell/new.html'],
@@ -3564,6 +3567,18 @@ const MYROOM_INTERCEPT_SCRIPT = `
       });
     });
 
+    // ── 내마일리지 / 마일리지 카테고리 링크 → 마이룸 홈 ─────────────────
+    document.querySelectorAll('a[href*="my_mileage"]').forEach(function(a) {
+      a.href = '/myroom/index.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
+    });
+
+    // ── 마이룸 nav_subject / 상단 GNB 마이룸 링크 강제 처리 ─────────────
+    document.querySelectorAll('a.myroom, a[href="/myroom/"], a[href="/myroom"], a[href="/myroom/index.html"]').forEach(function(a) {
+      a.href = '/myroom/index.html';
+      a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
+    });
+
     // ── 사이드 메뉴 마일리지충전 링크 ──────────────────────────────────
     document.querySelectorAll('a[href="javascript:void(0)"]').forEach(function(a) {
       if ((a.textContent||'').trim() === '마일리지충전') {
@@ -5792,6 +5807,11 @@ router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Prom
   const user = await getSessionUser(req);
 
   res.send(serveMyroom(myroomHtml, user));
+});
+
+// 내마일리지 → 마이룸 홈으로 리다이렉트
+router.get(["/myroom/mileage/my_mileage/", "/myroom/mileage/my_mileage"], (req, res): void => {
+  res.redirect(302, "/myroom/index.html");
 });
 
 // 출금하기 - 은행계좌 출금 신청 폼
