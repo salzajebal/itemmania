@@ -2107,12 +2107,18 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(me) {
         if (!me) return;
-        var nameCell = document.getElementById('userNameCell');
-        if (nameCell) nameCell.textContent = me.email || me.nickname || '';
+        var displayName = me.nickname || me.email || String(me.id);
+        // li.user_name 안의 텍스트 노드만 교체 (수정 버튼 <a> 유지)
+        var nameEl = document.querySelector('.my_private li.user_name, li.user_name');
+        if (nameEl) {
+          Array.prototype.forEach.call(nameEl.childNodes, function(node) {
+            if (node.nodeType === 3) node.textContent = displayName + ' ';
+          });
+        }
         var phoneEl = document.getElementById('spnUserPhone');
-        if (phoneEl) phoneEl.textContent = '';
+        if (phoneEl) phoneEl.textContent = '자택번호 없음 ';
         var cellEl = document.getElementById('spnUserCell');
-        if (cellEl) cellEl.textContent = '';
+        if (cellEl) cellEl.textContent = me.phone || '';
         var mileageEl = document.getElementById('txtCurrentMileage');
         if (mileageEl && me.balance != null)
           mileageEl.textContent = Number(me.balance).toLocaleString() + '원';
@@ -2785,12 +2791,17 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(me) {
         if (!me) return;
-        var nameCell = document.getElementById('userNameCell');
-        if (nameCell) nameCell.textContent = me.email || me.nickname || '';
+        var displayName = me.nickname || me.email || String(me.id);
+        var nameEl = document.querySelector('.my_private li.user_name, li.user_name');
+        if (nameEl) {
+          Array.prototype.forEach.call(nameEl.childNodes, function(node) {
+            if (node.nodeType === 3) node.textContent = displayName + ' ';
+          });
+        }
         var phoneEl = document.getElementById('spnUserPhone');
-        if (phoneEl) phoneEl.textContent = '';
+        if (phoneEl) phoneEl.textContent = '자택번호 없음 ';
         var cellEl = document.getElementById('spnUserCell');
-        if (cellEl) cellEl.textContent = '';
+        if (cellEl) cellEl.textContent = me.phone || '';
         var mileageEl = document.getElementById('txtCurrentMileage');
         if (mileageEl && me.balance != null)
           mileageEl.textContent = Number(me.balance).toLocaleString() + '원';
@@ -4601,7 +4612,29 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     alert('구매 신청이 완료되었습니다.\\n판매자와 채팅으로 거래를 진행해 주세요.');
   }
 
+  // ── 내 거래정보 섹션: 로그인 유저 정보로 교체 ────────────────────
+  function loadUserTradeInfo() {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(me) {
+        if (!me) return;
+        var displayName = me.nickname || me.email || String(me.id);
+        var nameEl = document.querySelector('.my_private li.user_name, li.user_name');
+        if (nameEl) {
+          Array.prototype.forEach.call(nameEl.childNodes, function(node) {
+            if (node.nodeType === 3) node.textContent = displayName + ' ';
+          });
+        }
+        var phoneEl = document.getElementById('spnUserPhone');
+        if (phoneEl) phoneEl.textContent = '자택번호 없음 ';
+        var cellEl = document.getElementById('spnUserCell');
+        if (cellEl) cellEl.textContent = me.phone || '';
+      })
+      .catch(function() {});
+  }
+
   function init() {
+    loadUserTradeInfo();
     // 구매신청 버튼 — form 제출 인터셉트
     var form = document.getElementById('frmSell');
     if (form) {
