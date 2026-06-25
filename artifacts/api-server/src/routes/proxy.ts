@@ -1308,6 +1308,27 @@ const SELL_INTERCEPT_SCRIPT = `
         var tid = li.getAttribute('data-tid');
         if (tid) {
           e.preventDefault(); e.stopPropagation();
+          // 상세 페이지에서 사용할 데이터를 sessionStorage에 저장
+          try {
+            var titleEl = li.querySelector('.kind_title');
+            var priceEl = li.querySelector('.trade_money');
+            var serverEls = li.querySelectorAll('.server li a');
+            var servers = Array.prototype.map.call(serverEls, function(a) { return a.textContent.trim(); });
+            var priceNode = priceEl ? priceEl.firstChild : null;
+            var priceNum = priceNode ? parseInt((priceNode.textContent || '').replace(/[^0-9]/g, ''), 10) || 0 : 0;
+            var card = {
+              id: tid,
+              title: titleEl ? titleEl.textContent.trim() : '',
+              price: priceNum,
+              priceRaw: priceEl ? priceEl.textContent.trim() : '',
+              gameName: servers[0] || '',
+              serverName: servers[1] || '',
+              itemCategory: servers[2] || '',
+              sellerName: '', description: '',
+              _source: 'itemmania'
+            };
+            sessionStorage.setItem('_im_card_' + tid, JSON.stringify(card));
+          } catch(ex) {}
           location.href = '/sell/application.html?id=' + tid;
         }
       }
@@ -3899,62 +3920,85 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     }
   }
 
+  function injectProduct(p) {
+    // ── 제목 ─────────────────────────────────────────────
+    var titleEl = document.querySelector('.trade_subject');
+    if (titleEl) {
+      var sig = titleEl.querySelector('.signboard');
+      titleEl.textContent = '';
+      if (sig) titleEl.appendChild(sig);
+      titleEl.appendChild(document.createTextNode(' ' + p.title));
+    }
+    document.title = p.title + ' - 아이템매니아';
+
+    // ── 거래 ID ──────────────────────────────────────────
+    var tidEl = document.querySelector('.trade_id');
+    if (tidEl && tidEl.firstChild && tidEl.firstChild.nodeType === 3) {
+      tidEl.firstChild.textContent = '#' + p.id + ' ';
+    }
+
+    // ── 가격 ─────────────────────────────────────────────
+    var moneyEl = document.querySelector('dd.trade_money');
+    if (moneyEl) {
+      // 아이템마니아 상품은 priceRaw(예:"1,000원 (1만당)") 그대로 표시, DB 상품은 fmt
+      var priceDisplay = p.priceRaw
+        ? p.priceRaw
+        : (fmt(p.price) + '원');
+      moneyEl.innerHTML = '<strong style="font-size:1.1em">' + priceDisplay + '</strong>';
+    }
+    var tradeMoneySp = document.getElementById('trade_money');
+    if (tradeMoneySp) tradeMoneySp.textContent = fmt(p.price);
+
+    // ── 게임/서버/카테고리 breadcrumb (.kind) ────────────
+    var kindEl = document.querySelector('.kind');
+    if (kindEl) {
+      var crumb = p.gameName || '게임';
+      if (p.serverName) crumb += ' &gt; ' + p.serverName;
+      if (p.itemCategory) crumb += ' &gt; ' + p.itemCategory;
+      kindEl.innerHTML = crumb;
+    }
+
+    // ── 판매자명 ─────────────────────────────────────────
+    if (p.sellerName) {
+      var sellerEl = document.querySelector('.user_nick, .vip_txt, .user_info strong');
+      if (sellerEl) sellerEl.textContent = p.sellerName;
+    }
+
+    // ── 상세 설명 ─────────────────────────────────────────
+    var descEl = document.querySelector('.ql-editor.detail_text');
+    if (descEl) {
+      if (p._source === 'itemmania') {
+        // 아이템마니아 상품: 상세 설명 없음 안내 (스냅샷 내용 유지하지 않음)
+        descEl.innerHTML = '<p style="color:#888">상세 설명은 판매자에게 채팅으로 문의해주세요.</p>';
+      } else if (p.description) {
+        descEl.innerHTML = '<p>' + p.description.replace(/\\n/g, '</p><p>') + '</p>';
+      } else {
+        descEl.innerHTML = '<p>상세 설명이 없습니다.</p>';
+      }
+    }
+
+    // ── 구매 박스 렌더링 ──────────────────────────────────
+    if (p._source !== 'itemmania') {
+      renderBuyBox(p);
+    }
+  }
+
   function loadProduct() {
     fetch('/api/products/' + productId, { credentials: 'include' })
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        // HTTP 에러(404/500 등)도 error 객체로 통일
+        if (!r.ok) return { error: 'not_found' };
+        return r.json();
+      })
       .then(function(p) {
-        if (p.error) return;
-
-        // ── 제목 ─────────────────────────────────────────────
-        var titleEl = document.querySelector('.trade_subject');
-        if (titleEl) {
-          var sig = titleEl.querySelector('.signboard');
-          titleEl.textContent = '';
-          if (sig) titleEl.appendChild(sig);
-          titleEl.appendChild(document.createTextNode(' ' + p.title));
+        if (p.error) {
+          // DB에 없는 상품 → sessionStorage 폴백 (아이템마니아 상품)
+          var stored = null;
+          try { stored = JSON.parse(sessionStorage.getItem('_im_card_' + productId) || 'null'); } catch(ex) {}
+          if (stored) { injectProduct(stored); }
+          return;
         }
-        document.title = p.title + ' - 아이템매니아';
-
-        // ── 거래 ID ──────────────────────────────────────────
-        var tidEl = document.querySelector('.trade_id');
-        if (tidEl && tidEl.firstChild && tidEl.firstChild.nodeType === 3) {
-          tidEl.firstChild.textContent = '#' + p.id + ' ';
-        }
-
-        // ── 가격 (dd.trade_money 전체 교체, 1만당 span 제거) ──
-        var moneyEl = document.querySelector('dd.trade_money');
-        if (moneyEl) {
-          moneyEl.innerHTML = '<strong style="font-size:1.1em">' + fmt(p.price) + '원</strong>';
-        }
-        // 결제 영역의 #trade_money span도 업데이트
-        var tradeMoneySp = document.getElementById('trade_money');
-        if (tradeMoneySp) tradeMoneySp.textContent = fmt(p.price);
-
-        // ── 게임/서버/카테고리 breadcrumb (.kind) ────────────
-        var kindEl = document.querySelector('.kind');
-        if (kindEl) {
-          var crumb = p.gameName || '게임';
-          if (p.serverName) crumb += ' &gt; ' + p.serverName;
-          if (p.itemCategory) crumb += ' &gt; ' + p.itemCategory;
-          kindEl.innerHTML = crumb;
-        }
-
-        // ── 판매자명 ─────────────────────────────────────────
-        if (p.sellerName) {
-          var sellerEl = document.querySelector('.user_nick, .vip_txt, .user_info strong');
-          if (sellerEl) sellerEl.textContent = p.sellerName;
-        }
-
-        // ── 상세 설명 ─────────────────────────────────────────
-        var descEl = document.querySelector('.ql-editor.detail_text');
-        if (descEl) {
-          descEl.innerHTML = p.description
-            ? '<p>' + p.description.replace(/\\n/g, '</p><p>') + '</p>'
-            : '<p>상세 설명이 없습니다.</p>';
-        }
-
-        // ── 구매 박스 렌더링 ──────────────────────────────────
-        renderBuyBox(p);
+        injectProduct(p);
       })
       .catch(function() {});
   }
@@ -4023,6 +4067,26 @@ const BUY_INTERCEPT_SCRIPT = `
         var tid = li.getAttribute('data-tid');
         if (tid) {
           e.preventDefault(); e.stopPropagation();
+          try {
+            var titleEl = li.querySelector('.kind_title');
+            var priceEl = li.querySelector('.trade_money');
+            var serverEls = li.querySelectorAll('.server li a');
+            var servers = Array.prototype.map.call(serverEls, function(a) { return a.textContent.trim(); });
+            var priceNode = priceEl ? priceEl.firstChild : null;
+            var priceNum = priceNode ? parseInt((priceNode.textContent || '').replace(/[^0-9]/g, ''), 10) || 0 : 0;
+            var card = {
+              id: tid,
+              title: titleEl ? titleEl.textContent.trim() : '',
+              price: priceNum,
+              priceRaw: priceEl ? priceEl.textContent.trim() : '',
+              gameName: servers[0] || '',
+              serverName: servers[1] || '',
+              itemCategory: servers[2] || '',
+              sellerName: '', description: '',
+              _source: 'itemmania'
+            };
+            sessionStorage.setItem('_im_card_' + tid, JSON.stringify(card));
+          } catch(ex) {}
           location.href = '/buy/application.html?id=' + tid;
         }
       }
