@@ -3905,7 +3905,7 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       .then(function(p) {
         if (p.error) return;
 
-        // 제목 업데이트
+        // ── 제목 ─────────────────────────────────────────────
         var titleEl = document.querySelector('.trade_subject');
         if (titleEl) {
           var sig = titleEl.querySelector('.signboard');
@@ -3915,40 +3915,45 @@ const APPLICATION_DYNAMIC_SCRIPT = `
         }
         document.title = p.title + ' - 아이템매니아';
 
-        // 거래 ID 업데이트
+        // ── 거래 ID ──────────────────────────────────────────
         var tidEl = document.querySelector('.trade_id');
-        if (tidEl) tidEl.firstChild.textContent = '#' + p.id + ' ';
+        if (tidEl && tidEl.firstChild && tidEl.firstChild.nodeType === 3) {
+          tidEl.firstChild.textContent = '#' + p.id + ' ';
+        }
 
-        // 가격 업데이트
-        var moneyEl = document.querySelector('dd.trade_money, .trade_money');
+        // ── 가격 (dd.trade_money 전체 교체, 1만당 span 제거) ──
+        var moneyEl = document.querySelector('dd.trade_money');
         if (moneyEl) {
-          var span = moneyEl.querySelector('span');
-          if (span) { span.textContent = fmt(p.price) + '원'; }
-          else { moneyEl.textContent = fmt(p.price) + '원'; }
+          moneyEl.innerHTML = '<strong style="font-size:1.1em">' + fmt(p.price) + '원</strong>';
+        }
+        // 결제 영역의 #trade_money span도 업데이트
+        var tradeMoneySp = document.getElementById('trade_money');
+        if (tradeMoneySp) tradeMoneySp.textContent = fmt(p.price);
+
+        // ── 게임/서버/카테고리 breadcrumb (.kind) ────────────
+        var kindEl = document.querySelector('.kind');
+        if (kindEl) {
+          var crumb = p.gameName || '게임';
+          if (p.serverName) crumb += ' &gt; ' + p.serverName;
+          if (p.itemCategory) crumb += ' &gt; ' + p.itemCategory;
+          kindEl.innerHTML = crumb;
         }
 
-        // 서버 정보
-        var serverLis = document.querySelectorAll('ul.server li');
-        if (serverLis.length >= 1 && p.gameName) {
-          var a = serverLis[0].querySelector('a');
-          if (a) a.textContent = p.gameName; else serverLis[0].textContent = p.gameName;
-        }
-        if (serverLis.length >= 2 && p.serverName) {
-          var a2 = serverLis[1].querySelector('a');
-          if (a2) a2.textContent = p.serverName; else serverLis[1].textContent = p.serverName;
+        // ── 판매자명 ─────────────────────────────────────────
+        if (p.sellerName) {
+          var sellerEl = document.querySelector('.user_nick, .vip_txt, .user_info strong');
+          if (sellerEl) sellerEl.textContent = p.sellerName;
         }
 
-        // 판매자명
-        var sellerEl = document.querySelector('.user_nick, strong.vip_txt, .user_info strong');
-        if (sellerEl && p.sellerName) sellerEl.textContent = p.sellerName;
-
-        // 설명
+        // ── 상세 설명 ─────────────────────────────────────────
         var descEl = document.querySelector('.ql-editor.detail_text');
-        if (descEl && p.description) {
-          descEl.innerHTML = '<p>' + p.description.replace(/\n/g, '</p><p>') + '</p>';
+        if (descEl) {
+          descEl.innerHTML = p.description
+            ? '<p>' + p.description.replace(/\\n/g, '</p><p>') + '</p>'
+            : '<p>상세 설명이 없습니다.</p>';
         }
 
-        // 구매 박스 렌더링
+        // ── 구매 박스 렌더링 ──────────────────────────────────
         renderBuyBox(p);
       })
       .catch(function() {});
