@@ -2266,6 +2266,28 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
 #reg_gameserver .initial_screen,
 #reg_gameserver .search-select{display:none!important}
 
+/* ─── gs_list 3열 레이아웃 (buy-register에는 sell CSS 없으므로 직접 정의) ─ */
+#reg_gameserver .g_search_frame_wrapper{overflow:visible!important;height:auto!important}
+#reg_gameserver .gs_list{
+  display:flex!important;height:180px!important;overflow:hidden!important;
+  border:1px solid #ddd!important;border-top:none!important;background:#fff!important;
+}
+#reg_gameserver .gs_list>div{
+  flex:1!important;height:100%!important;overflow-y:auto!important;display:block!important;
+  border-right:1px solid #e8e8e8!important;box-sizing:border-box!important;
+}
+#reg_gameserver .gs_list>div:last-child{border-right:none!important}
+#reg_gameserver .gs_list ul{list-style:none!important;margin:0!important;padding:0!important}
+#reg_gameserver .gs_list li{
+  padding:7px 12px!important;cursor:pointer!important;font-size:13px!important;
+  line-height:1.4!important;color:#333!important;white-space:nowrap!important;
+  overflow:hidden!important;text-overflow:ellipsis!important;
+}
+#reg_gameserver .gs_list li:hover,
+#reg_gameserver .gs_list li.sel_on{
+  background:#e8f4ff!important;color:#0070d2!important;font-weight:600!important;
+}
+
 /* ─── 구매 물품등록정보 팝업 오버레이 ─────────────── */
 #dvPopup{
   position:fixed!important;inset:0!important;z-index:10000!important;
@@ -2431,13 +2453,22 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       if (useCustom && dd) { dd.style.display = \'block\'; }
       else if (frame) {
         frame.classList.remove(\'g_hidden\');
-        frame.style.height = \'auto\';
-        frame.style.overflow = \'visible\';
+        frame.classList.remove(\'sf-hidden\');
+        frame.style.setProperty(\'display\',\'block\',\'important\');
+        frame.style.setProperty(\'height\',\'auto\',\'important\');
+        frame.style.setProperty(\'overflow\',\'visible\',\'important\');
+        frame.style.setProperty(\'visibility\',\'visible\',\'important\');
         var fw = frame.querySelector(\'.g_search_frame_wrapper\');
-        if (fw) fw.style.height = \'auto\';
+        if (fw) {
+          fw.style.setProperty(\'height\',\'auto\',\'important\');
+          fw.style.setProperty(\'overflow\',\'visible\',\'important\');
+        }
         var gl = frame.querySelector(\'.gs_list\');
-        if (gl) { gl.style.minHeight = \'180px\'; gl.style.height = \'180px\'; }
-        // initial_screen / search-select 강제 숨김 (스냅샷 JS 간섭 방지)
+        if (gl) {
+          gl.style.setProperty(\'display\',\'flex\',\'important\');
+          gl.style.setProperty(\'height\',\'180px\',\'important\');
+          gl.style.setProperty(\'min-height\',\'180px\',\'important\');
+        }
         var is2 = frame.querySelector(\'.initial_screen\');
         if (is2) is2.style.setProperty(\'display\',\'none\',\'important\');
         var ss2 = frame.querySelector(\'.search-select\');
@@ -2448,12 +2479,14 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       if (useCustom && dd) { dd.style.display = \'none\'; }
       else if (frame) {
         frame.classList.add(\'g_hidden\');
-        frame.style.height = \'\';
-        frame.style.overflow = \'\';
+        frame.style.removeProperty(\'display\');
+        frame.style.removeProperty(\'height\');
+        frame.style.removeProperty(\'overflow\');
+        frame.style.removeProperty(\'visibility\');
         var fw = frame.querySelector(\'.g_search_frame_wrapper\');
-        if (fw) fw.style.height = \'\';
+        if (fw) { fw.style.removeProperty(\'height\'); fw.style.removeProperty(\'overflow\'); }
         var gl = frame.querySelector(\'.gs_list\');
-        if (gl) { gl.style.minHeight = \'\'; gl.style.height = \'\'; }
+        if (gl) { gl.style.removeProperty(\'display\'); gl.style.removeProperty(\'height\'); gl.style.removeProperty(\'min-height\'); }
       }
     }
     function dropContains(el) {
@@ -2534,7 +2567,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
           if (sidx === 0) {
             li.classList.add(\'sel_on\');
             window._IM_sel_server = s;
-            inp.value = g.name + \' (\' + s.name + \')\';
+            // 자동완성 제거 — 클릭할 때만 inp.value 변경
           }
           li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
           li.addEventListener(\'click\', function() {
@@ -2542,11 +2575,10 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             li.classList.add(\'sel_on\');
             window._IM_sel_server = s;
             inp.value = g.name + \' (\' + s.name + \')\';
+            hideDrop();
           });
           serverUl.appendChild(li);
         });
-      } else {
-        inp.value = g.name;
       }
     }
 
