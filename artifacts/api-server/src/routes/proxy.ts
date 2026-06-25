@@ -1339,10 +1339,43 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     if (diff < 86400) return Math.floor(diff/3600) + '시간 전';
     return (dt.getMonth()+1) + '/' + dt.getDate();
   }
+  // 아이템매니아 시간 텍스트 → timestamp(ms) 파싱
+  function parseTimeText(txt) {
+    if (!txt) return 0;
+    txt = txt.trim();
+    var now = Date.now();
+    var m;
+    if ((m = txt.match(/^(\\d+)초\\s*전$/))) return now - parseInt(m[1]) * 1000;
+    if ((m = txt.match(/^(\\d+)분\\s*전$/))) return now - parseInt(m[1]) * 60000;
+    if ((m = txt.match(/^(\\d+)시간\\s*전$/))) return now - parseInt(m[1]) * 3600000;
+    if ((m = txt.match(/^(\\d{1,2}):(\\d{2})$/))) {
+      var d = new Date(); d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
+      if (d.getTime() > now) d.setDate(d.getDate() - 1);
+      return d.getTime();
+    }
+    if ((m = txt.match(/^(\\d{1,2})\\/(\\d{1,2})$/))) {
+      var d2 = new Date(); d2.setMonth(parseInt(m[1])-1, parseInt(m[2])); d2.setHours(0,0,0,0);
+      if (d2.getTime() > now) d2.setFullYear(d2.getFullYear() - 1);
+      return d2.getTime();
+    }
+    return 0;
+  }
+
+  // 아이템매니아 DOM li 요소에서 timestamp 추출
+  function getItemTs(el) {
+    var ts = el.getAttribute('data-ts');
+    if (ts) return parseInt(ts);
+    var dateEl = el.querySelector('.col.reg_date, .reg_date');
+    var t = parseTimeText(dateEl ? dateEl.textContent : '');
+    el.setAttribute('data-ts', String(t));
+    return t;
+  }
+
   function makeCard(p, type) {
     var li = document.createElement('li');
     li.className = 'list_item';
     li.setAttribute('data-tid', String(p.id));
+    li.setAttribute('data-ts', String(p.createdAt ? new Date(p.createdAt).getTime() : 0));
     var href = '/' + type + '/application.html?id=' + p.id;
     li.innerHTML =
       '<div class="col info"><span class="credit_mark_new regular"></span></div>' +
@@ -1532,23 +1565,16 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         // ── 우리 DB 상품 카드 생성 ────────────────────────────────
         var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
 
-        // ── 두 리스트를 비율에 맞게 균등하게 섞기 ────────────────
-        var merged = [];
-        if (ourEls.length === 0) {
-          merged = origNormalItems.slice();
-        } else if (origNormalItems.length === 0) {
-          merged = ourEls;
-        } else {
-          var total = ourEls.length + origNormalItems.length;
-          var oi = 0, si = 0;
-          for (var mi = 0; mi < total; mi++) {
-            var insertOurs = si < ourEls.length && (oi >= origNormalItems.length ||
-              (si / ourEls.length) <= (mi / total));
-            if (insertOurs) { merged.push(ourEls[si++]); }
-            else { merged.push(origNormalItems[oi++]); }
-          }
-        }
-        merged.forEach(function(el) { normalList.appendChild(el); });
+        // ── 업로드 시간순 병합 (최신 순) ──────────────────────────
+        // 아이템매니아 항목에 timestamp 추출해서 data-ts 설정
+        origNormalItems.forEach(function(el) { getItemTs(el); });
+
+        var all = ourEls.concat(origNormalItems);
+        all.sort(function(a, b) {
+          return (parseInt(b.getAttribute('data-ts') || '0') || 0)
+               - (parseInt(a.getAttribute('data-ts') || '0') || 0);
+        });
+        all.forEach(function(el) { normalList.appendChild(el); });
 
         // 둘 다 없으면 안내 메시지
         if (items.length === 0 && origNormalCount === 0) {
