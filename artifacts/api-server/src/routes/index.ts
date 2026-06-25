@@ -7,6 +7,7 @@ import chatRouter from "./chat";
 import productsRouter from "./products";
 import adminRouter from "./admin";
 import gamesRouter from "./games";
+import eventsRouter from "./events";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(chatRouter);
 router.use(productsRouter);
 router.use(adminRouter);
 router.use(gamesRouter);
+router.use(eventsRouter);
 
 export default router;

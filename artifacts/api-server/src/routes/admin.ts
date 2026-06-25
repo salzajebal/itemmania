@@ -3,6 +3,7 @@ import { eq, sql, desc } from "drizzle-orm";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
+import { pushToUser } from "../lib/sse";
 
 const router: IRouter = Router();
 
@@ -166,6 +167,32 @@ router.put("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promi
     .returning({ id: usersTable.id });
   if (!updated) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
   res.json(authStates);
+});
+
+// 마일리지(잔액) 수정
+router.patch("/admin/users/:id/balance", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
+
+  const { amount, mode } = req.body as { amount: number; mode: "add" | "set" };
+  const amt = Number(amount);
+  if (isNaN(amt) || !["add", "set"].includes(mode)) {
+    res.status(400).json({ error: "amount(숫자)와 mode(add|set)가 필요합니다." }); return;
+  }
+
+  const [existing] = await db.select().from(walletsTable).where(eq(walletsTable.userId, id));
+  let newBalance: number;
+  if (!existing) {
+    newBalance = Math.max(0, mode === "add" ? amt : amt);
+    await db.insert(walletsTable).values({ userId: id, balance: newBalance });
+  } else {
+    const current = Number(existing.balance);
+    newBalance = Math.max(0, mode === "add" ? current + amt : amt);
+    await db.update(walletsTable).set({ balance: newBalance }).where(eq(walletsTable.userId, id));
+  }
+
+  pushToUser(id, "balance", { balance: newBalance });
+  res.json({ balance: newBalance });
 });
 
 // 회원 삭제

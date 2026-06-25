@@ -1195,17 +1195,42 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
   }
 }
 
+const BALANCE_SSE_SCRIPT = `<script>
+(function(){
+  if(typeof EventSource==='undefined')return;
+  var es=new EventSource('/api/events');
+  var connected=false;
+  es.addEventListener('connected',function(){connected=true;});
+  es.addEventListener('error',function(){if(!connected)es.close();});
+  es.addEventListener('balance',function(e){
+    try{
+      var d=JSON.parse(e.data);
+      var b=Number(d.balance||0);
+      var txt=b.toLocaleString('ko-KR')+'원';
+      var els=document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]');
+      for(var i=0;i<els.length;i++)els[i].textContent=txt;
+    }catch(ex){}
+  });
+})();
+</script>`;
+
 function prepare(html: string, user: Record<string, unknown> | null = null): string {
   const clean = rewriteExternalLinks(stripCsp(html));
   const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
   // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
+  let result: string;
   if (clean.includes("<head>")) {
-    return clean.replace("<head>", "<head>" + headInject);
+    result = clean.replace("<head>", "<head>" + headInject);
+  } else if (clean.includes("<head ")) {
+    result = clean.replace(/<head [^>]*>/, (m) => m + headInject);
+  } else {
+    result = headInject + clean;
   }
-  if (clean.includes("<head ")) {
-    return clean.replace(/<head [^>]*>/, (m) => m + headInject);
+  // SSE 마일리지 실시간 업데이트 스크립트 (로그인 유저 전용, </body> 직전)
+  if (result.includes("</body>")) {
+    return result.replace("</body>", BALANCE_SSE_SCRIPT + "</body>");
   }
-  return headInject + clean;
+  return result + BALANCE_SSE_SCRIPT;
 }
 
 function serveItemmania(html: string, user: Record<string, unknown> | null = null): string {

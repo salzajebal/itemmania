@@ -212,6 +212,27 @@ tbody tr:hover{background:#fafbff}
   </div>
 </div>
 
+<!-- 마일리지 모달 -->
+<div class="modal-overlay" id="balanceModal" onclick="if(event.target===this)closeBalanceModal()">
+  <div class="modal" style="width:380px">
+    <h2>💰 마일리지 수정</h2>
+    <p id="balanceModalNick" style="font-size:14px;color:#555;margin-bottom:16px"></p>
+    <label>현재 잔액</label>
+    <div id="balanceCurrent" style="font-size:20px;font-weight:700;color:#159EFD;margin-bottom:4px">-</div>
+    <label style="margin-top:16px">처리 방식</label>
+    <select id="balanceMode" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none;margin-bottom:0">
+      <option value="add">추가 (현재 잔액에 더하기)</option>
+      <option value="set">설정 (금액으로 직접 설정)</option>
+    </select>
+    <label>금액 (원)</label>
+    <input type="number" id="balanceAmount" placeholder="예: 10000" min="0" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none">
+    <div class="modal-btns">
+      <button class="cancel-btn" onclick="closeBalanceModal()">취소</button>
+      <button class="save-btn" id="balanceSaveBtn" onclick="saveBalance()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 상품 등록/수정 모달 -->
 <div class="modal-overlay" id="productModal" onclick="if(event.target===this)closeProductModal()">
   <div class="modal">
@@ -455,15 +476,16 @@ async function loadUsers(){
         ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
         :'-';
       var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증 관리</button>';
-      return '<tr>'
+      var milBtn='<button class="action-btn edit" onclick="openBalanceModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+','+(u.balance||0)+')">💰 마일리지</button>';
+      return '<tr id="user-row-'+u.id+'">'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
         +'<td>'+escHtml(u.nickname||'-')+'</td>'
         +'<td>'+escHtml(u.phone||'-')+'</td>'
         +'<td><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
-        +'<td>'+fmtMoney(u.balance)+'</td>'
+        +'<td id="user-bal-'+u.id+'">'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
-        +'<td>'+authBtn+'</td>'
+        +'<td>'+milBtn+authBtn+'</td>'
         +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
@@ -605,6 +627,50 @@ async function processWd(id,status){
     showToast(status==='approved'?'✅ 출금 승인 완료':'❌ 출금 거절 완료');
     loadWithdrawals();
   }catch(e){showToast('서버 오류');btns.forEach(function(b){b.disabled=false;});}
+}
+
+// ── 마일리지 ───────────────────────────────────────────────
+var balanceModalUserId=null;
+
+function openBalanceModal(id,nickname,current){
+  balanceModalUserId=id;
+  document.getElementById('balanceModalNick').textContent=nickname+' 님의 마일리지';
+  document.getElementById('balanceCurrent').textContent=fmtMoney(current);
+  document.getElementById('balanceMode').value='add';
+  document.getElementById('balanceAmount').value='';
+  document.getElementById('balanceModal').classList.add('open');
+  setTimeout(function(){document.getElementById('balanceAmount').focus();},100);
+}
+
+function closeBalanceModal(){
+  document.getElementById('balanceModal').classList.remove('open');
+  balanceModalUserId=null;
+}
+
+async function saveBalance(){
+  if(!balanceModalUserId)return;
+  var btn=document.getElementById('balanceSaveBtn');
+  var amount=parseInt(document.getElementById('balanceAmount').value,10);
+  var mode=document.getElementById('balanceMode').value;
+  if(isNaN(amount)||amount<0){showToast('금액을 올바르게 입력하세요');return;}
+  btn.disabled=true;
+  try{
+    var r=await fetch('/api/admin/users/'+balanceModalUserId+'/balance',{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({amount,mode})
+    });
+    var d=await r.json();
+    if(!r.ok){showToast('오류: '+(d.error||'저장 실패'));btn.disabled=false;return;}
+    var modeLabel=mode==='add'?'추가':'설정';
+    showToast('✅ 마일리지 '+modeLabel+' 완료: '+fmtMoney(d.balance));
+    // 테이블 행의 잔액 셀 즉시 업데이트
+    var balCell=document.getElementById('user-bal-'+balanceModalUserId);
+    if(balCell)balCell.textContent=fmtMoney(d.balance);
+    document.getElementById('balanceCurrent').textContent=fmtMoney(d.balance);
+    closeBalanceModal();
+  }catch(e){showToast('서버 오류');btn.disabled=false;}
 }
 
 function showToast(msg){
