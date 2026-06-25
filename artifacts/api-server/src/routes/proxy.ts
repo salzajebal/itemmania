@@ -4558,6 +4558,29 @@ const CHAT_INTERCEPT_SCRIPT = `
     window.open(url, '_chat_' + roomId, 'width=900,height=700,resizable=yes,scrollbars=yes');
   }
 
+  /* chat_sub_list 열기/닫기 — li.expanded 클래스로 상태 추적 */
+  function toggleSubList(li) {
+    var sub = li.querySelector('.chat_sub_list');
+    if (!sub) return;
+    if (li.classList.contains('expanded')) {
+      li.classList.remove('expanded');
+      sub.style.height = '0';
+    } else {
+      li.classList.add('expanded');
+      /* scrollHeight 측정: 잠깐 auto 세팅 후 즉시 0으로 리셋 → rAF에서 목표값 세팅 */
+      sub.style.transition = 'none';
+      sub.style.height = 'auto';
+      var h = sub.scrollHeight;
+      sub.style.height = '0';
+      sub.style.transition = '';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          sub.style.height = h + 'px';
+        });
+      });
+    }
+  }
+
   function buildItem(r) {
     var isBuyer = r.buyerId === myId;
     var typeClass = isBuyer ? 'buy' : 'sell';
@@ -4570,6 +4593,21 @@ const CHAT_INTERCEPT_SCRIPT = `
     var productTitle = r.productTitle || '상품 문의';
     var price = r.productPrice ? Number(r.productPrice).toLocaleString() + '원' : '-';
     var roomIdStr = String(r.id);
+    var lastMsg = r.lastMessage || '';
+    var lastTime = fmtTime(r.lastMessageAt || r.createdAt);
+
+    /* ─── 서브 리스트 아이템 HTML (Re: 마지막메시지 + 타임스탬프 + 채팅하기) ─── */
+    var subItemHtml =
+      '<li class="chat_list_item" style="cursor:pointer;background:#fafbff" data-sub-room="' + roomIdStr + '">' +
+        '<div class=chat_info_area>' +
+          '<div class="subject reply">' + esc(lastMsg || '새 채팅을 시작하세요') + '</div>' +
+          '<div class=sub_info>' + lastTime + '</div>' +
+        '</div>' +
+        '<div class=chat_user><span>1:1</span>&nbsp;채팅</div>' +
+        '<div class=chat_proc>' +
+          '<button type=button class=chat_exit data-roomid="' + roomIdStr + '">채팅종료</button>' +
+        '</div>' +
+      '</li>';
 
     var li = document.createElement('li');
     li.className = 'chat_list_item';
@@ -4594,22 +4632,46 @@ const CHAT_INTERCEPT_SCRIPT = `
       '<div class=chat_proc>' +
         '<button type=button class=chat_exit data-roomid="' + roomIdStr + '">채팅종료</button>' +
       '</div>' +
-      '<div class=chat_sub_list></div>';
+      '<div class=chat_sub_list><ul style="margin:0;padding:0;list-style:none">' + subItemHtml + '</ul></div>';
 
-    li.querySelector('.chat_exit').addEventListener('click', function(e) {
+    /* 서브 아이템 클릭 → 팝업 */
+    li.querySelector('[data-sub-room]').addEventListener('click', function(e) {
+      if (e.target.classList.contains('chat_exit')) return;
       e.stopPropagation();
-      if (confirm('채팅을 종료하시겠습니까?')) {
-        fetch('/api/chat/rooms/' + r.id, {
-          method: 'PATCH', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'ended' })
-        }).then(function() { location.reload(); });
-      }
+      openChat(r.id, isBuyer);
     });
 
+    /* 채팅종료 버튼들 */
+    li.querySelectorAll('.chat_exit').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (confirm('채팅을 종료하시겠습니까?')) {
+          fetch('/api/chat/rooms/' + r.id, {
+            method: 'PATCH', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'ended' })
+          }).then(function() { location.reload(); });
+        }
+      });
+    });
+
+    /* 그룹보기 버튼 → 펼치기/접기 */
+    li.querySelector('.chat_group_expand').addEventListener('click', function(e) {
+      e.stopPropagation();
+      toggleSubList(li);
+    });
+
+    /* chat_sub_list 클릭이 부모 li 로 버블링되지 않도록 차단 */
+    var subDiv = li.querySelector('.chat_sub_list');
+    if (subDiv) {
+      subDiv.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
+
+    /* 메인 아이템 클릭 (chat_group, chat_info_area 등) → 펼치기/접기 */
     li.addEventListener('click', function(e) {
-      if (e.target.classList.contains('chat_group_expand') || e.target.classList.contains('chat_exit')) return;
-      openChat(r.id, isBuyer);
+      var tgt = e.target;
+      if (tgt.classList.contains('chat_exit') || tgt.classList.contains('chat_group_expand')) return;
+      toggleSubList(li);
     });
 
     return li;
