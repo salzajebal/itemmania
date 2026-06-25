@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, productsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -4839,7 +4839,40 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     }
   }
 
+  // snapshot JS가 DOM을 덮어쓸 때 즉시 재주입 (MutationObserver + retry)
+  function runInject(p) {
+    injectProduct(p);
+
+    // 주요 요소를 감시하다가 snapshot JS가 바꾸면 즉시 재주입
+    var watchRoot = document.querySelector('.trade_area, .g_body_wrap, main, body');
+    if (watchRoot) {
+      var busy = false;
+      var observer = new MutationObserver(function() {
+        if (busy) return;
+        busy = true;
+        // disconnect 후 재주입 → 다시 연결 (무한루프 방지)
+        observer.disconnect();
+        injectProduct(p);
+        setTimeout(function() {
+          busy = false;
+          if (watchRoot) observer.observe(watchRoot, { childList: true, subtree: true, characterData: true });
+        }, 120);
+      });
+      observer.observe(watchRoot, { childList: true, subtree: true, characterData: true });
+      // 12초 후 해제
+      setTimeout(function() { observer.disconnect(); }, 12000);
+    }
+
+    // 초기 타이밍 보장용 retry
+    [400, 1200, 3000, 6000].forEach(function(ms) {
+      setTimeout(function() { injectProduct(p); }, ms);
+    });
+  }
+
   function loadProduct() {
+    // 서버에서 미리 주입된 데이터 우선 사용 (race condition 없음)
+    if (window.__PRODUCT__) { runInject(window.__PRODUCT__); return; }
+
     fetch('/api/products/' + productId, { credentials: 'include' })
       .then(function(r) {
         // HTTP 에러(404/500 등)도 error 객체로 통일
@@ -4851,10 +4884,10 @@ const APPLICATION_DYNAMIC_SCRIPT = `
           // DB에 없는 상품 → sessionStorage 폴백 (아이템마니아 상품)
           var stored = null;
           try { stored = JSON.parse(sessionStorage.getItem('_im_card_' + productId) || 'null'); } catch(ex) {}
-          if (stored) { injectProduct(stored); }
+          if (stored) { runInject(stored); }
           return;
         }
-        injectProduct(p);
+        runInject(p);
       })
       .catch(function() {});
   }
@@ -5101,8 +5134,14 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
 </script>
 `;
 
-function serveBuyApplication(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+function serveBuyApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null): string {
+  let result = prepare(html, user);
+  if (product) {
+    const ps = buildProductScript(product);
+    result = result.includes("<head>")
+      ? result.replace("<head>", "<head>" + ps)
+      : result.replace("<body", ps + "<body");
+  }
   const combined = BUY_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   return result.includes("</body>")
     ? result.replace("</body>", combined + "</body>")
@@ -5117,8 +5156,70 @@ function serveBuy(html: string, user: Record<string, unknown> | null = null): st
     : result + combined;
 }
 
-function serveApplication(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * 스냅샷 HTML에 하드코딩된 상품 데이터를 DB 상품 데이터로 서버 사이드 교체.
+ * JavaScript 실행 타이밍 경쟁 없이 HTML 자체가 올바른 데이터를 갖게 됨.
+ */
+function applyProductToHtml(html: string, p: Record<string, unknown>): string {
+  let r = html;
+  const title = escHtml(String(p.title || ''));
+  const price = Number(p.price || 0).toLocaleString('ko-KR');
+
+  // 1. <title> 태그
+  r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
+
+  // 2. .trade_subject 내 제목 텍스트 (signboard span 이후 텍스트 노드 교체)
+  r = r.replace(
+    /(<div class=trade_subject>[\s\S]*?<span class=signboard>[^<]*<\/span>[^<]*)OOOOO[^\n]*OOOOO\s*/,
+    `$1${title} `
+  );
+
+  // 3. span#trade_money (총 거래가)
+  r = r.replace(/<span id=trade_money>[^<]*<\/span>/, `<span id=trade_money>${price}</span>`);
+
+  // 4. dd.trade_money (단가 표시 → 총 가격으로 교체)
+  r = r.replace(
+    /(<dd class=trade_money>)[\s\S]*?(<\/dd>)/,
+    `$1<strong style="font-size:1.1em">${price}원</strong>$2`
+  );
+
+  // 5. 설명 (ql-editor detail_text 내부)
+  const desc = p.description
+    ? `<p>${escHtml(String(p.description)).replace(/\n/g, '</p><p>')}</p>`
+    : '<p>상세 설명이 없습니다.</p>';
+  r = r.replace(
+    /(<div class="ql-editor detail_text">)[\s\S]*?(<\/div>)/,
+    `$1${desc}$2`
+  );
+
+  // 6. breadcrumb (.kind)
+  let crumb = escHtml(String(p.gameName || '게임'));
+  if (p.serverName) crumb += ' &gt; ' + escHtml(String(p.serverName));
+  if (p.itemCategory) crumb += ' &gt; ' + escHtml(String(p.itemCategory));
+  r = r.replace(/(<div class=kind>)[\s\S]*?(<\/div>)/, `$1${crumb}$2`);
+
+  return r;
+}
+
+function buildProductScript(product: Record<string, unknown>): string {
+  return `<script>window.__PRODUCT__ = ${JSON.stringify(product)};</script>`;
+}
+
+function serveApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null): string {
+  let result = prepare(html, user);
+  if (product) {
+    // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체
+    result = applyProductToHtml(result, product);
+    // window.__PRODUCT__ 주입 (클라이언트 JS 구매 박스용)
+    const ps = buildProductScript(product);
+    result = result.includes("<head>")
+      ? result.replace("<head>", "<head>" + ps)
+      : result.replace("<body", ps + "<body");
+  }
   const combined = SELL_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   if (result.includes("</body>")) {
     return result.replace("</body>", combined + "</body>");
@@ -5749,7 +5850,22 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-cache");
   const user = await getSessionUser(req);
 
-  res.send(serveApplication(sellApplicationHtml, user));
+  // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
+  let product: Record<string, unknown> | null = null;
+  const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+  const productId = parseInt(String(rawId ?? ""), 10);
+  if (!isNaN(productId) && productId > 0) {
+    const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+    if (p) {
+      product = {
+        id: p.id, title: p.title, price: Number(p.price),
+        gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
+        sellerName: p.sellerName, description: p.description, sellerId: p.sellerId, status: p.status,
+      };
+    }
+  }
+
+  res.send(serveApplication(sellApplicationHtml, user, product));
 });
 
 // 삽니다 상세 페이지 (/buy/application.html?id=...)
@@ -5762,7 +5878,22 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-cache");
   const user = await getSessionUser(req);
 
-  res.send(serveBuyApplication(buyApplicationHtml, user));
+  // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
+  let product: Record<string, unknown> | null = null;
+  const rawIdB = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
+  const productIdB = parseInt(String(rawIdB ?? ""), 10);
+  if (!isNaN(productIdB) && productIdB > 0) {
+    const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productIdB));
+    if (p) {
+      product = {
+        id: p.id, title: p.title, price: Number(p.price),
+        gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
+        sellerName: p.sellerName, description: p.description, sellerId: p.sellerId, status: p.status,
+      };
+    }
+  }
+
+  res.send(serveBuyApplication(buyApplicationHtml, user, product));
 });
 
 
