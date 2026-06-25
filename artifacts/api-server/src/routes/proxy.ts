@@ -4596,14 +4596,19 @@ const CHAT_INTERCEPT_SCRIPT = `
     var lastMsg = r.lastMessage || '';
     var lastTime = fmtTime(r.lastMessageAt || r.createdAt);
 
-    /* ─── 서브 리스트 아이템 HTML (Re: 마지막메시지 + 타임스탬프 + 채팅하기) ─── */
+    /* ─── 서브 리스트 아이템: 원본 chat_list_item flex 구조 완전 일치 ─── */
+    /* .chat_group(67px) + .chat_info_area(flex:1) + .chat_user(110px) + .dt(120px) + .chat_proc(124px) */
     var subItemHtml =
-      '<li class="chat_list_item" style="cursor:pointer;background:#fafbff" data-sub-room="' + roomIdStr + '">' +
+      '<li class="chat_list_item" style="cursor:pointer" data-sub-room="' + roomIdStr + '">' +
+        '<div class=chat_group>' +
+          '<div class="trade_type ' + typeClass + '"></div>' +
+        '</div>' +
         '<div class=chat_info_area>' +
           '<div class="subject reply">' + esc(lastMsg || '새 채팅을 시작하세요') + '</div>' +
-          '<div class=sub_info>' + lastTime + '</div>' +
+          '<div class=sub_info>' + esc(partnerName) + '</div>' +
         '</div>' +
         '<div class=chat_user><span>1:1</span>&nbsp;채팅</div>' +
+        '<div class=dt>' + lastTime + '</div>' +
         '<div class=chat_proc>' +
           '<button type=button class=chat_exit data-roomid="' + roomIdStr + '">채팅종료</button>' +
         '</div>' +
@@ -4611,6 +4616,10 @@ const CHAT_INTERCEPT_SCRIPT = `
 
     var li = document.createElement('li');
     li.className = 'chat_list_item';
+    /* 거래종료/취소/불가 → state_block 클래스 (회색 오버레이) */
+    if (stateKey === 'ended' || stateKey === 'cancelled' || stateKey === 'rejected') {
+      li.classList.add('state_block');
+    }
     li.setAttribute('data-expand', roomIdStr);
     li.setAttribute('data-type', typeClass);
     li.setAttribute('data-state', stateFilter);
