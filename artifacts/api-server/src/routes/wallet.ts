@@ -1,12 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db, walletsTable, withdrawalsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 
 const router: IRouter = Router();
 
-// 수단별 수수료 (서버 측 계산)
 const FEE_RATES: Record<string, { rate: number; flat: number; min: number }> = {
   kakaopay:    { rate: 0.055, flat: 0,    min: 0 },
   naverpay:    { rate: 0.055, flat: 0,    min: 0 },
@@ -62,23 +61,37 @@ router.post("/wallet/charge", requireAuth, async (req, res): Promise<void> => {
     .returning();
 
   const newBalance = Number(updated.balance);
-
-  // SSE로 마이룸/다른 탭에도 즉시 반영
   pushToUser(req.session.userId!, "balance", { balance: newBalance });
 
   res.json({ id: updated.id, userId: updated.userId, balance: newBalance, updatedAt: updated.updatedAt });
 });
 
 router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => {
-  const { amount, bankName, accountNumber, accountHolder } = req.body;
+  const { amount, method = "bank", bankName, accountNumber, accountHolder, phoneNumber } = req.body;
   const amountNum = Number(amount);
 
   if (!amountNum || amountNum < 1000) {
     res.status(400).json({ error: "최소 출금금액은 1,000원입니다." });
     return;
   }
-  if (!bankName || !accountNumber || !accountHolder) {
-    res.status(400).json({ error: "은행명, 계좌번호, 예금주는 필수입니다." });
+
+  if (method === "bank") {
+    if (!bankName || !accountNumber || !accountHolder) {
+      res.status(400).json({ error: "은행명, 계좌번호, 예금주는 필수입니다." });
+      return;
+    }
+  } else if (method === "phone") {
+    if (!phoneNumber) {
+      res.status(400).json({ error: "휴대폰번호는 필수입니다." });
+      return;
+    }
+    const phoneClean = String(phoneNumber).replace(/\D/g, "");
+    if (phoneClean.length < 10 || phoneClean.length > 11) {
+      res.status(400).json({ error: "올바른 휴대폰번호를 입력해주세요." });
+      return;
+    }
+  } else {
+    res.status(400).json({ error: "출금 방법이 올바르지 않습니다." });
     return;
   }
 
@@ -99,30 +112,109 @@ router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => 
       throw new Error("잔액 부족");
     }
 
-    const [withdrawal] = await tx.insert(withdrawalsTable).values({
-      userId: req.session.userId!,
-      amount: amountNum,
-      bankName,
-      accountNumber,
-      accountHolder,
-      status: "pending",
-    }).returning();
-
-    return withdrawal;
+    const [withdrawal] = await tx.insert(withdrawalsTable).values(
+      method === "bank"
+        ? { userId: req.session.userId!, amount: amountNum, method: "bank" as const, bankName, accountNumber, accountHolder, status: "pending" as const }
+        : { userId: req.session.userId!, amount: amountNum, method: "phone" as const, phoneNumber: String(phoneNumber).replace(/\D/g, ""), status: "pending" as const }
+    ).returning();
+    return { withdrawal, newBalance: Number(updated.balance) };
   });
+
+  pushToUser(req.session.userId!, "balance", { balance: result.newBalance });
 
   res.status(201).json({
-    id: result.id,
-    userId: result.userId,
-    amount: Number(result.amount),
-    bankName: result.bankName,
-    accountNumber: result.accountNumber,
-    accountHolder: result.accountHolder,
-    status: result.status,
-    adminNote: result.adminNote,
-    processedAt: result.processedAt,
-    createdAt: result.createdAt,
+    id: result.withdrawal.id,
+    userId: result.withdrawal.userId,
+    amount: Number(result.withdrawal.amount),
+    method: result.withdrawal.method,
+    bankName: result.withdrawal.bankName,
+    accountNumber: result.withdrawal.accountNumber,
+    accountHolder: result.withdrawal.accountHolder,
+    phoneNumber: result.withdrawal.phoneNumber,
+    status: result.withdrawal.status,
+    adminNote: result.withdrawal.adminNote,
+    processedAt: result.withdrawal.processedAt,
+    createdAt: result.withdrawal.createdAt,
   });
+});
+
+router.get("/wallet/withdrawals", requireAuth, async (req, res): Promise<void> => {
+  const method = req.query.method as string | undefined;
+
+  let query = db
+    .select()
+    .from(withdrawalsTable)
+    .where(eq(withdrawalsTable.userId, req.session.userId!))
+    .$dynamic();
+
+  if (method === "bank" || method === "phone") {
+    query = query.where(
+      and(
+        eq(withdrawalsTable.userId, req.session.userId!),
+        eq(withdrawalsTable.method, method)
+      )
+    );
+  }
+
+  const withdrawals = await query.orderBy(desc(withdrawalsTable.createdAt));
+
+  res.json(
+    withdrawals.map((w) => ({
+      id: w.id,
+      amount: Number(w.amount),
+      method: w.method,
+      bankName: w.bankName,
+      accountNumber: w.accountNumber,
+      accountHolder: w.accountHolder,
+      phoneNumber: w.phoneNumber,
+      status: w.status,
+      adminNote: w.adminNote,
+      processedAt: w.processedAt,
+      createdAt: w.createdAt,
+    }))
+  );
+});
+
+router.delete("/wallet/withdrawals/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "잘못된 출금 ID입니다." });
+    return;
+  }
+
+  const [withdrawal] = await db
+    .select()
+    .from(withdrawalsTable)
+    .where(and(eq(withdrawalsTable.id, id), eq(withdrawalsTable.userId, req.session.userId!)));
+
+  if (!withdrawal) {
+    res.status(404).json({ error: "출금 내역을 찾을 수 없습니다." });
+    return;
+  }
+
+  if (withdrawal.status !== "pending") {
+    res.status(400).json({ error: "처리 중이거나 완료된 출금은 취소할 수 없습니다." });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(withdrawalsTable)
+      .set({ status: "rejected", adminNote: "사용자가 취소함" })
+      .where(eq(withdrawalsTable.id, id));
+
+    await tx
+      .update(walletsTable)
+      .set({ balance: sql`${walletsTable.balance} + ${Number(withdrawal.amount)}` })
+      .where(eq(walletsTable.userId, req.session.userId!));
+  });
+
+  const [updatedWallet] = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.session.userId!));
+  if (updatedWallet) {
+    pushToUser(req.session.userId!, "balance", { balance: Number(updatedWallet.balance) });
+  }
+
+  res.json({ ok: true, message: "출금이 취소되었습니다." });
 });
 
 export default router;

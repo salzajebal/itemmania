@@ -600,12 +600,15 @@ async function loadWithdrawals(){
         ?'<button class="action-btn approve" onclick="processWd('+w.id+',\\'approved\\')">승인</button>'
           +'<button class="action-btn reject" onclick="processWd('+w.id+',\\'rejected\\')">거절</button>'
         :'-';
+      var methodLabel=w.method==='phone'?'📱 휴대폰':'🏦 은행계좌';
+      var contactInfo=w.method==='phone'
+        ?escHtml(w.phoneNumber||'-')
+        :escHtml(w.bankName||'-')+' / '+escHtml(w.accountNumber||'-')+' ('+escHtml(w.accountHolder||'-')+')';
       return '<tr id="wd-'+w.id+'">'
         +'<td>'+w.id+'</td><td>'+w.userId+'</td>'
+        +'<td>'+methodLabel+'</td>'
         +'<td>'+fmtMoney(w.amount)+'</td>'
-        +'<td>'+escHtml(w.bankName||'-')+'</td>'
-        +'<td>'+escHtml(w.accountNumber||'-')+'</td>'
-        +'<td>'+escHtml(w.accountHolder||'-')+'</td>'
+        +'<td>'+contactInfo+'</td>'
         +'<td><span class="badge '+w.status+'">'+sl+'</span></td>'
         +'<td>'+escHtml(w.adminNote||'-')+'</td>'
         +'<td>'+fmtDate(w.createdAt)+'</td>'

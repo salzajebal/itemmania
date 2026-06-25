@@ -164,6 +164,8 @@ const chargeAccountHtml       = loadSellHtml("charge-account.html");
 const chargeMileageHtml       = loadSellHtml("charge-mileage.html");
 const chargeMybankHtml        = loadSellHtml("charge-mybank.html");
 const chargeGift24Html        = loadSellHtml("charge-gift24.html");
+const paymentIndexHtml        = loadSellHtml("payment-index.html");
+const paymentPhoneHtml        = loadSellHtml("payment-phone.html");
 const paymentListHtml         = loadSellHtml("payment-list.html");
 const paymentPhoneListHtml    = loadSellHtml("payment-phone-list.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
@@ -870,9 +872,10 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/buy/list'))                              return '/buy/list.html' + qs;
   if (base === '/buy' || base === '/buy/')                       return '/buy/register.html';
   if (base.startsWith('/myroom/mileage/payment/payment_phone_list')) return '/myroom/mileage/payment/payment_phone_list.html' + qs;
-  if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/myroom/mileage/payment/payment_phone_list.html';
-  if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/myroom/mileage/payment/payment_list.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_phone'))  return '/myroom/mileage/payment/payment_phone.html';
+  if (base.startsWith('/myroom/mileage/payment/payment_switch')) return '/myroom/mileage/payment/index.html';
   if (base.startsWith('/myroom/mileage/payment/payment_list'))   return '/myroom/mileage/payment/payment_list.html' + qs;
+  if (base.startsWith('/myroom/mileage/payment/index') || base === '/myroom/mileage/payment/') return '/myroom/mileage/payment/index.html';
   if (base.startsWith('/myroom/batch_goods'))                    return '/myroom/batch_goods/index.html';
   if (base.startsWith('/myroom/chat/new_chat'))                  return '/myroom/chat/new_chat.html';
   if (base.startsWith('/myroom/chat/list'))                      return '/myroom/chat/list.html' + qs;
@@ -932,9 +935,10 @@ var ROUTE_MAP=[
   ['/portal/user/logout.html','/'],
   ['/portal/user/p_login_form.html','/login'],
   ['/myroom/mileage/payment/payment_phone_list.html','/myroom/mileage/payment/payment_phone_list.html'],
-  ['/myroom/mileage/payment/payment_switch.html','/myroom/mileage/payment/payment_list.html'],
-  ['/myroom/mileage/payment/payment_phone.html','/myroom/mileage/payment/payment_phone_list.html'],
+  ['/myroom/mileage/payment/payment_switch.html','/myroom/mileage/payment/index.html'],
+  ['/myroom/mileage/payment/payment_phone.html','/myroom/mileage/payment/payment_phone.html'],
   ['/myroom/mileage/payment/payment_list.html','/myroom/mileage/payment/payment_list.html'],
+  ['/myroom/mileage/payment/index.html','/myroom/mileage/payment/index.html'],
   ['/myroom/batch_goods/index.html','/myroom/batch_goods/index.html'],
   ['/sell/application.html','/sell/application.html'],
   ['/sell/new.html','/sell/new.html'],
@@ -3546,12 +3550,12 @@ const MYROOM_INTERCEPT_SCRIPT = `
       }
     });
 
-    // ── 출금하기 버튼 → 출금 목록 페이지 ───────────────────────────
+    // ── 출금하기 버튼 → 출금 신청 폼 페이지 ───────────────────────
     document.querySelectorAll('a[href*="payment_switch"],a.mileage_withdraw_btn').forEach(function(a) {
-      a.href = '/myroom/mileage/payment/payment_list.html';
+      a.href = '/myroom/mileage/payment/index.html';
       a.addEventListener('click', function(e) {
         e.preventDefault();
-        location.href = '/myroom/mileage/payment/payment_list.html';
+        location.href = '/myroom/mileage/payment/index.html';
       });
     });
 
@@ -3688,6 +3692,303 @@ const MYROOM_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const PAYMENT_INDEX_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  var BANKS = ['KB국민은행','신한은행','우리은행','하나은행','IBK기업은행','NH농협은행',
+    'SC제일은행','씨티은행','대구은행','부산은행','광주은행','경남은행','전북은행',
+    '제주은행','수협은행','우체국','새마을금고','신협','저축은행','카카오뱅크','토스뱅크','케이뱅크'];
+
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function fmt(n) { return Number(n || 0).toLocaleString('ko-KR'); }
+
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+  }
+
+  function fixTabs() {
+    var map = {
+      'index.html': '/myroom/mileage/payment/index.html',
+      'payment_phone.html': '/myroom/mileage/payment/payment_phone.html',
+      'payment_list.html': '/myroom/mileage/payment/payment_list.html',
+      'payment_phone_list.html': '/myroom/mileage/payment/payment_phone_list.html',
+      'payment_switch.html': '/myroom/mileage/payment/index.html'
+    };
+    document.querySelectorAll('a').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      var keys = Object.keys(map);
+      for (var i = 0; i < keys.length; i++) {
+        if (h.includes(keys[i])) {
+          var dest = map[keys[i]];
+          a.href = dest;
+          a.addEventListener('click', function(dest2) { return function(e) { e.preventDefault(); location.href = dest2; }; }(dest), true);
+          break;
+        }
+      }
+    });
+  }
+
+  function init() {
+    fixTabs();
+
+    // 내 계좌정보 섹션 → 은행 입력 폼으로 교체
+    var tables = document.querySelectorAll('table.table_form');
+    if (tables.length > 0) {
+      var tbody0 = tables[0].querySelector('tbody');
+      if (tbody0) {
+        var bankOpts = '<option value="">은행을 선택하세요</option>'
+          + BANKS.map(function(b) { return '<option value="' + b + '">' + b + '</option>'; }).join('');
+        tbody0.innerHTML =
+          '<tr><th style="width:120px">은행 선택</th><td>'
+          + '<select id="im_bank_sel" class="g_select" style="max-width:280px;width:100%">' + bankOpts + '</select>'
+          + '</td></tr>'
+          + '<tr><th>계좌번호</th><td>'
+          + '<input type="text" id="im_acc_num" class="g_text_new" placeholder="숫자만 입력하세요" maxlength="30" style="max-width:280px;width:100%">'
+          + '</td></tr>'
+          + '<tr><th>예금주</th><td>'
+          + '<input type="text" id="im_acc_holder" class="g_text_new" placeholder="예금주명" maxlength="30" style="max-width:200px;width:100%">'
+          + '</td></tr>';
+      }
+    }
+
+    // 잔액 조회
+    var balance = 0;
+    api('GET', '/wallet').then(function(d) {
+      balance = d.balance || 0;
+      var el = document.getElementById('mileage_total');
+      if (el) el.textContent = fmt(balance) + ' ';
+      updateNet();
+    });
+
+    function updateNet() {
+      var amtEl = document.getElementById('mileage');
+      var netEl = document.getElementById('spnPayment_mileage');
+      var chargeEl = document.getElementById('spnPayment_charge');
+      var btn = document.getElementById('payment_btn');
+      var v = amtEl ? Number(amtEl.value.replace(/,/g, '')) : 0;
+      if (netEl) netEl.textContent = fmt(v);
+      if (chargeEl) chargeEl.textContent = '(출금 수수료 : 0원)';
+      if (btn) btn.disabled = !(v >= 1000 && v <= balance);
+    }
+
+    var mileageEl = document.getElementById('mileage');
+    if (mileageEl) {
+      mileageEl.addEventListener('input', updateNet);
+      mileageEl.addEventListener('keyup', updateNet);
+    }
+
+    var allBtn = document.getElementById('add_all_mileage');
+    if (allBtn) allBtn.addEventListener('click', function() {
+      var el = document.getElementById('mileage');
+      if (el) { el.value = String(balance); updateNet(); }
+    });
+
+    // 폼 제출 인터셉트
+    var form = document.getElementById('frmPayment');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        doWithdraw();
+      });
+    }
+
+    var payBtn = document.getElementById('payment_btn');
+    if (payBtn) {
+      payBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        doWithdraw();
+      });
+    }
+
+    function doWithdraw() {
+      var bankEl = document.getElementById('im_bank_sel');
+      var numEl = document.getElementById('im_acc_num');
+      var holderEl = document.getElementById('im_acc_holder');
+      var amtEl = document.getElementById('mileage');
+      var bankName = bankEl ? bankEl.value : '';
+      var accountNumber = numEl ? numEl.value.replace(/\\s/g, '') : '';
+      var accountHolder = holderEl ? holderEl.value.trim() : '';
+      var amount = amtEl ? Number(amtEl.value.replace(/,/g, '')) : 0;
+      if (!bankName) { showToast('은행을 선택해주세요.', false); return; }
+      if (!accountNumber) { showToast('계좌번호를 입력해주세요.', false); return; }
+      if (!accountHolder) { showToast('예금주를 입력해주세요.', false); return; }
+      if (!amount || amount < 1000) { showToast('최소 1,000원 이상 출금하세요.', false); return; }
+      if (amount > balance) { showToast('잔액이 부족합니다.', false); return; }
+      var btn = document.getElementById('payment_btn');
+      if (btn) { btn.disabled = true; btn.textContent = '처리 중...'; }
+      api('POST', '/wallet/withdraw', { method: 'bank', bankName: bankName, accountNumber: accountNumber, accountHolder: accountHolder, amount: amount })
+        .then(function(d) {
+          if (d.error) {
+            showToast(d.error, false);
+            if (btn) { btn.disabled = false; btn.textContent = '마일리지 출금하기'; }
+          } else {
+            showToast('출금 신청이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/myroom/mileage/payment/payment_list.html'; }, 1500);
+          }
+        }).catch(function() {
+          showToast('오류가 발생했습니다.', false);
+          if (btn) { btn.disabled = false; btn.textContent = '마일리지 출금하기'; }
+        });
+    }
+
+    document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
+      .forEach(function(a) { a.href = '/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
+const PAYMENT_PHONE_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  function showToast(msg, ok) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+      + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
+      + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 3000);
+  }
+
+  function fmt(n) { return Number(n || 0).toLocaleString('ko-KR'); }
+
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+  }
+
+  function fixTabs() {
+    var map = {
+      'index.html': '/myroom/mileage/payment/index.html',
+      'payment_phone.html': '/myroom/mileage/payment/payment_phone.html',
+      'payment_list.html': '/myroom/mileage/payment/payment_list.html',
+      'payment_phone_list.html': '/myroom/mileage/payment/payment_phone_list.html',
+      'payment_switch.html': '/myroom/mileage/payment/index.html'
+    };
+    document.querySelectorAll('a').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      var keys = Object.keys(map);
+      for (var i = 0; i < keys.length; i++) {
+        if (h.includes(keys[i])) {
+          var dest = map[keys[i]];
+          a.href = dest;
+          a.addEventListener('click', function(dest2) { return function(e) { e.preventDefault(); location.href = dest2; }; }(dest), true);
+          break;
+        }
+      }
+    });
+  }
+
+  function init() {
+    fixTabs();
+
+    // 휴대폰번호 섹션 → 입력 폼으로 교체
+    var tables = document.querySelectorAll('table.table_form');
+    if (tables.length > 0) {
+      var tbody0 = tables[0].querySelector('tbody');
+      if (tbody0) {
+        tbody0.innerHTML =
+          '<tr><th style="width:120px">휴대폰번호</th><td>'
+          + '<input type="text" id="im_phone_num" class="g_text_new" placeholder="010-0000-0000" maxlength="13" style="max-width:200px;width:100%">'
+          + '</td></tr>';
+      }
+    }
+
+    // 잔액 조회
+    var balance = 0;
+    api('GET', '/wallet').then(function(d) {
+      balance = d.balance || 0;
+      var el = document.getElementById('mileage_total');
+      if (el) el.textContent = fmt(balance) + ' ';
+      updateNet();
+    });
+
+    function updateNet() {
+      var amtEl = document.getElementById('mileage');
+      var netEl = document.getElementById('spnPayment_mileage');
+      var chargeEl = document.getElementById('spnPayment_charge');
+      var btn = document.getElementById('payment_btn');
+      var v = amtEl ? Number(amtEl.value.replace(/,/g, '')) : 0;
+      if (netEl) netEl.textContent = fmt(v);
+      if (chargeEl) chargeEl.textContent = '(출금 수수료 : 0원)';
+      if (btn) btn.disabled = !(v >= 1000 && v <= balance);
+    }
+
+    var mileageEl = document.getElementById('mileage');
+    if (mileageEl) {
+      mileageEl.addEventListener('input', updateNet);
+      mileageEl.addEventListener('keyup', updateNet);
+    }
+
+    var allBtn = document.getElementById('add_all_mileage');
+    if (allBtn) allBtn.addEventListener('click', function() {
+      var el = document.getElementById('mileage');
+      if (el) { el.value = String(balance); updateNet(); }
+    });
+
+    function doWithdraw() {
+      var phoneEl = document.getElementById('im_phone_num');
+      var amtEl = document.getElementById('mileage');
+      var phone = phoneEl ? phoneEl.value.replace(/\\D/g, '') : '';
+      var amount = amtEl ? Number(amtEl.value.replace(/,/g, '')) : 0;
+      if (!phone || phone.length < 10 || phone.length > 11) {
+        showToast('올바른 휴대폰번호를 입력해주세요.', false); return;
+      }
+      if (!amount || amount < 1000) { showToast('최소 1,000원 이상 출금하세요.', false); return; }
+      if (amount > balance) { showToast('잔액이 부족합니다.', false); return; }
+      var btn = document.getElementById('payment_btn');
+      if (btn) { btn.disabled = true; btn.textContent = '처리 중...'; }
+      api('POST', '/wallet/withdraw', { method: 'phone', phoneNumber: phone, amount: amount })
+        .then(function(d) {
+          if (d.error) {
+            showToast(d.error, false);
+            if (btn) { btn.disabled = false; btn.textContent = '휴대폰번호 출금하기'; }
+          } else {
+            showToast('출금 신청이 완료되었습니다!', true);
+            setTimeout(function() { location.href = '/myroom/mileage/payment/payment_phone_list.html'; }, 1500);
+          }
+        }).catch(function() {
+          showToast('오류가 발생했습니다.', false);
+          if (btn) { btn.disabled = false; btn.textContent = '휴대폰번호 출금하기'; }
+        });
+    }
+
+    var form = document.getElementById('payment');
+    if (form) form.addEventListener('submit', function(e) { e.preventDefault(); doWithdraw(); });
+
+    var payBtn = document.getElementById('payment_btn');
+    if (payBtn) payBtn.addEventListener('click', function(e) { e.preventDefault(); doWithdraw(); });
+
+    document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
+      .forEach(function(a) { a.href = '/'; });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+`;
+
 const PAYMENT_LIST_INTERCEPT_SCRIPT = `
 <script>
 (function() {
@@ -3701,48 +4002,104 @@ const PAYMENT_LIST_INTERCEPT_SCRIPT = `
     setTimeout(function() { t.remove(); }, 3000);
   }
 
-  function init() {
-    // ── 탭: 휴대폰번호 출금 탭 ────────────────────────────────────────
-    document.querySelectorAll('a[href*="payment_phone"]').forEach(function(a) {
-      a.href = '/myroom/mileage/payment/payment_phone_list.html';
-      a.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/myroom/mileage/payment/payment_phone_list.html';
-      });
-    });
+  function fmt(n) { return Number(n || 0).toLocaleString('ko-KR'); }
 
-    // ── 은행계좌 출금 폼 제출 인터셉트 ────────────────────────────────
-    var form = document.getElementById('frm_pay') || document.querySelector('form[id*="pay"]');
-    if (form) {
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        window._IM_auth()
-          .then(function(d) {
-            if (!d || !d.id) {
-              showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200); return;
-            }
-            var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
-            var amt = amtEl ? amtEl.value.trim() : '';
-            if (!amt || isNaN(Number(amt.replace(/,/g,'')))) {
-              showToast('출금 금액을 입력해주세요.', false); return;
-            }
-            showToast('출금 신청이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
-          })
-          .catch(function() { showToast('오류가 발생했습니다.', false); });
-      });
-    }
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+  }
 
-    // ── 마이룸으로 돌아가기 ────────────────────────────────────────────
-    document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
+  function fmtDate(s) {
+    if (!s) return '-';
+    var d = new Date(s);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+      + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function statusBadge(status) {
+    var map = { pending: ['처리중','#f6a623'], approved: ['완료','#0070d2'], rejected: ['반려','#e53e3e'] };
+    var info = map[status] || ['알수없음','#888'];
+    return '<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#fff;background:' + info[1] + '">' + info[0] + '</span>';
+  }
+
+  function fixTabs() {
+    var map = {
+      'index.html': '/myroom/mileage/payment/index.html',
+      'payment_phone.html': '/myroom/mileage/payment/payment_phone.html',
+      'payment_list.html': '/myroom/mileage/payment/payment_list.html',
+      'payment_phone_list.html': '/myroom/mileage/payment/payment_phone_list.html',
+      'payment_switch.html': '/myroom/mileage/payment/index.html'
+    };
+    document.querySelectorAll('a').forEach(function(a) {
       var h = a.getAttribute('href') || '';
-      if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
-        a.href = '/myroom/index.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
+      var keys = Object.keys(map);
+      for (var i = 0; i < keys.length; i++) {
+        if (h.includes(keys[i])) {
+          var dest = map[keys[i]];
+          a.href = dest;
+          a.addEventListener('click', function(dest2) { return function(e) { e.preventDefault(); location.href = dest2; }; }(dest), true);
+          break;
+        }
       }
     });
+  }
 
-    // ── 홈 링크 ──────────────────────────────────────────────────────
+  function renderList(list, tbody) {
+    if (!list || !list.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty_item" style="text-align:center;padding:30px;color:#888">출금 내역이 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '<tr style="background:#f8f9fa;font-weight:600;font-size:13px">'
+      + '<td style="padding:8px 12px;text-align:center">신청일시</td>'
+      + '<td style="padding:8px 12px;text-align:center">은행명</td>'
+      + '<td style="padding:8px 12px;text-align:center">계좌번호 / 예금주</td>'
+      + '<td style="padding:8px 12px;text-align:center">출금금액</td>'
+      + '<td style="padding:8px 12px;text-align:center">상태</td>'
+      + '</tr>'
+      + list.map(function(w) {
+        var cancelBtn = w.status === 'pending'
+          ? '<br><button class="btn_cancel_w" data-id="' + w.id + '" style="margin-top:4px;padding:3px 10px;font-size:12px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">취소</button>'
+          : '';
+        return '<tr style="border-bottom:1px solid #eee">'
+          + '<td style="padding:8px 12px;text-align:center;font-size:13px">' + fmtDate(w.createdAt) + '</td>'
+          + '<td style="padding:8px 12px;text-align:center">' + (w.bankName || '-') + '</td>'
+          + '<td style="padding:8px 12px;text-align:center;font-size:13px">' + (w.accountNumber || '-') + '<br><span style="color:#888;font-size:12px">' + (w.accountHolder || '') + '</span></td>'
+          + '<td style="padding:8px 12px;text-align:right;font-weight:600">' + fmt(w.amount) + '원</td>'
+          + '<td style="padding:8px 12px;text-align:center">' + statusBadge(w.status) + cancelBtn + '</td>'
+          + '</tr>';
+      }).join('');
+
+    tbody.querySelectorAll('.btn_cancel_w').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-id');
+        if (!confirm('출금을 취소하시겠습니까? 마일리지가 즉시 반환됩니다.')) return;
+        btn.disabled = true;
+        api('DELETE', '/wallet/withdrawals/' + id)
+          .then(function(d) {
+            if (d.ok) { showToast('출금이 취소되었습니다.', true); setTimeout(function() { location.reload(); }, 1000); }
+            else { showToast(d.error || '오류가 발생했습니다.', false); btn.disabled = false; }
+          });
+      });
+    });
+  }
+
+  function init() {
+    fixTabs();
+
+    // 출금 내역 로드
+    var tbody = document.querySelector('tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#888">로딩 중...</td></tr>';
+
+    api('GET', '/wallet/withdrawals?method=bank').then(function(list) {
+      if (!tbody) {
+        tbody = document.querySelector('tbody');
+      }
+      if (tbody) renderList(Array.isArray(list) ? list : [], tbody);
+    });
+
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
       .forEach(function(a) { a.href = '/'; });
   }
@@ -3766,48 +4123,111 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
     setTimeout(function() { t.remove(); }, 3000);
   }
 
-  function init() {
-    // ── 탭: 은행계좌 출금 탭 ──────────────────────────────────────────
-    document.querySelectorAll('a[href*="payment_list"]').forEach(function(a) {
-      a.href = '/myroom/mileage/payment/payment_list.html';
-      a.addEventListener('click', function(e) {
-        e.preventDefault(); location.href = '/myroom/mileage/payment/payment_list.html';
-      });
-    });
+  function fmt(n) { return Number(n || 0).toLocaleString('ko-KR'); }
 
-    // ── 휴대폰 출금 폼 제출 인터셉트 ──────────────────────────────────
-    var form = document.getElementById('frm') || document.querySelector('form');
-    if (form && form.id !== 'g_searchbar_form') {
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        window._IM_auth()
-          .then(function(d) {
-            if (!d || !d.id) {
-              showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200); return;
-            }
-            var amtEl = form.querySelector('[name=pay_amount],[name=amount],[name=withdraw_amount]');
-            var amt = amtEl ? amtEl.value.trim() : '';
-            if (!amt || isNaN(Number(amt.replace(/,/g,'')))) {
-              showToast('출금 금액을 입력해주세요.', false); return;
-            }
-            showToast('휴대폰 출금 신청이 완료되었습니다!', true);
-            setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
-          })
-          .catch(function() { showToast('오류가 발생했습니다.', false); });
-      });
-    }
+  function api(method, path, body) {
+    return fetch('/api' + path, {
+      method: method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+  }
 
-    // ── 마이룸으로 돌아가기 ────────────────────────────────────────────
-    document.querySelectorAll('a[href*="/myroom/"]').forEach(function(a) {
+  function fmtDate(s) {
+    if (!s) return '-';
+    var d = new Date(s);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+      + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function fmtPhone(p) {
+    if (!p) return '-';
+    var n = p.replace(/\\D/g, '');
+    if (n.length === 11) return n.slice(0,3) + '-' + n.slice(3,7) + '-' + n.slice(7);
+    if (n.length === 10) return n.slice(0,3) + '-' + n.slice(3,6) + '-' + n.slice(6);
+    return p;
+  }
+
+  function statusBadge(status) {
+    var map = { pending: ['처리중','#f6a623'], approved: ['완료','#0070d2'], rejected: ['반려','#e53e3e'] };
+    var info = map[status] || ['알수없음','#888'];
+    return '<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#fff;background:' + info[1] + '">' + info[0] + '</span>';
+  }
+
+  function fixTabs() {
+    var map = {
+      'index.html': '/myroom/mileage/payment/index.html',
+      'payment_phone.html': '/myroom/mileage/payment/payment_phone.html',
+      'payment_list.html': '/myroom/mileage/payment/payment_list.html',
+      'payment_phone_list.html': '/myroom/mileage/payment/payment_phone_list.html',
+      'payment_switch.html': '/myroom/mileage/payment/index.html'
+    };
+    document.querySelectorAll('a').forEach(function(a) {
       var h = a.getAttribute('href') || '';
-      if (h.match(/\/myroom\/?$/) || h.endsWith('/myroom/')) {
-        a.href = '/myroom/index.html';
-        a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
+      var keys = Object.keys(map);
+      for (var i = 0; i < keys.length; i++) {
+        if (h.includes(keys[i])) {
+          var dest = map[keys[i]];
+          a.href = dest;
+          a.addEventListener('click', function(dest2) { return function(e) { e.preventDefault(); location.href = dest2; }; }(dest), true);
+          break;
+        }
       }
     });
+  }
 
-    // ── 홈 링크 ──────────────────────────────────────────────────────
+  function renderList(list, tbody) {
+    if (!list || !list.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty_item" style="text-align:center;padding:30px;color:#888">출금 내역이 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '<tr style="background:#f8f9fa;font-weight:600;font-size:13px">'
+      + '<td style="padding:8px 12px;text-align:center">신청일시</td>'
+      + '<td style="padding:8px 12px;text-align:center">휴대폰번호</td>'
+      + '<td style="padding:8px 12px;text-align:center">출금금액</td>'
+      + '<td style="padding:8px 12px;text-align:center">상태</td>'
+      + '<td style="padding:8px 12px;text-align:center">처리메모</td>'
+      + '<td style="padding:8px 12px;text-align:center">취소</td>'
+      + '</tr>'
+      + list.map(function(w) {
+        var cancelCell = w.status === 'pending'
+          ? '<button class="btn_cancel_w" data-id="' + w.id + '" style="padding:3px 10px;font-size:12px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">취소</button>'
+          : '-';
+        return '<tr style="border-bottom:1px solid #eee">'
+          + '<td style="padding:8px 12px;text-align:center;font-size:13px">' + fmtDate(w.createdAt) + '</td>'
+          + '<td style="padding:8px 12px;text-align:center">' + fmtPhone(w.phoneNumber) + '</td>'
+          + '<td style="padding:8px 12px;text-align:right;font-weight:600">' + fmt(w.amount) + '원</td>'
+          + '<td style="padding:8px 12px;text-align:center">' + statusBadge(w.status) + '</td>'
+          + '<td style="padding:8px 12px;text-align:center;font-size:12px;color:#666">' + (w.adminNote || '-') + '</td>'
+          + '<td style="padding:8px 12px;text-align:center">' + cancelCell + '</td>'
+          + '</tr>';
+      }).join('');
+
+    tbody.querySelectorAll('.btn_cancel_w').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-id');
+        if (!confirm('출금을 취소하시겠습니까? 마일리지가 즉시 반환됩니다.')) return;
+        btn.disabled = true;
+        api('DELETE', '/wallet/withdrawals/' + id)
+          .then(function(d) {
+            if (d.ok) { showToast('출금이 취소되었습니다.', true); setTimeout(function() { location.reload(); }, 1000); }
+            else { showToast(d.error || '오류가 발생했습니다.', false); btn.disabled = false; }
+          });
+      });
+    });
+  }
+
+  function init() {
+    fixTabs();
+
+    var tbody = document.querySelector('tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">로딩 중...</td></tr>';
+
+    api('GET', '/wallet/withdrawals?method=phone').then(function(list) {
+      if (!tbody) tbody = document.querySelector('tbody');
+      if (tbody) renderList(Array.isArray(list) ? list : [], tbody);
+    });
+
     document.querySelectorAll('a[href="/"],a[href="https://www.itemmania.com/"]')
       .forEach(function(a) { a.href = '/'; });
   }
@@ -4785,6 +5205,20 @@ function servePaymentPhoneList(html: string, user: Record<string, unknown> | nul
     : result + PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT;
 }
 
+function servePaymentIndex(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
+  return result.includes("</body>")
+    ? result.replace("</body>", PAYMENT_INDEX_INTERCEPT_SCRIPT + "</body>")
+    : result + PAYMENT_INDEX_INTERCEPT_SCRIPT;
+}
+
+function servePaymentPhone(html: string, user: Record<string, unknown> | null = null): string {
+  const result = prepare(html, user);
+  return result.includes("</body>")
+    ? result.replace("</body>", PAYMENT_PHONE_INTERCEPT_SCRIPT + "</body>")
+    : result + PAYMENT_PHONE_INTERCEPT_SCRIPT;
+}
+
 function serveChatNew(html: string, user: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
 
@@ -5189,6 +5623,30 @@ router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Prom
   res.send(serveMyroom(myroomHtml, user));
 });
 
+// 출금하기 - 은행계좌 출금 신청 폼
+router.get(["/myroom/mileage/payment/index.html", "/myroom/mileage/payment/", "/myroom/mileage/payment"], async (req, res): Promise<void> => {
+  if (!paymentIndexHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  const user = await getSessionUser(req);
+  res.send(servePaymentIndex(paymentIndexHtml, user));
+});
+
+// 출금하기 - 휴대폰번호 출금 신청 폼
+router.get("/myroom/mileage/payment/payment_phone.html", async (req, res): Promise<void> => {
+  if (!paymentPhoneHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-cache");
+  const user = await getSessionUser(req);
+  res.send(servePaymentPhone(paymentPhoneHtml, user));
+});
+
 // 출금하기 - 은행계좌 출금 내역
 router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promise<void> => {
   if (!paymentListHtml) {
@@ -5198,7 +5656,6 @@ router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promis
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   const user = await getSessionUser(req);
-
   res.send(servePaymentList(paymentListHtml, user));
 });
 
@@ -5211,22 +5668,12 @@ router.get("/myroom/mileage/payment/payment_phone_list.html", async (req, res): 
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-cache");
   const user = await getSessionUser(req);
-
   res.send(servePaymentPhoneList(paymentPhoneListHtml, user));
 });
 
-// payment_switch → payment_list 리다이렉트
+// payment_switch → index.html 리다이렉트
 router.get("/myroom/mileage/payment/payment_switch.html", async (req, res): Promise<void> => {
-  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
-});
-router.get("/myroom/mileage/payment/payment_switch.html", async (req, res): Promise<void> => {
-  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
-});
-router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promise<void> => {
-  res.redirect(302, "/myroom/mileage/payment/payment_list.html");
-});
-router.get("/myroom/mileage/payment/payment_phone_list.html", async (req, res): Promise<void> => {
-  res.redirect(302, "/myroom/mileage/payment/payment_phone_list.html");
+  res.redirect(302, "/myroom/mileage/payment/index.html");
 });
 
 // 판매등록/구매등록 직접 접근 리다이렉트
