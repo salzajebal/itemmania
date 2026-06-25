@@ -1215,17 +1215,17 @@ const BALANCE_SSE_SCRIPT = `<script>
     var b = Number(balance || 0);
     var formatted = b.toLocaleString('ko-KR');
     var formattedWon = formatted + '원';
-    // 마이룸: .over_mile, .total_mile
+    // 마이룸: .over_mile, .total_mile (스냅샷 JS가 대체하기 전 원본 구조)
     var avail = document.querySelector('.over_mile');
     var total = document.querySelector('.total_mile');
     if (avail) avail.textContent = formatted;
     if (total) total.textContent = formatted;
+    // 마이룸: .mr_user_mileage_txt (스냅샷 JS가 내부를 "0원" 텍스트로 대체한 경우)
+    var mileageTxt = document.querySelector('.mr_user_mileage_txt');
+    if (mileageTxt) mileageTxt.textContent = formattedWon;
     // 충전 페이지 등: #txtCurrentMileage
     document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]')
       .forEach(function(el){ el.textContent = formattedWon; });
-    // 마이룸 상단 잔액 텍스트
-    var mileageTxt = document.querySelector('.mr_user_mileage_txt');
-    if (mileageTxt) mileageTxt.textContent = formattedWon;
   };
 
   if(typeof EventSource==='undefined')return;
@@ -3631,19 +3631,33 @@ const MYROOM_INTERCEPT_SCRIPT = `
         // 쿠폰·포인트 값 초기화 (스냅샷에 다른 유저 값이 박혀 있음)
         document.querySelectorAll('.coupon_result').forEach(function(el) { el.textContent = '0'; });
 
-        // 잔액 표시 (사용가능 마일리지: .over_mile, 총 마일리지: .total_mile)
+        // 잔액 표시: 즉시 + MutationObserver + setTimeout 재적용
         fetch('/api/wallet', { credentials: 'include' })
           .then(function(r) { return r.ok ? r.json() : null; })
           .then(function(b) {
             if (!b) return;
-            if (typeof window._IM_updateBalance === 'function') {
-              window._IM_updateBalance(b.balance);
-            } else {
-              var amount = Number(b.balance || 0).toLocaleString('ko-KR');
-              var avail = document.querySelector('.over_mile');
-              var total = document.querySelector('.total_mile');
-              if (avail) avail.textContent = amount;
-              if (total) total.textContent = amount;
+            var cachedBalance = b.balance;
+            var _applying = false;
+            var applyBalance = function() {
+              _applying = true;
+              if (typeof window._IM_updateBalance === 'function') {
+                window._IM_updateBalance(cachedBalance);
+              }
+              setTimeout(function() { _applying = false; }, 80);
+            };
+            applyBalance();
+            setTimeout(applyBalance, 300);
+            setTimeout(applyBalance, 800);
+            setTimeout(applyBalance, 2000);
+            setTimeout(applyBalance, 4000);
+            // MutationObserver: 스냅샷 JS가 덮어쓰면 즉시 재적용
+            var mileageTxt = document.querySelector('.mr_user_mileage_txt');
+            if (mileageTxt && typeof MutationObserver !== 'undefined') {
+              var obs = new MutationObserver(function() {
+                if (!_applying) applyBalance();
+              });
+              obs.observe(mileageTxt, { childList: true, characterData: true, subtree: true });
+              setTimeout(function() { obs.disconnect(); }, 6000);
             }
           });
 
