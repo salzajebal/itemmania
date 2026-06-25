@@ -2262,6 +2262,10 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
 #charge_service,#dvPremium,.premium_info,.g_layer.premium_info,#dv_power,
 .charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
 
+/* 검색 드롭다운: initial_screen / search-select 숨김 — gs_list만 표시 */
+#reg_gameserver .initial_screen,
+#reg_gameserver .search-select{display:none!important}
+
 /* ─── 구매 물품등록정보 팝업 오버레이 ─────────────── */
 #dvPopup{
   position:fixed!important;inset:0!important;z-index:10000!important;
@@ -2427,13 +2431,17 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       if (useCustom && dd) { dd.style.display = \'block\'; }
       else if (frame) {
         frame.classList.remove(\'g_hidden\');
-        // .g_search_frame_wrapper{height:100%} collapse 방지 — inline으로 override
         frame.style.height = \'auto\';
         frame.style.overflow = \'visible\';
         var fw = frame.querySelector(\'.g_search_frame_wrapper\');
         if (fw) fw.style.height = \'auto\';
         var gl = frame.querySelector(\'.gs_list\');
         if (gl) { gl.style.minHeight = \'180px\'; gl.style.height = \'180px\'; }
+        // initial_screen / search-select 강제 숨김 (스냅샷 JS 간섭 방지)
+        var is2 = frame.querySelector(\'.initial_screen\');
+        if (is2) is2.style.setProperty(\'display\',\'none\',\'important\');
+        var ss2 = frame.querySelector(\'.search-select\');
+        if (ss2) ss2.style.setProperty(\'display\',\'none\',\'important\');
       }
     }
     function hideDrop() {
