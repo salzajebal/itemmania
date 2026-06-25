@@ -3166,28 +3166,37 @@ const CHARGE_INTERCEPT_SCRIPT = `<script>
   };
 
   // ── 네비게이션 맵 (메뉴 텍스트 키워드 → 충전 URL) ─────────────────────
+  // 긴 키워드를 먼저 배치 (부분 매칭 우선순위)
   var NAV_MAP = [
-    {kw: 'ARS',       url: '/myroom/mileage/charge/charge-phone-ars.html'},
-    {kw: '신용카드',  url: '/myroom/mileage/charge/charge-creditcard.html'},
-    {kw: '네이버페이',url: '/myroom/mileage/charge/charge-naverpay.html'},
-    {kw: '카카오페이',url: '/myroom/mileage/charge/charge-kakaopay.html'},
-    {kw: '토스',      url: '/myroom/mileage/charge/charge-kakaopay.html'},
-    {kw: '컬쳐랜드',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
-    {kw: '도서문화',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
-    {kw: '에그머니',  url: '/myroom/mileage/charge/charge-onlyculture.html'},
-    {kw: '스마트문상',url: '/myroom/mileage/charge/charge-onlyculture.html'},
-    {kw: '틴캐시',    url: '/myroom/mileage/charge/charge-onlyculture.html'},
-    {kw: '전용계좌',  url: '/myroom/mileage/charge/charge-account.html'},
+    // 카테고리 버튼 (charge_menu)
+    {kw: 'ARS',        url: '/myroom/mileage/charge/charge-phone-ars.html'},
+    {kw: '신용카드',   url: '/myroom/mileage/charge/charge-creditcard.html'},
+    {kw: '간편결제',   url: '/myroom/mileage/charge/charge-kakaopay.html'},
+    {kw: '이달의',       url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '전용계좌',     url: '/myroom/mileage/charge/charge-account.html'},
+    {kw: '매니아 전용',  url: '/myroom/mileage/charge/charge-mileage.html'},
+    {kw: '계좌 충전',    url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '기타 충전',    url: '/myroom/mileage/charge/charge-gift24.html'},
+    // 서브메뉴 버튼 (child_menu_wrapper) — 구체적인 키워드 먼저
+    {kw: '카카오페이',   url: '/myroom/mileage/charge/charge-kakaopay.html'},
+    {kw: '네이버페이',   url: '/myroom/mileage/charge/charge-naverpay.html'},
+    {kw: '토스',         url: '/myroom/mileage/charge/charge-kakaopay.html'},
+    {kw: '컬쳐랜드',     url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '도서문화',     url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '에그머니',     url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '스마트문상',   url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '틴캐시',       url: '/myroom/mileage/charge/charge-onlyculture.html'},
     {kw: '마일리지 상품권', url: '/myroom/mileage/charge/charge-mileage.html'},
     {kw: '이벤트 쿠폰',    url: '/myroom/mileage/charge/charge-mileage.html'},
-    {kw: '내통장결제',url: '/myroom/mileage/charge/charge-mybank.html'},
-    {kw: '케이뱅크',  url: '/myroom/mileage/charge/charge-mybank.html'},
-    {kw: '자동이체',  url: '/myroom/mileage/charge/charge-mybank.html'},
-    {kw: '기프트24',  url: '/myroom/mileage/charge/charge-gift24.html'},
-    {kw: 'TCash',     url: '/myroom/mileage/charge/charge-gift24.html'},
-    {kw: '모바일팝',  url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '상품권',       url: '/myroom/mileage/charge/charge-onlyculture.html'},
+    {kw: '내통장결제',   url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '케이뱅크',     url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '자동이체',     url: '/myroom/mileage/charge/charge-mybank.html'},
+    {kw: '기프트24',     url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: 'TCash',        url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '모바일팝',     url: '/myroom/mileage/charge/charge-gift24.html'},
     {kw: '모바일티머니', url: '/myroom/mileage/charge/charge-gift24.html'},
-    {kw: '카드포인트',url: '/myroom/mileage/charge/charge-gift24.html'},
+    {kw: '카드포인트',   url: '/myroom/mileage/charge/charge-gift24.html'},
   ];
 
   // 현재 페이지 수수료
@@ -3351,7 +3360,7 @@ const CHARGE_INTERCEPT_SCRIPT = `<script>
       'width:240px', 'line-height:55px', 'height:55px',
       'background:#159EFD', 'color:#fff', 'border:none',
       'border-radius:10px', 'font-size:18px', 'font-weight:700',
-      'cursor:pointer',
+      'cursor:pointer', 'text-align:center',
     ].join(';');
     btnWrap.appendChild(chargeBtn);
     panel.appendChild(btnWrap);
@@ -3434,20 +3443,33 @@ const CHARGE_INTERCEPT_SCRIPT = `<script>
       }
     }).catch(function(){});
 
-  // ── 메뉴 클릭 네비게이션 ────────────────────────────────────────────────
-  function attachNavigation(el) {
-    var txt = el.textContent || '';
+  // ── 메뉴 클릭 네비게이션 ─────────────────────────────────────────────────
+  // capture phase 위임: <a> 기본 href 이동보다 먼저 가로챔
+  function resolveNavUrl(txt) {
     for (var i = 0; i < NAV_MAP.length; i++) {
-      if (txt.indexOf(NAV_MAP[i].kw) !== -1) {
-        (function(url){ el.addEventListener('click', function(e){
-          e.preventDefault(); e.stopPropagation();
-          location.href = url;
-        }); })(NAV_MAP[i].url);
+      if (txt.indexOf(NAV_MAP[i].kw) !== -1) return NAV_MAP[i].url;
+    }
+    return null;
+  }
+  function menuClickCapture(e) {
+    // 클릭된 요소부터 li까지 텍스트 수집
+    var node = e.target;
+    while (node && node.tagName !== 'UL') {
+      var url = resolveNavUrl(node.textContent || '');
+      if (url) {
+        e.preventDefault();
+        e.stopPropagation();
+        location.href = url;
         return;
       }
+      if (node.tagName === 'LI') break;
+      node = node.parentElement;
     }
   }
-  document.querySelectorAll('#charge_menu li, #child_menu_wrapper li').forEach(attachNavigation);
+  ['#charge_menu', '#child_menu_wrapper'].forEach(function(sel) {
+    var el = document.querySelector(sel);
+    if (el) el.addEventListener('click', menuClickCapture, true);
+  });
 })();
 </script>`;
 
