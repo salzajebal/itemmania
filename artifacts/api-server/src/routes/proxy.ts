@@ -2261,6 +2261,94 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
 <style>
 #charge_service,#dvPremium,.premium_info,.g_layer.premium_info,#dv_power,
 .charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
+
+/* ─── 구매 물품등록정보 팝업 오버레이 ─────────────── */
+#dvPopup{
+  position:fixed!important;inset:0!important;z-index:10000!important;
+  background:rgba(0,0,0,0.55)!important;
+  display:none!important;
+  align-items:flex-start!important;justify-content:center!important;
+  padding:40px 16px!important;overflow-y:auto!important;
+  box-sizing:border-box!important;
+}
+#dvPopup.im-show{display:flex!important;}
+
+/* 팝업 흰 박스 + 초록 테두리 */
+#dvPopup .inner{
+  background:#fff!important;
+  border-radius:10px!important;
+  border:2px solid #39A742!important;
+  width:100%!important;max-width:640px!important;
+  overflow:hidden!important;position:relative!important;
+  text-align:left!important;
+}
+/* 제목 "물품등록정보" */
+#dvPopup .title{
+  display:block!important;
+  font-size:18px!important;font-weight:700!important;color:#39A742!important;
+  padding:20px 22px 16px!important;margin:0!important;
+  border-bottom:2px solid #39A742!important;
+  background:#fff!important;
+}
+/* 본문 */
+#dvPopup .cont{padding:18px 22px 0!important;}
+/* 테이블 */
+#dvPopup .g_blue_table{
+  width:100%!important;border-collapse:collapse!important;margin-bottom:10px!important;
+}
+#dvPopup .g_blue_table th{
+  background:#EEF5FF!important;font-size:13px!important;font-weight:600!important;
+  padding:10px 14px!important;border:1px solid #D5E2F2!important;
+  text-align:left!important;white-space:nowrap!important;color:#333!important;
+}
+#dvPopup .g_blue_table td{
+  padding:10px 14px!important;border:1px solid #D5E2F2!important;
+  font-size:13px!important;color:#222!important;
+}
+/* 거래 사고 주의사항 */
+#dvPopup .attention{
+  font-size:13px!important;font-weight:700!important;color:#e53e3e!important;
+  margin:10px 0 6px!important;padding:0!important;
+}
+/* 빨간 경고 박스 */
+#dvPopup .attention_box{
+  padding:12px 16px!important;
+  border:1px solid #f5c6cb!important;background:#FFF5F5!important;
+  font-size:13px!important;line-height:1.75!important;
+  margin-bottom:10px!important;border-radius:4px!important;
+  list-style:none!important;
+}
+#dvPopup .attention_box li{margin-bottom:4px!important;list-style:none!important;padding:0!important;}
+#dvPopup .attention_box .deco{font-weight:700!important;}
+#dvPopup .attention_box .f_blue3{color:#159EFD!important;font-size:12px!important;}
+/* 약관 회색 박스 */
+#dvPopup .box6{
+  padding:10px 16px!important;
+  border:1px solid #e0e0e0!important;background:#f9f9f9!important;
+  font-size:12px!important;color:#555!important;
+  line-height:1.75!important;margin-bottom:10px!important;border-radius:4px!important;
+}
+#dvPopup .box6 li{list-style:none!important;margin-bottom:2px!important;padding:0!important;}
+#dvPopup .list_non::before{content:""!important;}
+/* "등록하시려는 물품이 위와 같습니까?" */
+#dvPopup .last_txt{
+  text-align:center!important;font-size:14px!important;font-weight:600!important;color:#333!important;
+  padding:14px 0 16px!important;border-top:1px solid #e8e8e8!important;margin-top:4px!important;
+}
+/* 버튼 영역 */
+#dvPopup .g_btn_new{padding:0 22px 22px!important;display:flex!important;gap:10px!important;}
+/* 확인(초록) 버튼 */
+#buy_reg_submit{
+  flex:1!important;padding:15px 0!important;
+  background:#39A742!important;color:#fff!important;border:none!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;
+}
+/* 취소(회색) 버튼 */
+#buy_cancel_submit{
+  flex:1!important;padding:15px 0!important;
+  background:#666!important;color:#fff!important;border:none!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;
+}
 </style>
 <script>
 (function() {
@@ -2547,8 +2635,76 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       .catch(function() {});
   }
 
+  // ── 구매 팝업 HTML 주입 ──────────────────────────────────────────
+  function injectBuyPopup() {
+    var dvPopup = document.getElementById('dvPopup');
+    if (!dvPopup) return;
+    dvPopup.innerHTML = '<div class=inner>'
+      + '<div class=title>물품등록정보</div>'
+      + '<div class=cont>'
+      + '<table class=g_blue_table><colgroup><col width=122><col width=180><col width=122><col width=180></colgroup>'
+      + '<tbody><tr><th>카테고리</th><td colspan=3 id=buy_popup_category></td></tr></tbody></table>'
+      + '<table class="g_blue_table g_blue_table2"><colgroup><col width=122><col width=180><col width=122><col width=180></colgroup>'
+      + '<tbody>'
+      + '<tr><th>물품제목</th><td colspan=3 id=buy_popup_title></td></tr>'
+      + '<tr><th>거래유형</th><td id=buy_popup_trade_type>일반구매</td><th>구매금액</th><td id=buy_popup_price></td></tr>'
+      + '</tbody></table>'
+      + '<div class=attention>거래 사고 주의사항</div>'
+      + '<ul class=attention_box>'
+      + '<li>1. 전달받은 <span class=deco style="color:red">물품은 절대 돌려주지</span> 마세요.</li>'
+      + '<li>2. 구매 등록 시 반드시 <span class=deco style="color:red">본인 정보(게임명/서버/캐릭터)를 등록</span>하세요.</li>'
+      + '<li class=f_blue3>타인 게임정보 기재 또는, 다른 게임/서버에 구매 신청할 경우 물품신청자에게 불이익이 발생할 수 있습니다.</li>'
+      + '</ul>'
+      + '<ul class="box6 g_list">'
+      + '<li>상대방의 판매 신청 후 10분 이내에 결제를 해주셔야만 거래가 가능합니다.</li>'
+      + '<li>단, 즉시구매 등록 물품은 판매신청이 들어오면 바로거래가 가능합니다.</li>'
+      + '<li>[물품등록유지기간]<br></li>'
+      + '<li class=list_non>등록물품은 7일 후 자동으로 삭제됩니다. (계정거래의 경우 30일)<br></li>'
+      + '<li class=list_non>* 팝니다/삽니다 등록물품 모두 포함</li>'
+      + '<li class=list_non>단, 부가서비스 이용중인 물품의 경우 잔여 시간 경과 후 자동 삭제</li>'
+      + '</ul>'
+      + '<div class=last_txt>등록하시려는 물품이 위와 같습니까?</div>'
+      + '<div class=g_btn_new>'
+      + '<button type=button id=buy_reg_submit>확인</button>'
+      + '<button type=button id=buy_cancel_submit>취소</button>'
+      + '</div>'
+      + '</div></div>';
+  }
+
+  // ── 구매 팝업 데이터 채우고 표시 ──────────────────────────────────
+  function fillAndShowBuyPopup(data) {
+    var dvPopup = document.getElementById('dvPopup');
+    if (!dvPopup) return;
+    var catEl = document.getElementById('buy_popup_category');
+    var titEl = document.getElementById('buy_popup_title');
+    var prcEl = document.getElementById('buy_popup_price');
+    if (catEl) catEl.textContent = (data.gameName || '') + (data.serverName ? ' > ' + data.serverName : '') + (data.itemCategory ? ' > ' + data.itemCategory : '');
+    if (titEl) titEl.textContent = data.title || '';
+    if (prcEl) prcEl.textContent = Number(data.price || 0).toLocaleString() + '원';
+
+    // 확인 버튼
+    var regBtn = document.getElementById('buy_reg_submit');
+    if (regBtn && !regBtn._imBound) {
+      regBtn._imBound = true;
+      regBtn.addEventListener('click', function() {
+        location.href = '/buy/list.html';
+      });
+    }
+    // 취소 버튼
+    var cancelBtn = document.getElementById('buy_cancel_submit');
+    if (cancelBtn && !cancelBtn._imBound) {
+      cancelBtn._imBound = true;
+      cancelBtn.addEventListener('click', function() {
+        dvPopup.classList.remove('im-show');
+      });
+    }
+    dvPopup.classList.remove('sf-hidden');
+    dvPopup.classList.add('im-show');
+  }
+
   function init() {
     loadUserTradeInfo();
+    injectBuyPopup();
     // 스냅샷에 미리 채워진 폼 값 초기화
     var _inputs = [
       document.getElementById('searchRegGameServer'),
@@ -2626,8 +2782,13 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             })
             .then(function(r) {
               if (r.ok) {
-                showToast('구매 등록이 완료되었습니다!', true);
-                setTimeout(function() { location.href = '/buy/list.html'; }, 1800);
+                fillAndShowBuyPopup({
+                  gameName: game2,
+                  serverName: server2,
+                  itemCategory: window._IM_sel_category || '',
+                  title: title2,
+                  price: parseInt(price.replace(/[^0-9]/g, ''), 10)
+                });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
               }
