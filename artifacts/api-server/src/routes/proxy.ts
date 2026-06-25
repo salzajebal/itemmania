@@ -1210,6 +1210,24 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
 
 const BALANCE_SSE_SCRIPT = `<script>
 (function(){
+  // 잔액 표시 요소를 모두 업데이트하는 공유 함수
+  window._IM_updateBalance = function(balance) {
+    var b = Number(balance || 0);
+    var formatted = b.toLocaleString('ko-KR');
+    var formattedWon = formatted + '원';
+    // 마이룸: .over_mile, .total_mile
+    var avail = document.querySelector('.over_mile');
+    var total = document.querySelector('.total_mile');
+    if (avail) avail.textContent = formatted;
+    if (total) total.textContent = formatted;
+    // 충전 페이지 등: #txtCurrentMileage
+    document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]')
+      .forEach(function(el){ el.textContent = formattedWon; });
+    // 마이룸 상단 잔액 텍스트
+    var mileageTxt = document.querySelector('.mr_user_mileage_txt');
+    if (mileageTxt) mileageTxt.textContent = formattedWon;
+  };
+
   if(typeof EventSource==='undefined')return;
   var es=new EventSource('/api/events');
   var connected=false;
@@ -1218,10 +1236,7 @@ const BALANCE_SSE_SCRIPT = `<script>
   es.addEventListener('balance',function(e){
     try{
       var d=JSON.parse(e.data);
-      var b=Number(d.balance||0);
-      var txt=b.toLocaleString('ko-KR')+'원';
-      var els=document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]');
-      for(var i=0;i<els.length;i++)els[i].textContent=txt;
+      window._IM_updateBalance(d.balance);
     }catch(ex){}
   });
 })();
@@ -3621,11 +3636,15 @@ const MYROOM_INTERCEPT_SCRIPT = `
           .then(function(r) { return r.ok ? r.json() : null; })
           .then(function(b) {
             if (!b) return;
-            var amount = Number(b.balance || 0).toLocaleString('ko-KR');
-            var avail = document.querySelector('.over_mile');
-            var total = document.querySelector('.total_mile');
-            if (avail) avail.textContent = amount;
-            if (total) total.textContent = amount;
+            if (typeof window._IM_updateBalance === 'function') {
+              window._IM_updateBalance(b.balance);
+            } else {
+              var amount = Number(b.balance || 0).toLocaleString('ko-KR');
+              var avail = document.querySelector('.over_mile');
+              var total = document.querySelector('.total_mile');
+              if (avail) avail.textContent = amount;
+              if (total) total.textContent = amount;
+            }
           });
 
         // 인증 배지 상태 반영
