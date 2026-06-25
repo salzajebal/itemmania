@@ -5302,6 +5302,7 @@ const CHARGE_FORCE_STYLE = `<style id="charge-force-style">
 .m_button{display:flex!important;opacity:1!important;visibility:visible!important}
 #btn_charge{display:inline-block!important;opacity:1!important;visibility:visible!important}
 #g_POPUP{overflow:visible!important;height:auto!important}
+.charge_banner_module_wrapper{display:none!important}
 </style>`;
 
 function serveCharge(html: string, user: Record<string, unknown> | null = null): string {
