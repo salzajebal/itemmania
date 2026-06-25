@@ -3,10 +3,12 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { ordersTable } from "./orders";
+import { productsTable } from "./products";
 
 export const chatRoomsTable = pgTable("chat_rooms", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").references(() => ordersTable.id),
+  productId: integer("product_id").references(() => productsTable.id),
   buyerId: integer("buyer_id").notNull().references(() => usersTable.id),
   sellerId: integer("seller_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
