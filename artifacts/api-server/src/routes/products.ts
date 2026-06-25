@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, desc, asc } from "drizzle-orm";
-import { db, productsTable, gamesTable } from "@workspace/db";
+import { eq, ilike, and, sql, desc, asc, count, inArray } from "drizzle-orm";
+import { db, productsTable, gamesTable, ordersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -141,6 +141,50 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 });
 
 // 내 상품 목록 (로그인 필요)
+// 나의 거래 현황 통계
+router.get("/products/my/stats", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+
+  const [sellTotal] = await db
+    .select({ cnt: count() })
+    .from(productsTable)
+    .where(eq(productsTable.sellerId, userId));
+
+  const [sellActive] = await db
+    .select({ cnt: count() })
+    .from(productsTable)
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.status, "active")));
+
+  const [sellPending] = await db
+    .select({ cnt: count() })
+    .from(ordersTable)
+    .where(and(eq(ordersTable.sellerId, userId), eq(ordersTable.status, "pending")));
+
+  const [buyTotal] = await db
+    .select({ cnt: count() })
+    .from(ordersTable)
+    .where(eq(ordersTable.buyerId, userId));
+
+  const [buyPending] = await db
+    .select({ cnt: count() })
+    .from(ordersTable)
+    .where(and(eq(ordersTable.buyerId, userId), eq(ordersTable.status, "pending")));
+
+  const [buyProcessing] = await db
+    .select({ cnt: count() })
+    .from(ordersTable)
+    .where(and(eq(ordersTable.buyerId, userId), inArray(ordersTable.status, ["shipped", "confirmed"])));
+
+  res.json({
+    sellTotal: Number(sellTotal?.cnt ?? 0),
+    sellActive: Number(sellActive?.cnt ?? 0),
+    sellPending: Number(sellPending?.cnt ?? 0),
+    buyTotal: Number(buyTotal?.cnt ?? 0),
+    buyPending: Number(buyPending?.cnt ?? 0),
+    buyProcessing: Number(buyProcessing?.cnt ?? 0),
+  });
+});
+
 router.get("/products/my/list", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const items = await db

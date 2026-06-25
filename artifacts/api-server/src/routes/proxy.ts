@@ -3680,6 +3680,26 @@ const MYROOM_INTERCEPT_SCRIPT = `
         // 인증 배지 상태 반영
         applyAuthBadges(d.authStates);
 
+        // ── 나의 거래 현황 수치 반영 ───────────────────────────────────
+        fetch('/api/products/my/stats', { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(s) {
+            if (!s) return;
+            var set = function(sel, val) {
+              var el = document.querySelector(sel);
+              if (el) el.textContent = String(val || 0);
+            };
+            // 판매
+            set('.sell_result.trade_result a', s.sellTotal);
+            set('.sell_pay_wait_result.trade_result2 a', s.sellPending);
+            set('.sell_ing_title.trade_result2 a', s.sellActive);
+            // 구매
+            set('.buy_result.trade_result a', s.buyTotal);
+            set('.buy_pay_wait_result.trade_result2 a', s.buyPending);
+            set('.buy_ing_title.trade_result2 a', s.buyProcessing);
+          })
+          .catch(function() {});
+
         // ── 실제 주문 내역 표시 ────────────────────────────────────────
         fetch('/api/orders', { credentials: 'include' })
           .then(function(r) { return r.ok ? r.json() : []; })
