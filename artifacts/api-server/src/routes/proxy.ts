@@ -1614,130 +1614,105 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
 #charge_service,#dv_power,
 .charge_service,.credit_benefit_area,#credit_benefit{display:none!important}
 
-/* ─── 팝업 오버레이 공통 ─────────────────────────── */
-#dvPremium,#receipt_layer,#dvPopup{
+/* ─── 프리미엄/현금영수증 팝업 완전 제거 ─────────── */
+#dvPremium,#receipt_layer{display:none!important;}
+
+/* ─── 물품등록정보 팝업 오버레이 ─────────────────── */
+#dvPopup{
   position:fixed!important;inset:0!important;z-index:10000!important;
   background:rgba(0,0,0,0.55)!important;
   display:none!important;
   align-items:flex-start!important;justify-content:center!important;
   padding:40px 16px!important;overflow-y:auto!important;
-  box-sizing:border-box!important;text-align:left!important;
+  box-sizing:border-box!important;
 }
-#dvPremium.im-show,#receipt_layer.im-show,#dvPopup.im-show{
-  display:flex!important;
-}
-/* 흰 박스 */
-#dvPremium .inner,#receipt_layer .inner,#dvPopup .inner{
-  background:#fff!important;border-radius:10px!important;
-  width:100%!important;max-width:620px!important;
-  box-shadow:0 8px 40px rgba(0,0,0,.28)!important;
+#dvPopup.im-show{display:flex!important;}
+
+/* 팝업 흰 박스 + 파란 테두리 */
+#dvPopup .inner{
+  background:#fff!important;
+  border-radius:10px!important;
+  border:2px solid #159EFD!important;
+  width:100%!important;max-width:640px!important;
   overflow:hidden!important;position:relative!important;
   text-align:left!important;
 }
-/* 제목 */
-#dvPremium .title,#receipt_layer .title,#dvPopup .title{
+/* 제목 "물품등록정보" */
+#dvPopup .title{
+  display:block!important;
   font-size:18px!important;font-weight:700!important;color:#159EFD!important;
-  padding:24px 28px 20px!important;margin:0!important;
+  padding:20px 22px 16px!important;margin:0!important;
   border-bottom:2px solid #159EFD!important;
+  background:#fff!important;
 }
-/* 본문 */
-#dvPremium .cont,#receipt_layer .cont,#dvPopup .cont{
-  padding:20px 28px!important;
+/* 본문 영역 */
+#dvPopup .cont{padding:18px 22px 0!important;}
+/* 테이블 */
+#dvPopup .g_blue_table{
+  width:100%!important;border-collapse:collapse!important;margin-bottom:10px!important;
+}
+#dvPopup .g_blue_table th{
+  background:#EEF5FF!important;font-size:13px!important;font-weight:600!important;
+  padding:10px 14px!important;border:1px solid #D5E2F2!important;
+  text-align:left!important;white-space:nowrap!important;color:#333!important;
+}
+#dvPopup .g_blue_table td{
+  padding:10px 14px!important;border:1px solid #D5E2F2!important;
+  font-size:13px!important;color:#222!important;
+}
+/* 거래 사고 주의사항 헤더 */
+#dvPopup .attention{
+  font-size:13px!important;font-weight:700!important;color:#e53e3e!important;
+  margin:10px 0 6px!important;padding:0!important;
+}
+/* 빨간 경고 박스 */
+#dvPopup .attention_box{
+  padding:12px 16px!important;
+  border:1px solid #f5c6cb!important;
+  background:#FFF5F5!important;
+  font-size:13px!important;line-height:1.75!important;
+  margin-bottom:10px!important;border-radius:4px!important;
+  list-style:none!important;
+}
+#dvPopup .attention_box li{
+  margin-bottom:4px!important;list-style:none!important;padding:0!important;
+}
+#dvPopup .attention_box .deco{font-weight:700!important;}
+#dvPopup .attention_box .f_blue3{color:#159EFD!important;font-size:12px!important;}
+/* 약관 회색 박스 */
+#dvPopup .box6{
+  padding:10px 16px!important;
+  border:1px solid #e0e0e0!important;
+  background:#f9f9f9!important;
+  font-size:12px!important;color:#555!important;
+  line-height:1.75!important;margin-bottom:10px!important;border-radius:4px!important;
+}
+#dvPopup .box6 li{list-style:none!important;margin-bottom:2px!important;padding:0!important;}
+#dvPopup .list_non::before{content:""!important;}
+/* checkbox 영역 숨김 */
+#dvPopup .warning_txt_layer{display:none!important;}
+/* "등록하시려는 물품이 위와 같습니까?" */
+#dvPopup .last_txt{
+  text-align:center!important;font-size:14px!important;font-weight:600!important;color:#333!important;
+  padding:14px 0 16px!important;border-top:1px solid #e8e8e8!important;margin-top:4px!important;
 }
 /* 버튼 영역 */
-#dvPremium .g_btn_new,#receipt_layer .g_btn_new,#dvPopup .g_btn_new{
-  padding:0 28px 24px!important;display:flex!important;gap:10px!important;
+#dvPopup .g_btn_new{
+  padding:0 22px 22px!important;display:flex!important;gap:10px!important;
 }
-/* 파란 버튼 */
-#premium_btn,#receipt_ok_btn,#reg_submit{
-  flex:1!important;width:auto!important;padding:15px!important;
+/* 확인(파란) 버튼 */
+#reg_submit{
+  flex:1!important;padding:15px 0!important;
   background:#159EFD!important;color:#fff!important;border:none!important;
   border-radius:8px!important;font-size:16px!important;font-weight:700!important;
   cursor:pointer!important;
 }
 /* 취소(회색) 버튼 */
 #cancel_submit{
-  flex:1!important;width:auto!important;padding:15px!important;
-  background:#555!important;color:#fff!important;border:none!important;
+  flex:1!important;padding:15px 0!important;
+  background:#666!important;color:#fff!important;border:none!important;
   border-radius:8px!important;font-size:16px!important;font-weight:700!important;
   cursor:pointer!important;
-}
-/* X 닫기 버튼 */
-#receipt_layer .close_w{
-  position:absolute!important;top:18px!important;right:20px!important;
-  background:none!important;border:none!important;font-size:18px!important;
-  cursor:pointer!important;color:#888!important;padding:4px 8px!important;
-}
-/* dvPremium 내부 요소 */
-#dvPremium .middle_text{font-size:14px;color:#444;text-align:center;margin-bottom:16px}
-#dvPremium .total_charge{
-  text-align:center;padding:12px 0;margin-bottom:14px;
-  border-top:1px solid #e8e8e8;border-bottom:1px solid #e8e8e8;
-}
-#dvPremium .total_label{font-size:15px;font-weight:700}
-#dvPremium .total_charge_money{font-size:17px;font-weight:700;color:#e53e3e}
-#dvPremium .total_charge .center{font-size:13px;color:#666;margin-top:4px}
-#dvPremium .item_content{border:1px solid #D5E2F2;padding:14px;margin-bottom:12px}
-#dvPremium .f_right{text-align:right;margin-bottom:8px}
-#dvPremium .free_view{
-  font-weight:700;padding:4px 18px;color:#159EFD;
-  border:1px solid #159EFD;border-radius:3px;background:none;cursor:pointer;font-size:13px;
-}
-#dvPremium .premium_box{display:flex;flex-direction:column;gap:10px}
-#dvPremium .charge_price{text-align:center;font-size:13px;margin-bottom:6px}
-#dvPremium .quantity_wrap{display:flex;justify-content:center;gap:8px;margin-bottom:8px}
-#dvPremium .quantity_input{
-  display:flex;flex:1;height:36px;border:1px solid #DDE0E3;border-radius:3px;max-width:200px;
-}
-#dvPremium .quantity_input button{
-  width:40px;height:36px;border:none;background:#F1F2F4;
-  font-size:16px;cursor:pointer;border-radius:0;
-}
-#dvPremium .quantity_input input{
-  flex:1;text-align:center;border:none;outline:none;font-size:16px;
-}
-#dvPremium .reset{
-  padding:0 14px;border:1px solid #DDE0E3;border-radius:3px;
-  background:#fff;font-size:13px;cursor:pointer;height:36px;
-}
-#dvPremium .set_amount_list{
-  display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;
-}
-#dvPremium .set_amount_list button[name=set_amount]{
-  flex:1;min-width:36px;height:30px;border:1px solid #DDE0E3;
-  border-radius:3px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#747474;
-}
-#dvPremium .sub_txt{
-  font-size:12px;color:#555;text-align:center;
-  background:#E8F2FF;padding:8px;border-radius:4px;margin-top:6px;
-}
-#dvPremium .sub_notice_txt{font-size:12px;color:#FF2400;margin-top:10px;text-align:center}
-/* dvPopup 내부 */
-#dvPopup .g_blue_table{width:100%;border-collapse:collapse;margin-bottom:6px}
-#dvPopup .g_blue_table th{
-  background:#E8F2FF;font-size:13px;font-weight:700;
-  padding:10px 12px;border:1px solid #D5E2F2;text-align:left;
-}
-#dvPopup .g_blue_table td{
-  padding:10px 12px;border:1px solid #D5E2F2;font-size:13px;
-}
-#dvPopup .attention{
-  font-size:13px;font-weight:700;color:#e53e3e;
-  margin:14px 0 6px;
-}
-#dvPopup .attention_box{
-  padding:12px 16px;border:1px solid #f5c6cb;background:#fff5f5;
-  font-size:13px;line-height:1.7;margin-bottom:10px;
-}
-#dvPopup .attention_box li{margin-bottom:4px;list-style:none}
-#dvPopup .box6{
-  padding:10px 16px;border:1px solid #e0e0e0;background:#f9f9f9;
-  font-size:12px;color:#666;line-height:1.7;margin-bottom:14px;
-}
-#dvPopup .box6 li{list-style:none;margin-bottom:2px}
-#dvPopup .last_txt{
-  text-align:center;font-size:14px;font-weight:700;
-  padding:14px 0 16px;border-top:1px solid #e8e8e8;
 }
 </style>
 <script>
@@ -2240,57 +2215,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                     el.classList.remove('im-show');
                   }
 
-                  // ── STEP 1: dvPremium 표시 ──────────────────────────────
-                  var dvPremium = document.getElementById('dvPremium');
-                  if (dvPremium) {
-                    showLayer(dvPremium);
-
-                    // 마일리지 표시
-                    fetch('/api/auth/me', { credentials: 'include' })
-                      .then(function(mr) { return mr.json(); })
-                      .then(function(me) {
-                        var ml = document.getElementById('my_mileage_layer');
-                        if (ml && me && me.balance != null)
-                          ml.textContent = me.balance.toLocaleString() + '원';
-                      }).catch(function() {});
-
-                    // ── STEP 2: premium_btn 확인 → receipt_layer 표시 ──
-                    var premiumBtn = document.getElementById('premium_btn');
-                    if (premiumBtn && !premiumBtn._imBound) {
-                      premiumBtn._imBound = true;
-                      premiumBtn.addEventListener('click', function() {
-                        hideLayer(dvPremium);
-                        var receiptLayer = document.getElementById('receipt_layer');
-                        if (receiptLayer) {
-                          showLayer(receiptLayer);
-
-                          // ── STEP 3: receipt_ok_btn → dvPopup 표시 ──
-                          var receiptOkBtn = document.getElementById('receipt_ok_btn');
-                          if (receiptOkBtn && !receiptOkBtn._imBound) {
-                            receiptOkBtn._imBound = true;
-                            receiptOkBtn.addEventListener('click', function() {
-                              hideLayer(receiptLayer);
-                              fillAndShowDvPopup();
-                            });
-                          }
-                          // receipt_layer 닫기(X) 버튼
-                          var closeBtn = receiptLayer.querySelector('.close_w');
-                          if (closeBtn && !closeBtn._imBound) {
-                            closeBtn._imBound = true;
-                            closeBtn.addEventListener('click', function() {
-                              hideLayer(receiptLayer);
-                            });
-                          }
-                        } else {
-                          // receipt_layer 없으면 dvPopup 바로 표시
-                          fillAndShowDvPopup();
-                        }
-                      });
-                    }
-                  } else {
-                    // dvPremium 없으면 바로 dvPopup
-                    fillAndShowDvPopup();
-                  }
+                  // 프리미엄/현금영수증 건너뜀 → 바로 물품등록정보 표시
+                  fillAndShowDvPopup();
                 });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
