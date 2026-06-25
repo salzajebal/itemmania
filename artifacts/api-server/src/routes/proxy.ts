@@ -2402,24 +2402,25 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
 
     var listEl = frame ? (document.getElementById(\'reg_gameserver_list\') || frame.querySelector(\'.gs_list\')) : null;
 
-    // gs_list가 있어도 .game div 없으면 커스텀 드롭다운으로 전환 (buy 페이지 구조 대응)
+    // gs_list에 .game/.server/.goods 구조 주입 — sell 페이지와 완전 동일한 3열 드롭다운
     if (!useCustom && listEl && !listEl.querySelector(\'.game\')) {
-      useCustom = true;
-      listEl = null;
-      var wrapperB = inp.parentElement;
-      for (var wkB = 0; wkB < 8 && wrapperB; wkB++) {
-        if (wrapperB.classList && wrapperB.classList.contains(\'g_search_wrapper\')) break;
-        wrapperB = wrapperB.parentElement;
-      }
-      var existDdB = document.getElementById(\'_im_game_dd_fb\');
-      if (existDdB) existDdB.remove();
-      dd = document.createElement(\'div\');
-      dd.id = \'_im_game_dd_fb\';
-      dd.style.cssText = \'position:absolute;top:38px;left:0;width:100%;z-index:200;\'
-        + \'background:var(--color-body,#fff);border:4px solid var(--color-blue7,#159EFD);\'
-        + \'border-top:0;border-radius:0 0 15px 15px;overflow-y:auto;max-height:320px;\'
-        + \'box-sizing:border-box;padding:8px 0;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)\';
-      if (wrapperB) wrapperB.appendChild(dd);
+      listEl.innerHTML = \'\';
+      var gameD = document.createElement(\'div\');
+      gameD.className = \'game\';
+      gameD.innerHTML = \'<ul></ul>\';
+      var serverD = document.createElement(\'div\');
+      serverD.className = \'server\';
+      serverD.innerHTML = \'<ul></ul>\';
+      var goodsD = document.createElement(\'div\');
+      goodsD.className = \'goods\';
+      goodsD.innerHTML = \'<ul><li>게임머니</li><li>아이템</li><li>계정</li><li class=sel_on>기타</li></ul>\';
+      listEl.appendChild(gameD);
+      listEl.appendChild(serverD);
+      listEl.appendChild(goodsD);
+      window._IM_sel_category = \'기타\';
+      // initial_screen 숨김
+      var initScr = frame.querySelector(\'.initial_screen\');
+      if (initScr) initScr.classList.add(\'g_hidden\');
     }
 
     function showDrop() {
