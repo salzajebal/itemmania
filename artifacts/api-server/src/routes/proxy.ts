@@ -1566,8 +1566,12 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
 
         // ── 업로드 시간순 병합 (최신 순) ──────────────────────────
-        // 아이템매니아 항목에 timestamp 추출해서 data-ts 설정
-        origNormalItems.forEach(function(el) { getItemTs(el); });
+        // 아이템매니아 원본은 이미 최신순. 같은 분(HH:MM) 내 순서는 원본 순서 보존.
+        // idx=0(첫 항목)이 가장 최신이므로 뒤에서부터 오프셋 부여.
+        origNormalItems.forEach(function(el, idx) {
+          var baseTs = getItemTs(el);
+          el.setAttribute('data-ts', String(baseTs + (origNormalItems.length - 1 - idx)));
+        });
 
         var all = ourEls.concat(origNormalItems);
         all.sort(function(a, b) {
