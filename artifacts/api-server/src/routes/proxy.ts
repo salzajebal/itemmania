@@ -1846,9 +1846,9 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             li.classList.add(\'sel_on\');
             window._IM_sel_category = li.textContent.replace(/NEW/g, \'\').trim();
             if (window._IM_sel_game) {
-              inp.value = window._IM_sel_server
-                ? window._IM_sel_game.name + \' (\' + window._IM_sel_server.name + \')\'
-                : window._IM_sel_game.name;
+              inp.value = window._IM_sel_game.name
+                + (window._IM_sel_server ? \' > \' + window._IM_sel_server.name : \'\')
+                + \' > \' + window._IM_sel_category;
               hideDrop();
             }
           });
@@ -1870,14 +1870,14 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
           if (sidx === 0) {
             li.classList.add(\'sel_on\');
             window._IM_sel_server = s;
-            inp.value = g.name + \' (\' + s.name + \')\';
+            inp.value = g.name + \' > \' + s.name;
           }
           li.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
           li.addEventListener(\'click\', function() {
             serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
             li.classList.add(\'sel_on\');
             window._IM_sel_server = s;
-            inp.value = g.name + \' (\' + s.name + \')\';
+            inp.value = g.name + \' > \' + s.name;
           });
           serverUl.appendChild(li);
         });
@@ -1933,7 +1933,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
         row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
         row.addEventListener(\'click\', function() {
           window._IM_sel_server = s;
-          inp.value = g.name + \' (\' + s.name + \')\';
+          inp.value = g.name + \' > \' + s.name;
           hideDrop();
         });
         dd.appendChild(row);
@@ -2543,9 +2543,9 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             li.classList.add(\'sel_on\');
             window._IM_sel_category = li.textContent.replace(/NEW/g, \'\').trim();
             if (window._IM_sel_game) {
-              inp.value = window._IM_sel_server
-                ? window._IM_sel_game.name + \' (\' + window._IM_sel_server.name + \')\'
-                : window._IM_sel_game.name;
+              inp.value = window._IM_sel_game.name
+                + (window._IM_sel_server ? \' > \' + window._IM_sel_server.name : \'\')
+                + \' > \' + window._IM_sel_category;
               hideDrop();
             }
           });
@@ -2574,8 +2574,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             serverUl.querySelectorAll(\'li\').forEach(function(el) { el.classList.remove(\'sel_on\'); });
             li.classList.add(\'sel_on\');
             window._IM_sel_server = s;
-            inp.value = g.name + \' (\' + s.name + \')\';
-            hideDrop();
+            inp.value = g.name + \' > \' + s.name;
           });
           serverUl.appendChild(li);
         });
@@ -2629,7 +2628,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
         row.addEventListener(\'mousedown\', function(e) { e.preventDefault(); });
         row.addEventListener(\'click\', function() {
           window._IM_sel_server = s;
-          inp.value = g.name + \' (\' + s.name + \')\';
+          inp.value = g.name + \' > \' + s.name;
           hideDrop();
         });
         dd.appendChild(row);
