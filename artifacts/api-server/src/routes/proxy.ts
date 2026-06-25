@@ -1699,20 +1699,21 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
 /* 버튼 영역 */
 #dvPopup .g_btn_new{
   padding:0 22px 22px!important;display:flex!important;gap:10px!important;
+  justify-content:center!important;
 }
 /* 확인(파란) 버튼 */
 #reg_submit{
-  flex:1!important;padding:15px 0!important;
+  flex:0 0 140px!important;padding:15px 0!important;
   background:#159EFD!important;color:#fff!important;border:none!important;
   border-radius:8px!important;font-size:16px!important;font-weight:700!important;
-  cursor:pointer!important;
+  cursor:pointer!important;text-align:center!important;
 }
 /* 취소(회색) 버튼 */
 #cancel_submit{
-  flex:1!important;padding:15px 0!important;
+  flex:0 0 140px!important;padding:15px 0!important;
   background:#666!important;color:#fff!important;border:none!important;
   border-radius:8px!important;font-size:16px!important;font-weight:700!important;
-  cursor:pointer!important;
+  cursor:pointer!important;text-align:center!important;
 }
 </style>
 <script>
@@ -2362,18 +2363,18 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
   padding:14px 0 16px!important;border-top:1px solid #e8e8e8!important;margin-top:4px!important;
 }
 /* 버튼 영역 */
-#dvPopup .g_btn_new{padding:0 22px 22px!important;display:flex!important;gap:10px!important;}
+#dvPopup .g_btn_new{padding:0 22px 22px!important;display:flex!important;gap:10px!important;justify-content:center!important;}
 /* 확인(초록) 버튼 */
 #buy_reg_submit{
-  flex:1!important;padding:15px 0!important;
+  flex:0 0 140px!important;padding:15px 0!important;
   background:#39A742!important;color:#fff!important;border:none!important;
-  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;text-align:center!important;
 }
 /* 취소(회색) 버튼 */
 #buy_cancel_submit{
-  flex:1!important;padding:15px 0!important;
+  flex:0 0 140px!important;padding:15px 0!important;
   background:#666!important;color:#fff!important;border:none!important;
-  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;
+  border-radius:8px!important;font-size:16px!important;font-weight:700!important;cursor:pointer!important;text-align:center!important;
 }
 </style>
 <script>
