@@ -1529,27 +1529,26 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         // normalList 비우기
         normalList.innerHTML = '';
 
-        // ── 우리 DB 상품 먼저 표시 ────────────────────────────────
-        if (items.length > 0) {
-          // 우리 사이트 상품 구분 헤더
-          var ourHeader = document.createElement('li');
-          ourHeader.style.cssText = 'padding:10px 16px;background:#EDF8FF;border-radius:8px;margin-bottom:4px;list-style:none;font-size:13px;font-weight:700;color:#159EFD;border-left:3px solid #159EFD';
-          ourHeader.textContent = '★ 우리 사이트 등록 상품 (' + ourTotal + '건)';
-          normalList.appendChild(ourHeader);
-          items.forEach(function(p) { normalList.appendChild(makeCardWithBadge(p, type)); });
-        }
+        // ── 우리 DB 상품 카드 생성 ────────────────────────────────
+        var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
 
-        // ── 아이템매니아 원본 상품 이어서 표시 ───────────────────
-        if (origNormalCount > 0) {
-          if (items.length > 0) {
-            // 구분선
-            var sep = document.createElement('li');
-            sep.style.cssText = 'padding:10px 16px;background:#f8f8f8;border-radius:8px;margin:8px 0 4px;list-style:none;font-size:13px;font-weight:700;color:#666;border-left:3px solid #ccc';
-            sep.textContent = '아이템매니아 상품 (' + origNormalCount + '건)';
-            normalList.appendChild(sep);
+        // ── 두 리스트를 비율에 맞게 균등하게 섞기 ────────────────
+        var merged = [];
+        if (ourEls.length === 0) {
+          merged = origNormalItems.slice();
+        } else if (origNormalItems.length === 0) {
+          merged = ourEls;
+        } else {
+          var total = ourEls.length + origNormalItems.length;
+          var oi = 0, si = 0;
+          for (var mi = 0; mi < total; mi++) {
+            var insertOurs = si < ourEls.length && (oi >= origNormalItems.length ||
+              (si / ourEls.length) <= (mi / total));
+            if (insertOurs) { merged.push(ourEls[si++]); }
+            else { merged.push(origNormalItems[oi++]); }
           }
-          origNormalItems.forEach(function(el) { normalList.appendChild(el); });
         }
+        merged.forEach(function(el) { normalList.appendChild(el); });
 
         // 둘 다 없으면 안내 메시지
         if (items.length === 0 && origNormalCount === 0) {
