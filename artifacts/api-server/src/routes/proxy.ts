@@ -4352,45 +4352,63 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
   }
 
+  var STATUS_LABEL = { pending:'거래대기', active:'거래중', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
   var roomId = null;
   var myId = null;
-  var myNickname = '';
   var lastMsgId = 0;
   var pollTimer = null;
 
   function appendMessage(m) {
     var list = document.getElementById('chat_content_list');
     if (!list) return;
-    var isMe = (m.senderId === myId);
     if (m.id && m.id <= lastMsgId) return;
     if (m.id) lastMsgId = Math.max(lastMsgId, m.id);
+    var isMe = (m.senderId === myId);
     var hhmm = fmtTime(m.createdAt);
     var div = document.createElement('div');
-    div.className = 'chat_item' + (isMe ? ' me' : '');
+    div.className = 'chat_item ' + (isMe ? 'me' : 'another');
     div.innerHTML = '<div class=chat_msg><span>' + esc(m.content) + '</span></div><div class=send_time>' + hhmm + '</div>';
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
+  }
+
+  function updateStatusUI(status) {
+    var stateEl = document.getElementById('trade_state_text');
+    if (stateEl) stateEl.textContent = STATUS_LABEL[status] || status;
+    if (status === 'ended' || status === 'cancelled' || status === 'rejected') {
+      var ti = document.getElementById('trade_ing');
+      var tc = document.getElementById('trade_cancel');
+      if (ti) { ti.disabled = true; ti.style.opacity = '0.4'; }
+      if (tc) { tc.disabled = true; tc.style.opacity = '0.4'; }
+    }
   }
 
   function loadMessages() {
     if (!roomId) return;
     api('GET', '/chat/rooms/' + roomId + '/messages').then(function(data) {
       if (!data || !data.messages) return;
-
-      // 채팅방 헤더 정보 업데이트
       if (data.room) {
         var r = data.room;
-        var isMe = (r.buyerId === myId);
-        var partnerName = isMe ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
-        var titleEl = document.getElementById('chat_partner_name') || document.querySelector('.chat_user_name, .nick_name, h2.title');
+        var isBuyer = r.buyerId === myId;
+        var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
+        var titleEl = document.querySelector('.nick_name, .chat_user_name');
         if (titleEl) titleEl.textContent = partnerName;
-        if (r.productTitle) {
-          var prodEl = document.getElementById('chat_product_title') || document.querySelector('.trade_goods_name, .goods_name');
-          if (prodEl) prodEl.textContent = r.productTitle;
+        var prodEl = document.querySelector('.trade_goods_name, .goods_name');
+        if (prodEl && r.productTitle) prodEl.textContent = r.productTitle;
+        if (r.productPrice) {
+          var priceEl = document.querySelector('.trade_price_num, .goods_price');
+          if (priceEl) priceEl.textContent = Number(r.productPrice).toLocaleString() + '원';
+        }
+        updateStatusUI(r.status || 'pending');
+        var userInfoEl = document.getElementById('chat_user_info');
+        if (userInfoEl) {
+          userInfoEl.className = 'chat_user_info ' + (isBuyer ? 'sell' : 'buy');
+          var roleLabel = userInfoEl.querySelector('.user_info_txt');
+          if (roleLabel) roleLabel.innerHTML = isBuyer ? '판매자<br>정보' : '구매자<br>정보';
+          var nickEl = userInfoEl.querySelector('ul li:first-child');
+          if (nickEl) nickEl.textContent = partnerName;
         }
       }
-
-      // 메시지 렌더
       var list = document.getElementById('chat_content_list');
       if (list && lastMsgId === 0) list.innerHTML = '';
       data.messages.forEach(appendMessage);
@@ -4405,9 +4423,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     if (!msg) return;
     textarea.value = '';
     api('POST', '/chat/rooms/' + roomId + '/messages', { content: msg })
-      .then(function(m) {
-        if (m && m.id) appendMessage(m);
-      });
+      .then(function(m) { if (m && m.id) appendMessage(m); });
   }
 
   function startPolling() {
@@ -4417,53 +4433,66 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       api('GET', '/chat/rooms/' + roomId + '/messages').then(function(data) {
         if (!data || !data.messages) return;
         data.messages.forEach(appendMessage);
+        if (data.room) updateStatusUI(data.room.status || 'pending');
       });
     }, 4000);
+  }
+
+  function changeStatus(newStatus, confirmMsg) {
+    if (!confirm(confirmMsg)) return;
+    api('PATCH', '/chat/rooms/' + roomId, { status: newStatus }).then(function(res) {
+      if (res && res.status) updateStatusUI(res.status);
+    });
   }
 
   function init() {
     var params = new URLSearchParams(location.search);
     roomId = params.get('roomId') ? Number(params.get('roomId')) : null;
 
-    // 뒤로가기
-    var backBtn = document.querySelector('a.back_btn');
-    if (backBtn) {
-      backBtn.href = '/myroom/chat/list.html';
-      backBtn.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/chat/list.html'; });
-    }
-
-    // 마이룸 버튼
     var myroomBtn = document.querySelector('button.go_myroom');
-    if (myroomBtn) { myroomBtn.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; }); }
+    if (myroomBtn) myroomBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (window.opener) { window.close(); } else { location.href = '/myroom/index.html'; }
+    });
 
-    // 채팅종료
     var exitBtn = document.getElementById('chat_exit');
-    if (exitBtn) { exitBtn.addEventListener('click', function(e) { e.preventDefault(); if (confirm('채팅을 종료하시겠습니까?')) { if (pollTimer) clearInterval(pollTimer); location.href = '/myroom/chat/list.html'; } }); }
+    if (exitBtn) exitBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (confirm('채팅을 종료하시겠습니까?')) {
+        if (pollTimer) clearInterval(pollTimer);
+        if (window.opener) { window.close(); } else { location.href = '/myroom/chat/list.html'; }
+      }
+    });
 
-    // 준비 중 버튼
     ['chat_block','user_report','chat_template','chat_alarm','chat_print','send_file'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('click', function(e) { e.preventDefault(); alert('해당 기능은 준비 중입니다.'); });
     });
 
-    // 인수확인 버튼
-    var params2 = new URLSearchParams(location.search);
-    var type = params2.get('type') || 'sell';
     var tradeIngBtn = document.getElementById('trade_ing');
     if (tradeIngBtn) {
-      tradeIngBtn.textContent = (type === 'buy') ? '인수확인' : '인수확인요청';
       tradeIngBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        var layer = document.getElementById('buy_check_layer');
-        if (layer) { layer.style.display = 'block'; layer.classList.remove('sf-hidden'); }
+        changeStatus('ended', '거래완료(인수확인) 처리하시겠습니까?');
       }, true);
     }
-    var cancelBtn = document.getElementById('cancel_btn');
-    if (cancelBtn) { cancelBtn.addEventListener('click', function(e) { e.preventDefault(); var layer = document.getElementById('buy_check_layer'); if (layer) layer.style.display = 'none'; }); }
-    var tradeEndBtn = document.getElementById('trade_end_btn');
-    if (tradeEndBtn) { tradeEndBtn.addEventListener('click', function(e) { e.preventDefault(); var layer = document.getElementById('buy_check_layer'); if (layer) layer.style.display = 'none'; var stateEl = document.getElementById('trade_state_text'); if (stateEl) stateEl.textContent = '거래완료'; if (tradeIngBtn) { tradeIngBtn.disabled = true; tradeIngBtn.style.opacity = '0.4'; } }); }
 
-    // 메시지 전송
+    var tradeCancelBtn = document.getElementById('trade_cancel');
+    if (tradeCancelBtn) {
+      tradeCancelBtn.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        changeStatus('cancelled', '거래를 취소하시겠습니까?');
+      }, true);
+    }
+
+    var backBtn = document.querySelector('a.back_btn');
+    if (backBtn) {
+      backBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (window.opener) { window.close(); } else { location.href = '/myroom/chat/list.html'; }
+      });
+    }
+
     var sendBtn = document.getElementById('send_btn');
     var textarea = document.getElementById('write_chat');
     if (sendBtn) sendBtn.addEventListener('click', sendMsg);
@@ -4473,18 +4502,16 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       });
     }
 
-    // 로그인 확인 후 메시지 로드
     window._IM_auth().then(function(me) {
       if (!me || !me.id) {
-        location.href = '/login?redirect=' + encodeURIComponent(location.href);
+        if (window.opener) { alert('로그인이 필요합니다.'); window.close(); }
+        else { location.href = '/login?redirect=' + encodeURIComponent(location.href); }
         return;
       }
       myId = me.id;
-      myNickname = me.nickname || me.email || String(me.id);
-
       if (!roomId) {
         var list = document.getElementById('chat_content_list');
-        if (list) list.innerHTML = '<div style="padding:40px;text-align:center;color:#888">채팅방을 찾을 수 없습니다.<br><a href="/myroom/chat/list.html" style="color:#159EFD">채팅 목록으로</a></div>';
+        if (list) list.innerHTML = '<div style="padding:40px;text-align:center;color:#888">채팅방을 찾을 수 없습니다.</div>';
         return;
       }
       loadMessages();
@@ -4507,57 +4534,132 @@ const CHAT_INTERCEPT_SCRIPT = `
   }
   function fmtTime(iso) {
     if (!iso) return '';
-    var d = new Date(iso);
-    var now = new Date();
-    var diffDays = Math.floor((now - d) / 86400000);
-    if (diffDays === 0) return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-    if (diffDays < 7) return ['일','월','화','수','목','금','토'][d.getDay()] + '요일';
+    var d = new Date(iso), now = new Date();
+    var diff = Math.floor((now - d) / 86400000);
+    if (diff === 0) return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    if (diff < 7) return ['일','월','화','수','목','금','토'][d.getDay()] + '요일';
     return (d.getMonth()+1) + '/' + d.getDate();
   }
 
-  function renderRooms(rooms, myId) {
+  var STATUS_FILTER = { pending:'a', active:'b', ended:'c', cancelled:'d', rejected:'e' };
+  var STATUS_CLASS_SELL = { pending:'sell_wait', active:'sell_ing', ended:'sell_end', cancelled:'sell_cancel', rejected:'sell_impossible' };
+  var STATUS_CLASS_BUY  = { pending:'buy_wait',  active:'buy_ing',  ended:'buy_end',  cancelled:'buy_cancel',  rejected:'buy_impossible' };
+  var STATUS_LABEL = { pending:'거래대기', active:'거래중', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
+
+  var allRooms = [];
+  var myId = null;
+
+  function openChat(roomId, isBuyer) {
+    var url = '/myroom/chat/new_chat.html?roomId=' + roomId + '&type=' + (isBuyer ? 'buy' : 'sell');
+    window.open(url, '_chat_' + roomId, 'width=900,height=700,resizable=yes,scrollbars=yes');
+  }
+
+  function buildItem(r) {
+    var isBuyer = r.buyerId === myId;
+    var typeClass = isBuyer ? 'buy' : 'sell';
+    var typeLabel = isBuyer ? '삽니다' : '팝니다';
+    var stateKey  = r.status || 'pending';
+    var stateClass = isBuyer ? (STATUS_CLASS_BUY[stateKey] || 'buy_wait') : (STATUS_CLASS_SELL[stateKey] || 'sell_wait');
+    var stateLabel = STATUS_LABEL[stateKey] || '거래대기';
+    var stateFilter = STATUS_FILTER[stateKey] || 'a';
+    var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
+    var productTitle = r.productTitle || '상품 문의';
+    var price = r.productPrice ? Number(r.productPrice).toLocaleString() + '원' : '-';
+    var roomIdStr = String(r.id);
+
+    var li = document.createElement('li');
+    li.className = 'chat_list_item';
+    li.setAttribute('data-expand', roomIdStr);
+    li.setAttribute('data-type', typeClass);
+    li.setAttribute('data-state', stateFilter);
+    li.setAttribute('data-time', r.lastMessageAt || r.createdAt || '');
+    li.style.cursor = 'pointer';
+    li.innerHTML =
+      '<div class=chat_group>' +
+        '<div class="trade_type ' + typeClass + '">' + typeLabel + '</div>' +
+        '<button type=button class=chat_group_expand>그룹보기</button>' +
+      '</div>' +
+      '<div class=chat_info_area>' +
+        '<div class="trade_state ' + stateClass + '">' + stateLabel + '</div>' +
+        '<div class=tid>#' + roomIdStr + '</div>' +
+        '<div class=subject>' + esc(productTitle) + '</div>' +
+        '<div class=sub_info>' + esc(partnerName) + '</div>' +
+      '</div>' +
+      '<div class=chat_user><span>1명과</span> 대화중</div>' +
+      '<div class=dt>' + price + '</div>' +
+      '<div class=chat_proc>' +
+        '<button type=button class=chat_exit data-roomid="' + roomIdStr + '">채팅종료</button>' +
+      '</div>' +
+      '<div class=chat_sub_list></div>';
+
+    li.querySelector('.chat_exit').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (confirm('채팅을 종료하시겠습니까?')) {
+        fetch('/api/chat/rooms/' + r.id, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ended' })
+        }).then(function() { location.reload(); });
+      }
+    });
+
+    li.addEventListener('click', function(e) {
+      if (e.target.classList.contains('chat_group_expand') || e.target.classList.contains('chat_exit')) return;
+      openChat(r.id, isBuyer);
+    });
+
+    return li;
+  }
+
+  function applyFilters() {
+    var typeEl  = document.querySelector('input[name=trade_type]:checked');
+    var stateEl = document.querySelector('input[name=trade_state]:checked');
+    var typeVal  = typeEl  ? typeEl.value  : '';
+    var stateVal = stateEl ? stateEl.value : '';
     var list = document.querySelector('.chat_list');
     if (!list) return;
-    if (!rooms.length) {
-      list.innerHTML = '<li style="padding:40px;text-align:center;color:#888;font-size:15px">채팅 내역이 없습니다.<br><small>상품 상세 페이지의 채팅 아이콘을 눌러 시작하세요.</small></li>';
-      return;
-    }
-    list.innerHTML = rooms.map(function(r) {
-      var isBuyer = r.buyerId === myId;
-      var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
-      var tradeLabel = isBuyer ? '구매' : '판매';
-      var tradeClass = isBuyer ? 'buy' : 'sell';
-      var tradeBg = isBuyer ? '#e8f4ff' : '#fff3e0';
-      var productLabel = r.productTitle ? esc(r.productTitle) : '상품 문의';
-      var lastMsg = r.lastMessage ? esc(r.lastMessage) : '채팅을 시작해보세요';
-      var timeStr = fmtTime(r.lastMessageAt || r.createdAt);
-      return '<li class="chat_list_item" data-roomid="' + r.id + '" style="cursor:pointer;padding:16px 18px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:14px">' +
-        '<div style="width:46px;height:46px;border-radius:50%;background:#e8f4ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👤</div>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
-            '<span style="font-weight:700;font-size:15px">' + esc(partnerName) + '</span>' +
-            '<span style="font-size:12px;color:#aaa">' + timeStr + '</span>' +
-          '</div>' +
-          '<div style="font-size:12px;margin-bottom:3px"><span style="background:' + tradeBg + ';padding:1px 7px;border-radius:99px;font-weight:600;color:#159EFD">' + tradeLabel + '</span> ' + productLabel + '</div>' +
-          '<div style="font-size:14px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + lastMsg + '</div>' +
-        '</div>' +
-      '</li>';
-    }).join('');
-
-    list.addEventListener('click', function(e) {
-      var li = e.target.closest && e.target.closest('li[data-roomid]');
-      if (!li) return;
-      var roomId = li.getAttribute('data-roomid');
-      if (roomId) location.href = '/myroom/chat/new_chat.html?roomId=' + roomId;
+    Array.from(list.querySelectorAll('li.chat_list_item')).forEach(function(li) {
+      var t = li.getAttribute('data-type') || '';
+      var s = li.getAttribute('data-state') || '';
+      var ok = (!typeVal || t === typeVal) && (!stateVal || s === stateVal);
+      li.style.display = ok ? '' : 'none';
     });
   }
 
-  function initButtons() {
-    var myroomBtn = document.querySelector('button.go_myroom');
-    if (myroomBtn) { myroomBtn.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; }); }
+  function renderRooms(rooms) {
+    var list = document.querySelector('.chat_list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!rooms.length) {
+      var empty = document.createElement('li');
+      empty.style.cssText = 'padding:40px;text-align:center;color:#888;font-size:15px';
+      empty.innerHTML = '채팅 내역이 없습니다.<br><small>상품 상세 페이지의 채팅 버튼을 눌러 시작하세요.</small>';
+      list.appendChild(empty);
+      return;
+    }
+    rooms.forEach(function(r) { list.appendChild(buildItem(r)); });
+    applyFilters();
+  }
 
+  function init() {
+    var myroomBtn = document.querySelector('button.go_myroom');
+    if (myroomBtn) myroomBtn.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
     var blockBtn = document.querySelector('button.block_list');
-    if (blockBtn) { blockBtn.addEventListener('click', function(e) { e.preventDefault(); alert('차단리스트 기능은 준비 중입니다.'); }); }
+    if (blockBtn) blockBtn.addEventListener('click', function(e) { e.preventDefault(); alert('차단리스트 기능은 준비 중입니다.'); });
+
+    document.querySelectorAll('input[name=trade_type]').forEach(function(el) { el.addEventListener('change', applyFilters); });
+    document.querySelectorAll('input[name=trade_state]').forEach(function(el) { el.addEventListener('change', applyFilters); });
+
+    var orderEl = document.querySelector('input[name=order]');
+    if (orderEl) {
+      orderEl.addEventListener('change', function() {
+        var sorted = allRooms.slice();
+        if (orderEl.checked) {
+          sorted.sort(function(a, b) { return new Date(b.lastMessageAt || b.createdAt) - new Date(a.lastMessageAt || a.createdAt); });
+        }
+        renderRooms(sorted);
+      });
+    }
 
     window._IM_auth().then(function(me) {
       if (!me || !me.id) {
@@ -4565,11 +4667,13 @@ const CHAT_INTERCEPT_SCRIPT = `
         if (list) list.innerHTML = '<li style="padding:40px;text-align:center;color:#888;font-size:15px"><a href="/login" style="color:#159EFD;font-weight:700">로그인</a>하면 채팅 내역을 확인할 수 있습니다.</li>';
         return;
       }
+      myId = me.id;
       fetch('/api/chat/rooms', { credentials: 'include' })
         .then(function(r) { return r.json(); })
         .then(function(rooms) {
-          rooms.sort(function(a, b) { return new Date(b.lastMessageAt || b.createdAt) - new Date(a.lastMessageAt || a.createdAt); });
-          renderRooms(rooms, me.id);
+          allRooms = rooms;
+          allRooms.sort(function(a, b) { return new Date(b.lastMessageAt || b.createdAt) - new Date(a.lastMessageAt || a.createdAt); });
+          renderRooms(allRooms);
         })
         .catch(function() {
           var list = document.querySelector('.chat_list');
@@ -4579,10 +4683,8 @@ const CHAT_INTERCEPT_SCRIPT = `
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initButtons);
-  } else {
-    initButtons();
-  }
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();
 </script>
 `;
@@ -4700,7 +4802,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
               }).then(function(r) { return r.json(); })
               .then(function(room) {
                 if (room && room.id) {
-                  location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+                  window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
                 } else { location.href = '/myroom/chat/list.html'; }
               });
             })
@@ -4929,7 +5031,7 @@ const APPLICATION_DYNAMIC_SCRIPT = `
           }).then(function(r) { return r.json(); })
           .then(function(room) {
             if (room && room.id) {
-              location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+              window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
             } else { location.href = '/myroom/chat/list.html'; }
           }).catch(function() { location.href = '/myroom/chat/list.html'; });
         });

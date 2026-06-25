@@ -11,6 +11,7 @@ export const chatRoomsTable = pgTable("chat_rooms", {
   productId: integer("product_id").references(() => productsTable.id),
   buyerId: integer("buyer_id").notNull().references(() => usersTable.id),
   sellerId: integer("seller_id").notNull().references(() => usersTable.id),
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
