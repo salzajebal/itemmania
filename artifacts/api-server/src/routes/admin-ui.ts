@@ -266,6 +266,30 @@ tbody tr:hover{background:#fafbff}
   </div>
 </div>
 
+<!-- 회원 정보 수정 모달 -->
+<div class="modal-overlay" id="userEditModal" onclick="if(event.target===this)closeUserEditModal()">
+  <div class="modal" style="width:460px">
+    <h2>✏️ 회원 정보 수정</h2>
+    <input type="hidden" id="userEditId">
+    <label>이메일</label>
+    <input type="email" id="userEditEmail" placeholder="예: user@example.com">
+    <label>닉네임</label>
+    <input type="text" id="userEditNickname" placeholder="닉네임">
+    <label>전화번호</label>
+    <input type="tel" id="userEditPhone" placeholder="예: 010-1234-5678">
+    <label>등급</label>
+    <select id="userEditRole">
+      <option value="user">일반 회원</option>
+      <option value="admin">관리자</option>
+    </select>
+    <div id="userEditErr" style="margin-top:10px;font-size:13px;color:#e53e3e;min-height:18px"></div>
+    <div class="modal-btns">
+      <button class="cancel-btn" onclick="closeUserEditModal()">취소</button>
+      <button class="save-btn" id="userEditSaveBtn" onclick="saveUserEdit()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 인증상태 모달 -->
 <div class="modal-overlay" id="authModal" onclick="if(event.target===this)closeAuthModal()">
   <div class="modal">
@@ -475,17 +499,18 @@ async function loadUsers(){
       var delBtn=u.role!=='admin'
         ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
         :'-';
-      var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증 관리</button>';
-      var milBtn='<button class="action-btn edit" onclick="openBalanceModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+','+(u.balance||0)+')">💰 마일리지</button>';
+      var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증</button>';
+      var milBtn='<button class="action-btn edit" onclick="openBalanceModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+','+(u.balance||0)+')">💰</button>';
+      var editBtn='<button class="action-btn" style="background:#f0f4ff;color:#5a5fc7" onclick="openUserEditModal('+JSON.stringify(u).replace(/"/g,'&quot;')+')">수정</button>';
       return '<tr id="user-row-'+u.id+'">'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
-        +'<td>'+escHtml(u.nickname||'-')+'</td>'
-        +'<td>'+escHtml(u.phone||'-')+'</td>'
-        +'<td><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
+        +'<td id="user-nick-'+u.id+'">'+escHtml(u.nickname||'-')+'</td>'
+        +'<td id="user-phone-'+u.id+'">'+escHtml(u.phone||'-')+'</td>'
+        +'<td id="user-role-'+u.id+'"><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
         +'<td id="user-bal-'+u.id+'">'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
-        +'<td>'+milBtn+authBtn+'</td>'
+        +'<td>'+editBtn+milBtn+authBtn+'</td>'
         +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
@@ -501,6 +526,57 @@ async function deleteUser(id){
     showToast('🗑 회원이 삭제되었습니다');
     loadUsers();
   }catch(e){showToast('서버 오류');}
+}
+
+// ── 회원 정보 수정 ───────────────────────────────────────────
+function openUserEditModal(u){
+  document.getElementById('userEditId').value=u.id;
+  document.getElementById('userEditEmail').value=u.email||'';
+  document.getElementById('userEditNickname').value=u.nickname||'';
+  document.getElementById('userEditPhone').value=u.phone||'';
+  document.getElementById('userEditRole').value=u.role||'user';
+  document.getElementById('userEditErr').textContent='';
+  document.getElementById('userEditModal').classList.add('open');
+  setTimeout(function(){document.getElementById('userEditNickname').focus();},80);
+}
+
+function closeUserEditModal(){
+  document.getElementById('userEditModal').classList.remove('open');
+}
+
+async function saveUserEdit(){
+  var id=document.getElementById('userEditId').value;
+  var email=document.getElementById('userEditEmail').value.trim();
+  var nickname=document.getElementById('userEditNickname').value.trim();
+  var phone=document.getElementById('userEditPhone').value.trim();
+  var role=document.getElementById('userEditRole').value;
+  var errEl=document.getElementById('userEditErr');
+  errEl.textContent='';
+
+  if(!nickname){errEl.textContent='닉네임을 입력하세요.';return;}
+  if(!email){errEl.textContent='이메일을 입력하세요.';return;}
+
+  var btn=document.getElementById('userEditSaveBtn');
+  btn.disabled=true;
+  try{
+    var r=await fetch('/api/admin/users/'+id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({email,nickname,phone:phone||null,role})
+    });
+    var d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'저장 실패';btn.disabled=false;return;}
+    // 행 즉시 업데이트 (실시간 반영)
+    var nickEl=document.getElementById('user-nick-'+id);
+    var phoneEl=document.getElementById('user-phone-'+id);
+    var roleEl=document.getElementById('user-role-'+id);
+    if(nickEl)nickEl.textContent=d.nickname||'-';
+    if(phoneEl)phoneEl.textContent=d.phone||'-';
+    if(roleEl)roleEl.innerHTML='<span class="badge '+d.role+'">'+(d.role==='admin'?'관리자':'일반')+'</span>';
+    showToast('✅ 회원 정보가 수정되었습니다');
+    closeUserEditModal();
+  }catch(e){errEl.textContent='서버 오류';btn.disabled=false;}
 }
 
 // ── 인증상태 ───────────────────────────────────────────────

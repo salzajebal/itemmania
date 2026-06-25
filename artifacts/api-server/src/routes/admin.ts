@@ -197,6 +197,51 @@ router.patch("/admin/users/:id/balance", requireAdmin, async (req, res): Promise
   res.json({ balance: newBalance });
 });
 
+// 회원 정보 수정 (닉네임, 전화번호, 이메일, 역할)
+router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+
+  const { nickname, phone, email, role } = req.body as Record<string, string>;
+  const updates: Partial<typeof usersTable.$inferInsert> = {};
+
+  if (nickname !== undefined) updates.nickname = String(nickname).trim();
+  if (phone !== undefined) updates.phone = phone ? String(phone).trim() : null;
+  if (email !== undefined && email.trim()) updates.email = String(email).trim();
+  if (role !== undefined && ["user", "admin"].includes(role)) {
+    updates.role = role as "user" | "admin";
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "수정할 필드가 없습니다." }); return;
+  }
+
+  try {
+    const [updated] = await db
+      .update(usersTable)
+      .set(updates)
+      .where(eq(usersTable.id, id))
+      .returning({
+        id: usersTable.id,
+        email: usersTable.email,
+        nickname: usersTable.nickname,
+        phone: usersTable.phone,
+        role: usersTable.role,
+      });
+    res.json(updated);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("unique")) {
+      res.status(409).json({ error: "이미 사용 중인 이메일입니다." });
+    } else {
+      res.status(500).json({ error: "수정에 실패했습니다." });
+    }
+  }
+});
+
 // 회원 삭제
 router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
