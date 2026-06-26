@@ -205,10 +205,11 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
 
-  const { nickname, phone, email, role } = req.body as Record<string, string>;
+  const { nickname, name, phone, email, role } = req.body as Record<string, string>;
   const updates: Partial<typeof usersTable.$inferInsert> = {};
 
   if (nickname !== undefined) updates.nickname = String(nickname).trim();
+  if (name !== undefined) updates.name = name ? String(name).trim() : null;
   if (phone !== undefined) updates.phone = phone ? String(phone).trim() : null;
   if (email !== undefined && email.trim()) updates.email = String(email).trim();
   if (role !== undefined && ["user", "admin"].includes(role)) {
@@ -228,6 +229,7 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
         id: usersTable.id,
         email: usersTable.email,
         nickname: usersTable.nickname,
+        name: usersTable.name,
         phone: usersTable.phone,
         role: usersTable.role,
       });

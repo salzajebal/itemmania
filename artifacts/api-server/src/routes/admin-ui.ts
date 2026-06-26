@@ -275,6 +275,8 @@ tbody tr:hover{background:#fafbff}
     <input type="email" id="userEditEmail" placeholder="예: user@example.com">
     <label>닉네임</label>
     <input type="text" id="userEditNickname" placeholder="닉네임">
+    <label>이름 (실명)</label>
+    <input type="text" id="userEditName" placeholder="홍길동">
     <label>전화번호</label>
     <input type="tel" id="userEditPhone" placeholder="예: 010-1234-5678">
     <label>등급</label>
@@ -533,6 +535,7 @@ function openUserEditModal(u){
   document.getElementById('userEditId').value=u.id;
   document.getElementById('userEditEmail').value=u.email||'';
   document.getElementById('userEditNickname').value=u.nickname||'';
+  document.getElementById('userEditName').value=u.name||'';
   document.getElementById('userEditPhone').value=u.phone||'';
   document.getElementById('userEditRole').value=u.role||'user';
   document.getElementById('userEditErr').textContent='';
@@ -548,6 +551,7 @@ async function saveUserEdit(){
   var id=document.getElementById('userEditId').value;
   var email=document.getElementById('userEditEmail').value.trim();
   var nickname=document.getElementById('userEditNickname').value.trim();
+  var name=document.getElementById('userEditName').value.trim();
   var phone=document.getElementById('userEditPhone').value.trim();
   var role=document.getElementById('userEditRole').value;
   var errEl=document.getElementById('userEditErr');
@@ -563,7 +567,7 @@ async function saveUserEdit(){
       method:'PATCH',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
-      body:JSON.stringify({email,nickname,phone:phone||null,role})
+      body:JSON.stringify({email,nickname,name:name||null,phone:phone||null,role})
     });
     var d=await r.json();
     if(!r.ok){errEl.textContent=d.error||'저장 실패';btn.disabled=false;return;}
