@@ -279,10 +279,19 @@ tbody tr:hover{background:#fafbff}
     <input type="text" id="userEditName" placeholder="홍길동">
     <label>전화번호</label>
     <input type="tel" id="userEditPhone" placeholder="예: 010-1234-5678">
-    <label>등급</label>
+    <label>권한</label>
     <select id="userEditRole">
       <option value="user">일반 회원</option>
       <option value="admin">관리자</option>
+    </select>
+    <label>신용등급</label>
+    <select id="userEditGrade">
+      <option value="">없음</option>
+      <option value="bronze">BRONZE (5점 미만)</option>
+      <option value="silver">SILVER (5~100점)</option>
+      <option value="gold">GOLD (51~100점)</option>
+      <option value="platinum">PLATINUM (101~300점)</option>
+      <option value="vip">VIP (301점+)</option>
     </select>
     <div id="userEditErr" style="margin-top:10px;font-size:13px;color:#e53e3e;min-height:18px"></div>
     <div class="modal-btns">
@@ -509,7 +518,7 @@ async function loadUsers(){
         +'<td>'+escHtml(u.email)+'</td>'
         +'<td id="user-nick-'+u.id+'">'+escHtml(u.nickname||'-')+'</td>'
         +'<td id="user-phone-'+u.id+'">'+escHtml(u.phone||'-')+'</td>'
-        +'<td id="user-role-'+u.id+'"><span class="badge '+u.role+'">'+(u.role==='admin'?'관리자':'일반')+'</span></td>'
+        +'<td id="user-grade-'+u.id+'">'+(function(g){var m={vip:['#7B5CAA','V'],platinum:['#E84060','P'],gold:['#D4941C','G'],silver:['#9B9EA4','S'],bronze:['#5CB85C','B']};var e=g?m[g]:null;return e?'<svg width="22" height="26" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg" title="'+g.toUpperCase()+'"><polygon points="11,0 22,6.5 22,19.5 11,26 0,19.5 0,6.5" fill="'+e[0]+'"/><text x="11" y="19" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">'+e[1]+'</text></svg>':'-';})(u.grade)+'</td>'
         +'<td id="user-bal-'+u.id+'">'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
         +'<td>'+editBtn+milBtn+authBtn+'</td>'
@@ -538,6 +547,7 @@ function openUserEditModal(u){
   document.getElementById('userEditName').value=u.name||'';
   document.getElementById('userEditPhone').value=u.phone||'';
   document.getElementById('userEditRole').value=u.role||'user';
+  document.getElementById('userEditGrade').value=u.grade||'';
   document.getElementById('userEditErr').textContent='';
   document.getElementById('userEditModal').classList.add('open');
   setTimeout(function(){document.getElementById('userEditNickname').focus();},80);
@@ -554,6 +564,7 @@ async function saveUserEdit(){
   var name=document.getElementById('userEditName').value.trim();
   var phone=document.getElementById('userEditPhone').value.trim();
   var role=document.getElementById('userEditRole').value;
+  var grade=document.getElementById('userEditGrade').value;
   var errEl=document.getElementById('userEditErr');
   errEl.textContent='';
 
@@ -567,17 +578,17 @@ async function saveUserEdit(){
       method:'PATCH',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
-      body:JSON.stringify({email,nickname,name:name||null,phone:phone||null,role})
+      body:JSON.stringify({email,nickname,name:name||null,phone:phone||null,role,grade:grade||''})
     });
     var d=await r.json();
     if(!r.ok){errEl.textContent=d.error||'저장 실패';btn.disabled=false;return;}
     // 행 즉시 업데이트 (실시간 반영)
     var nickEl=document.getElementById('user-nick-'+id);
     var phoneEl=document.getElementById('user-phone-'+id);
-    var roleEl=document.getElementById('user-role-'+id);
+    var gradeEl=document.getElementById('user-grade-'+id);
     if(nickEl)nickEl.textContent=d.nickname||'-';
     if(phoneEl)phoneEl.textContent=d.phone||'-';
-    if(roleEl)roleEl.innerHTML='<span class="badge '+d.role+'">'+(d.role==='admin'?'관리자':'일반')+'</span>';
+    if(gradeEl){var gm={vip:['#7B5CAA','V'],platinum:['#E84060','P'],gold:['#D4941C','G'],silver:['#9B9EA4','S'],bronze:['#5CB85C','B']};var ge=d.grade?gm[d.grade]:null;gradeEl.innerHTML=ge?'<svg width="22" height="26" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg" title="'+d.grade.toUpperCase()+'"><polygon points="11,0 22,6.5 22,19.5 11,26 0,19.5 0,6.5" fill="'+ge[0]+'"/><text x="11" y="19" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">'+ge[1]+'</text></svg>':'-';}
     showToast('✅ 회원 정보가 수정되었습니다');
     closeUserEditModal();
   }catch(e){errEl.textContent='서버 오류';btn.disabled=false;}

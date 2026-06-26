@@ -1,11 +1,22 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, desc, asc, count, inArray } from "drizzle-orm";
-import { db, productsTable, gamesTable, ordersTable } from "@workspace/db";
+import { db, productsTable, gamesTable, ordersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-function formatProduct(p: typeof productsTable.$inferSelect) {
+type ProductRow = {
+  id: number; itemmaniaid: string; title: string; price: number;
+  category: string | null; itemCategory: string | null;
+  gameName: string | null; serverName: string | null;
+  sellerId: number | null; sellerName: string | null;
+  description: string | null; thumbnailUrl: string | null;
+  detailUrl: string | null; status: string | null;
+  crawledAt: Date | null; createdAt: Date;
+  sellerGrade?: string | null;
+};
+
+function formatProduct(p: ProductRow) {
   return {
     id: p.id,
     itemmaniaid: p.itemmaniaid,
@@ -17,6 +28,7 @@ function formatProduct(p: typeof productsTable.$inferSelect) {
     serverName: p.serverName,
     sellerId: p.sellerId,
     sellerName: p.sellerName,
+    sellerGrade: p.sellerGrade ?? null,
     description: p.description,
     thumbnailUrl: p.thumbnailUrl,
     detailUrl: p.detailUrl,
@@ -81,8 +93,27 @@ router.get("/products", async (req, res): Promise<void> => {
       : desc(productsTable.createdAt);
 
   const items = await db
-    .select()
+    .select({
+      id: productsTable.id,
+      itemmaniaid: productsTable.itemmaniaid,
+      title: productsTable.title,
+      price: productsTable.price,
+      category: productsTable.category,
+      itemCategory: productsTable.itemCategory,
+      gameName: productsTable.gameName,
+      serverName: productsTable.serverName,
+      sellerId: productsTable.sellerId,
+      sellerName: productsTable.sellerName,
+      description: productsTable.description,
+      thumbnailUrl: productsTable.thumbnailUrl,
+      detailUrl: productsTable.detailUrl,
+      status: productsTable.status,
+      crawledAt: productsTable.crawledAt,
+      createdAt: productsTable.createdAt,
+      sellerGrade: usersTable.grade,
+    })
     .from(productsTable)
+    .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))
     .where(where)
     .orderBy(sortOrder)
     .limit(limit)

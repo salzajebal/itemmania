@@ -1472,8 +1472,13 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     li.setAttribute('data-tid', String(p.id));
     li.setAttribute('data-ts', String(p.createdAt ? new Date(p.createdAt).getTime() : 0));
     var href = '/' + type + '/application.html?id=' + p.id;
+    var gradeMap = { vip:['#7B5CAA','V'], platinum:['#E84060','P'], gold:['#D4941C','G'], silver:['#9B9EA4','S'], bronze:['#5CB85C','B'] };
+    var gEntry = p.sellerGrade ? gradeMap[p.sellerGrade as keyof typeof gradeMap] : null;
+    var gradeHtml = gEntry
+      ? '<svg width="26" height="30" viewBox="0 0 26 30" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;display:block"><polygon points="13,0 26,7.5 26,22.5 13,30 0,22.5 0,7.5" fill="' + gEntry[0] + '"/><text x="13" y="21" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">' + gEntry[1] + '</text></svg>'
+      : '<span class="credit_mark_new regular"></span>';
     li.innerHTML =
-      '<div class="col info"><span class="credit_mark_new regular"></span></div>' +
+      '<div class="col info">' + gradeHtml + '</div>' +
       '<div class="col subject_info">' +
         '<ul class=server>' +
           '<li><a href="javascript:void(0)" data-search=game>' + (p.gameName||'') + '</a></li>' +
