@@ -320,12 +320,32 @@ const INTERCEPT_SCRIPT = `
     var enName = GRADE_EN[cls];
     var koName = GRADE_KO[cls];
 
-    // 1. .credit_mark_new — chat 등 (class 교체 + 텍스트 소문자)
-    document.querySelectorAll('.credit_mark_new').forEach(function(el) {
+    // 1a. .credit_mark_new (data-seller-id 없음) — chat/헤더 등 일반 배지
+    document.querySelectorAll('.credit_mark_new:not([data-seller-id])').forEach(function(el) {
       GRADES.forEach(function(g) { el.classList.remove(g); });
       el.classList.add(cls);
       if (el.textContent.trim()) el.textContent = cls;
     });
+    // 1b. .credit_mark_new[data-seller-id] — 물품 리스트 내 현재 유저 카드만 업데이트
+    // 1c. .credit_mark[data-seller-id]       — 상품 상세 판매자 배지
+    // 1d. .vip_txt[data-seller-id]            — 상품 상세 판매자 등급 텍스트
+    if (currentUser && currentUser.id) {
+      var uid = String(currentUser.id);
+      document.querySelectorAll('.credit_mark_new[data-seller-id="' + uid + '"]').forEach(function(el) {
+        GRADES.forEach(function(g) { el.classList.remove(g); });
+        el.classList.add(cls);
+        if (el.textContent.trim()) el.textContent = cls;
+      });
+      document.querySelectorAll('.credit_mark[data-seller-id="' + uid + '"]').forEach(function(el) {
+        GRADES.forEach(function(g) { el.classList.remove(g); });
+        el.classList.add(cls);
+        var ltr = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B', regular:'' };
+        el.textContent = ltr[cls] || '';
+      });
+      document.querySelectorAll('.vip_txt[data-seller-id="' + uid + '"]').forEach(function(el) {
+        el.textContent = enName;
+      });
+    }
 
     // 2. .credit_mark2 — myroom 큰 육각형 아이콘 (credit_GOLD → credit_PLATINUM 등)
     document.querySelectorAll('.credit_mark2').forEach(function(el) {
@@ -1574,11 +1594,12 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     li.setAttribute('data-tid', String(p.id));
     li.setAttribute('data-ts', String(p.createdAt ? new Date(p.createdAt).getTime() : 0));
     var href = '/' + type + '/application.html?id=' + p.id;
-    var gradeMap = { vip:['#7B5CAA','V'], platinum:['#E84060','P'], gold:['#D4941C','G'], silver:['#9B9EA4','S'], bronze:['#5CB85C','B'] };
-    var gEntry = p.sellerGrade ? gradeMap[p.sellerGrade as keyof typeof gradeMap] : null;
-    var gradeHtml = gEntry
-      ? '<svg width="26" height="30" viewBox="0 0 26 30" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;display:block"><polygon points="13,0 26,7.5 26,22.5 13,30 0,22.5 0,7.5" fill="' + gEntry[0] + '"/><text x="13" y="21" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">' + gEntry[1] + '</text></svg>'
-      : '<span class="credit_mark_new regular"></span>';
+    var GRADE_LETTERS = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+    var gradeKey = p.sellerGrade && (GRADE_LETTERS as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
+    var sellerId = p.sellerId ? String(p.sellerId) : '';
+    var gradeHtml = gradeKey
+      ? '<span class="credit_mark_new ' + gradeKey + '" data-seller-id="' + sellerId + '">' + (GRADE_LETTERS as Record<string,string>)[gradeKey] + '</span>'
+      : '<span class="credit_mark_new regular" data-seller-id="' + sellerId + '"></span>';
     li.innerHTML =
       '<div class="col info">' + gradeHtml + '</div>' +
       '<div class="col subject_info">' +
@@ -5348,11 +5369,38 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       kindEl.innerHTML = crumb;
     }
 
-    // ── 판매자명 ─────────────────────────────────────────
-    if (p.sellerName) {
-      var sellerEl = document.querySelector('.user_nick, .vip_txt, .user_info strong');
-      if (sellerEl) sellerEl.textContent = p.sellerName;
-    }
+    // ── 판매자 grade 배지 (.credit_mark) + 이름 ─────────
+    (function() {
+      var GRADE_LTR = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+      var GRADE_NM  = { vip:'VIP', platinum:'PLATINUM', gold:'GOLD', silver:'SILVER', bronze:'BRONZE' };
+      var ALL_G = ['vip','platinum','gold','silver','bronze'];
+      var creditMark = document.querySelector('.user_info .credit_mark');
+      if (creditMark && p.sellerId) {
+        creditMark.setAttribute('data-seller-id', String(p.sellerId));
+        ALL_G.forEach(function(g) { creditMark.classList.remove(g); });
+        var gk = p.sellerGrade && (GRADE_LTR as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
+        if (gk) {
+          creditMark.classList.add(gk);
+          creditMark.textContent = (GRADE_LTR as Record<string,string>)[gk];
+        } else {
+          creditMark.classList.add('regular');
+          creditMark.textContent = '';
+        }
+      }
+      // .vip_txt — 등급 명칭 텍스트 (e.g. "VIP") + data-seller-id
+      var vipTxt = document.querySelector('.vip_txt');
+      if (vipTxt && p.sellerId) {
+        vipTxt.setAttribute('data-seller-id', String(p.sellerId));
+        var gk2 = p.sellerGrade && (GRADE_NM as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
+        vipTxt.textContent = gk2 ? (GRADE_NM as Record<string,string>)[gk2] : '';
+      }
+      // 판매자명 (.user_nick / .user_info strong)
+      if (p.sellerName) {
+        var sellerEl = document.querySelector('.user_nick, .user_info strong:not(.vip_txt)');
+        if (!sellerEl) sellerEl = document.querySelector('.user_info strong');
+        if (sellerEl) sellerEl.textContent = p.sellerName;
+      }
+    })();
 
     // ── 상세 설명 ─────────────────────────────────────────
     var descEl = document.querySelector('.ql-editor.detail_text');
