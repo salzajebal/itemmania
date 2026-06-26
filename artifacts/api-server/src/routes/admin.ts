@@ -240,6 +240,7 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
         role: usersTable.role,
         grade: usersTable.grade,
       });
+    pushToUser(id, "nickname", { nickname: updated.nickname });
     res.json(updated);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

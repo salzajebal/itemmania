@@ -311,6 +311,29 @@ const INTERCEPT_SCRIPT = `
   var closeBtn = document.getElementById('_im_close');
   var currentUser = null;
 
+  // 어드민에서 닉네임 변경 시 SSE → CustomEvent → 여기서 수신
+  window.addEventListener('im:nickname', function(e) {
+    var nick = e.detail && e.detail.nickname;
+    if (!nick) return;
+    if (currentUser) {
+      currentUser.nickname = nick;
+      updateHeader();
+    }
+    // 마이룸: level_desc 텍스트 노드 교체
+    var levelDesc = document.querySelector('.level_desc > div');
+    if (levelDesc) {
+      levelDesc.childNodes.forEach(function(node) {
+        if (node.nodeType === 3 && node.textContent.trim()) {
+          node.textContent = node.textContent.replace(/^[^\s]+/, nick);
+        }
+      });
+    }
+    // 공통 닉네임 셀렉터
+    document.querySelectorAll('.mr_user_name,.user_name,.nick_name').forEach(function(el) {
+      if (el.textContent.trim()) el.textContent = nick;
+    });
+  });
+
   // --- 모달 열기/닫기 ---
   function openModal(html) {
     modalBody.innerHTML = html;
@@ -1258,6 +1281,12 @@ const BALANCE_SSE_SCRIPT = `<script>
     try{
       var d=JSON.parse(e.data);
       window._IM_updateBalance(d.balance);
+    }catch(ex){}
+  });
+  es.addEventListener('nickname',function(e){
+    try{
+      var d=JSON.parse(e.data);
+      if(d.nickname) window.dispatchEvent(new CustomEvent('im:nickname',{detail:{nickname:d.nickname}}));
     }catch(ex){}
   });
 })();
