@@ -915,6 +915,8 @@ function rewriteExternalLinks(html: string): string {
 // Replit iframe 에러 감지 차단 + 원본 itemmania.com JS 에러 억제
 const ERROR_SUPPRESSOR = `<script>
 (function(){
+  // 네이티브 window.open을 최초 시점에 저장 — 이후 스크립트가 재정의해도 채팅 팝업은 원본 사용
+  window._nativeOpen = window.open.bind(window);
   // 모든 JS 에러 억제 (itemmania.com 원본 스크립트 SyntaxError 등)
   window.onerror = function(){ return true; };
   window.addEventListener('error', function(e){ e.stopImmediatePropagation(); }, true);
@@ -4555,7 +4557,16 @@ const CHAT_INTERCEPT_SCRIPT = `
 
   function openChat(roomId, isBuyer) {
     var url = '/myroom/chat/new_chat.html?roomId=' + roomId + '&type=' + (isBuyer ? 'buy' : 'sell');
-    window.open(url, '_chat_' + roomId, 'width=900,height=700,resizable=yes,scrollbars=yes');
+    var opener = window._nativeOpen || window.open.bind(window);
+    var w = opener(url, '_chat_' + roomId, 'width=900,height=700,resizable=yes,scrollbars=yes');
+    if (!w || w.closed) {
+      /* 팝업 차단됨 → 새 탭으로 재시도 */
+      w = opener(url, '_blank');
+      if (!w || w.closed) {
+        /* 새 탭도 차단됨 → 현재 탭 이동 */
+        location.href = url;
+      }
+    }
   }
 
   /* chat_sub_list 열기/닫기 — li.expanded 클래스로 상태 추적 */
