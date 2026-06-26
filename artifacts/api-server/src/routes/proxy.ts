@@ -1338,6 +1338,20 @@ if(document.readyState==='loading'){
 }else{
   _imUpdateHeaderAuth();
 }
+/* ── 채팅 아이콘 (#chat_notice / .header-message) — 모든 페이지 공통 ── */
+document.addEventListener('click',function(e){
+  var el=e.target;
+  while(el&&el!==document.body){
+    if(el.id==='chat_notice'||(el.classList&&el.classList.contains('header-message'))){
+      e.preventDefault();e.stopImmediatePropagation();
+      var nOpen=window._nativeOpen||window.open.bind(window);
+      var w=nOpen('/myroom/chat/list.html','im_chat_list','width=900,height=700,resizable=yes,scrollbars=yes');
+      if(!w||w.closed){location.href='/myroom/chat/list.html';}
+      return;
+    }
+    el=el.parentElement;
+  }
+},true);
 })();
 </script>`;
 
