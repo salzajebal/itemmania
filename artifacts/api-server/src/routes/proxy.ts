@@ -4395,15 +4395,24 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
         var uidEl = document.querySelector('.chat_user .uid');
         if (uidEl) uidEl.textContent = partnerName;
+        var subjectA = document.querySelector('.chat_user2 .subject a');
+        var subjectDiv = document.querySelector('.chat_user2 .subject');
         if (r.productTitle) {
-          var subjectA = document.querySelector('.chat_user2 .subject a');
           if (subjectA) subjectA.textContent = r.productTitle;
-          var subjectDiv = document.querySelector('.chat_user2 .subject');
-          if (!subjectA && subjectDiv) subjectDiv.textContent = r.productTitle;
+          else if (subjectDiv) subjectDiv.textContent = r.productTitle;
+        } else {
+          if (subjectA) subjectA.textContent = '';
+          else if (subjectDiv) subjectDiv.textContent = '';
         }
+        var priceEl = document.querySelector('.trade_price_num, .goods_price');
+        var priceInput = document.getElementById('trade_money');
         if (r.productPrice) {
-          var priceEl = document.querySelector('.trade_price_num, .goods_price');
-          if (priceEl) priceEl.textContent = Number(r.productPrice).toLocaleString() + '원';
+          var priceStr = Number(r.productPrice).toLocaleString();
+          if (priceEl) priceEl.textContent = priceStr + '원';
+          if (priceInput) priceInput.value = priceStr;
+        } else {
+          if (priceEl) priceEl.textContent = '';
+          if (priceInput) priceInput.value = '';
         }
         updateStatusUI(r.status || 'pending');
         var userInfoEl = document.getElementById('chat_user_info');
@@ -4427,10 +4436,10 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
             } else if (charLi) {
               charLi.parentNode.removeChild(charLi);
             }
-            var li2 = ul.querySelector('li:nth-child(2)');
-            var li3 = ul.querySelector('li:nth-child(3)');
-            if (li2 && !li2.classList.contains('character')) li2.textContent = '';
-            if (li3 && !li3.classList.contains('character')) li3.textContent = '';
+            var allLi = Array.from(ul.querySelectorAll('li'));
+            allLi.slice(1).forEach(function(li) {
+              if (!li.classList.contains('character')) ul.removeChild(li);
+            });
           }
         }
       }
