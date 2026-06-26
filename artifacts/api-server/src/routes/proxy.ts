@@ -4413,6 +4413,25 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
           if (roleLabel) roleLabel.innerHTML = isBuyer ? '판매자<br>정보' : '구매자<br>정보';
           var nickEl = userInfoEl.querySelector('ul li:first-child');
           if (nickEl) nickEl.textContent = partnerName;
+          var ul = userInfoEl.querySelector('ul');
+          if (ul) {
+            var charLi = ul.querySelector('li.character');
+            var showChar = (r.goodsType === '게임머니' || r.goodsType === '아이템') && r.characterName;
+            if (showChar) {
+              if (!charLi) {
+                charLi = document.createElement('li');
+                charLi.className = 'character';
+                ul.appendChild(charLi);
+              }
+              charLi.textContent = '구매자 캐릭터명: ' + r.characterName;
+            } else if (charLi) {
+              charLi.parentNode.removeChild(charLi);
+            }
+            var li2 = ul.querySelector('li:nth-child(2)');
+            var li3 = ul.querySelector('li:nth-child(3)');
+            if (li2 && !li2.classList.contains('character')) li2.textContent = '';
+            if (li3 && !li3.classList.contains('character')) li3.textContent = '';
+          }
         }
       }
       var list = document.getElementById('chat_content_list');
@@ -4880,14 +4899,31 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
             if (Number(prod.sellerId) === Number(user.id)) {
               alert('자신의 상품에는 채팅할 수 없습니다.'); return;
             }
+            var charEl = document.getElementById('user_character');
+            var charName = charEl ? (charEl.value || '').trim() : '';
+            var detectedType = '';
+            if (document.querySelector('.character_write')) {
+              var unitTxt = (document.querySelector('.unit_info') || {}).textContent || '';
+              detectedType = unitTxt.indexOf('게임머니') >= 0 ? '게임머니' : '아이템';
+            } else {
+              detectedType = '계정';
+            }
             fetch('/api/chat/rooms', {
               method: 'POST', credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sellerId: Number(prod.sellerId), productId: prod.id ? Number(prod.id) : undefined })
+              body: JSON.stringify({
+                sellerId: Number(prod.sellerId),
+                productId: prod.id ? Number(prod.id) : undefined,
+                characterName: charName || undefined,
+                goodsType: detectedType || undefined
+              })
             }).then(function(r) { return r.json(); })
             .then(function(room) {
               if (room && room.id) {
-                window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+                var opener2 = window._nativeOpen || window.open.bind(window);
+                var w2 = opener2('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+                if (!w2 || w2.closed) { w2 = opener2('/myroom/chat/new_chat.html?roomId=' + room.id, '_blank'); }
+                if (!w2 || w2.closed) { location.href = '/myroom/chat/new_chat.html?roomId=' + room.id; }
               } else { location.href = '/myroom/chat/list.html'; }
             }).catch(function() { location.href = '/myroom/chat/list.html'; });
           }
@@ -5119,14 +5155,30 @@ const APPLICATION_DYNAMIC_SCRIPT = `
           if (Number(p.sellerId) === Number(user.id)) {
             location.href = '/myroom/chat/list.html'; return;
           }
+          var charEl2 = document.getElementById('user_character');
+          var charName2 = charEl2 ? (charEl2.value || '').trim() : '';
+          var detectedType2 = '';
+          if (document.querySelector('.character_write')) {
+            var unitTxt2 = (document.querySelector('.unit_info') || {}).textContent || '';
+            detectedType2 = unitTxt2.indexOf('게임머니') >= 0 ? '게임머니' : '아이템';
+          } else {
+            detectedType2 = '계정';
+          }
           fetch('/api/chat/rooms', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sellerId: Number(p.sellerId), productId: Number(p.id) })
+            body: JSON.stringify({
+              sellerId: Number(p.sellerId), productId: Number(p.id),
+              characterName: charName2 || undefined,
+              goodsType: detectedType2 || undefined
+            })
           }).then(function(r) { return r.json(); })
           .then(function(room) {
             if (room && room.id) {
-              window.open('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+              var opener3 = window._nativeOpen || window.open.bind(window);
+              var w3 = opener3('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+              if (!w3 || w3.closed) { w3 = opener3('/myroom/chat/new_chat.html?roomId=' + room.id, '_blank'); }
+              if (!w3 || w3.closed) { location.href = '/myroom/chat/new_chat.html?roomId=' + room.id; }
             } else { location.href = '/myroom/chat/list.html'; }
           }).catch(function() { location.href = '/myroom/chat/list.html'; });
         });

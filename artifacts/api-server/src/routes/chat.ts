@@ -57,7 +57,9 @@ router.get("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
 // 채팅방 생성 또는 기존 방 반환
 router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
-  const { sellerId, productId } = req.body as { sellerId?: number; productId?: number };
+  const { sellerId, productId, characterName, goodsType } = req.body as {
+    sellerId?: number; productId?: number; characterName?: string; goodsType?: string;
+  };
 
   if (!sellerId || typeof sellerId !== "number") {
     res.status(400).json({ error: "sellerId가 필요합니다." });
@@ -73,13 +75,19 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
 
   const [existing] = await db.select().from(chatRoomsTable).where(and(...conditions)).limit(1);
   if (existing) {
+    if (characterName && !existing.characterName) {
+      await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, existing.id));
+    }
     res.json({ id: existing.id, created: false });
     return;
   }
 
   const [room] = await db
     .insert(chatRoomsTable)
-    .values({ buyerId: userId, sellerId, productId: productId ?? null })
+    .values({
+      buyerId: userId, sellerId, productId: productId ?? null,
+      characterName: characterName ?? null, goodsType: goodsType ?? null,
+    })
     .returning();
 
   res.status(201).json({ id: room.id, created: true });
@@ -148,6 +156,8 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
       status: room.status,
       productTitle,
       productPrice,
+      characterName: room.characterName ?? null,
+      goodsType: room.goodsType ?? null,
       buyerNickname: buyer?.nickname ?? String(room.buyerId),
       sellerNickname: seller?.nickname ?? String(room.sellerId),
     },
