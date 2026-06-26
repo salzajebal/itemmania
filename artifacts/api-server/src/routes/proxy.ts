@@ -311,6 +311,16 @@ const INTERCEPT_SCRIPT = `
   var closeBtn = document.getElementById('_im_close');
   var currentUser = null;
 
+  // 등급 배지 업데이트 공통 함수
+  function applyGradeBadge(grade) {
+    var GRADE_CLASSES = ['regular','bronze','silver','gold','platinum','vip'];
+    var cls = (grade && GRADE_CLASSES.indexOf(grade) !== -1) ? grade : 'regular';
+    document.querySelectorAll('.credit_mark_new').forEach(function(el) {
+      GRADE_CLASSES.forEach(function(g) { el.classList.remove(g); });
+      el.classList.add(cls);
+    });
+  }
+
   // 어드민에서 닉네임 변경 시 SSE → CustomEvent → 여기서 수신
   window.addEventListener('im:nickname', function(e) {
     var nick = e.detail && e.detail.nickname;
@@ -332,6 +342,13 @@ const INTERCEPT_SCRIPT = `
     document.querySelectorAll('.mr_user_name,.user_name,.nick_name').forEach(function(el) {
       if (el.textContent.trim()) el.textContent = nick;
     });
+  });
+
+  // 어드민에서 등급 변경 시 SSE → CustomEvent → 여기서 수신
+  window.addEventListener('im:grade', function(e) {
+    var grade = e.detail && e.detail.grade;
+    if (currentUser) currentUser.grade = grade || null;
+    applyGradeBadge(grade);
   });
 
   // --- 모달 열기/닫기 ---
@@ -1221,6 +1238,7 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
       email: usersTable.email,
       nickname: usersTable.nickname,
       role: usersTable.role,
+      grade: usersTable.grade,
       authStates: usersTable.authStates,
     }).from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return null;
@@ -1229,6 +1247,7 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
       email: user.email,
       nickname: user.nickname,
       role: user.role,
+      grade: user.grade ?? null,
       authStates: user.authStates ?? { excellent: false, phone: false, email: false, ipin: false, withdraw: false },
     };
   } catch {
@@ -1287,6 +1306,12 @@ const BALANCE_SSE_SCRIPT = `<script>
     try{
       var d=JSON.parse(e.data);
       if(d.nickname) window.dispatchEvent(new CustomEvent('im:nickname',{detail:{nickname:d.nickname}}));
+    }catch(ex){}
+  });
+  es.addEventListener('grade',function(e){
+    try{
+      var d=JSON.parse(e.data);
+      window.dispatchEvent(new CustomEvent('im:grade',{detail:{grade:d.grade||null}}));
     }catch(ex){}
   });
 })();
@@ -3741,6 +3766,9 @@ const MYROOM_INTERCEPT_SCRIPT = `
 
         // 인증 배지 상태 반영
         applyAuthBadges(d.authStates);
+
+        // 신용등급 배지 반영
+        applyGradeBadge(d.grade);
 
         // ── 나의 거래 현황 수치 반영 ───────────────────────────────────
         fetch('/api/products/my/stats', { credentials: 'include' })

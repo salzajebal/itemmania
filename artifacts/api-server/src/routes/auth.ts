@@ -130,6 +130,7 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     nickname: user.nickname,
     phone: user.phone,
     role: user.role,
+    grade: user.grade ?? null,
     createdAt: user.createdAt,
   });
 });
