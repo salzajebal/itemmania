@@ -637,16 +637,22 @@ const INTERCEPT_SCRIPT = `
       }
     });
 
-    // 채팅 버튼 → 채팅 목록 별도 창으로 열기
-    var chatBtn = document.querySelector('#chat_notice button[aria-label="채팅"], #chat_notice button');
-    if (chatBtn) {
-      chatBtn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        var nOpen = window._nativeOpen || window.open.bind(window);
-        var w = nOpen('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-        if (!w || w.closed) { location.href = '/myroom/chat/list.html'; }
-      }, true);
-    }
+    // 채팅 버튼 → 채팅 목록 별도 창으로 열기 (document 위임 — 어느 페이지서든 동작)
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      // #chat_notice 안의 버튼/이미지/링크이거나 header-message 영역 클릭
+      var el = target;
+      while (el && el !== document.body) {
+        if (el.id === 'chat_notice' || (el.classList && el.classList.contains('header-message'))) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          var nOpen = window._nativeOpen || window.open.bind(window);
+          var w = nOpen('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+          if (!w || w.closed) { location.href = '/myroom/chat/list.html'; }
+          return;
+        }
+        el = el.parentElement;
+      }
+    }, true);
 
     // 이미 로그인 여부 확인 + 외부 JS 덮어쓰기 방어
     window._IM_auth().then(function(data){
