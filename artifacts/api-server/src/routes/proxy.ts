@@ -3694,6 +3694,44 @@ const MYROOM_INTERCEPT_SCRIPT = `
     });
   }
 
+  function applyGradeBadge(grade) {
+    var GRADES = ['regular','bronze','silver','gold','platinum','vip'];
+    var GRADE_EN = {regular:'REGULAR',bronze:'BRONZE',silver:'SILVER',gold:'GOLD',platinum:'PLATINUM',vip:'VIP'};
+    var GRADE_KO = {regular:'레귤러',bronze:'브론즈',silver:'실버',gold:'골드',platinum:'플래티넘',vip:'VIP'};
+    var cls = (grade && GRADES.indexOf(grade) !== -1) ? grade : 'regular';
+    var enName = GRADE_EN[cls];
+    var koName = GRADE_KO[cls];
+    document.querySelectorAll('.credit_mark2').forEach(function(el) {
+      GRADES.forEach(function(g) { el.classList.remove('credit_' + GRADE_EN[g]); });
+      el.classList.add('credit_' + enName);
+      el.textContent = enName;
+    });
+    document.querySelectorAll('.level_txt').forEach(function(el) {
+      GRADES.forEach(function(g) { el.classList.remove('f_' + GRADE_EN[g]); });
+      el.classList.add('f_' + enName);
+      el.textContent = enName;
+    });
+    document.querySelectorAll('.level_desc span, .level_desc [class]').forEach(function(el) {
+      var fCls = [];
+      el.classList.forEach(function(c) { if (c.indexOf('f_') === 0) fCls.push(c); });
+      if (!fCls.length) return;
+      fCls.forEach(function(c) { el.classList.remove(c); });
+      el.classList.add('f_' + enName);
+      var txt = el.textContent || '';
+      GRADES.forEach(function(g) { txt = txt.replace(GRADE_KO[g], koName); });
+      el.textContent = txt;
+    });
+    document.querySelectorAll('.level_desc > div').forEach(function(div) {
+      div.childNodes.forEach(function(node) {
+        if (node.nodeType === 3) {
+          var t = node.textContent || '';
+          GRADES.forEach(function(g) { t = t.replace(GRADE_KO[g], koName); });
+          node.textContent = t;
+        }
+      });
+    });
+  }
+
   function init() {
     // ── 충전하기 버튼 → 충전 팝업 ─────────────────────────────────────
     document.querySelectorAll('button.mileage_charge_btn,.mileage_charge_btn').forEach(function(btn) {
@@ -3919,6 +3957,15 @@ const MYROOM_INTERCEPT_SCRIPT = `
           .catch(function() {});
       });
   }
+
+  // 어드민에서 등급 변경 시 SSE → im:grade CustomEvent → 마이룸 실시간 반영
+  window.addEventListener('im:grade', function(e) {
+    var grade = e.detail && e.detail.grade;
+    applyGradeBadge(grade);
+    setTimeout(function() { applyGradeBadge(grade); }, 300);
+    setTimeout(function() { applyGradeBadge(grade); }, 900);
+    setTimeout(function() { applyGradeBadge(grade); }, 2500);
+  });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
