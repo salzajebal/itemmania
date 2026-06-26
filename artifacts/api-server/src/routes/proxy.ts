@@ -76,7 +76,8 @@ const JOIN_FORM_HTML_PATH = join(STATIC_DIR, "join-form.html");
 let joinFormHtml = "";
 
 try {
-  joinFormHtml = readFileSync(JOIN_FORM_HTML_PATH, "utf-8");
+  joinFormHtml = readFileSync(JOIN_FORM_HTML_PATH, "utf-8")
+    .replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
   logger.info("join-form.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "join-form.html 로드 실패");
