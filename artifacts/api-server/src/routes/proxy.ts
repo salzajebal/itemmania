@@ -1293,16 +1293,17 @@ document.addEventListener('submit',function(e){
   }
 },true);
 /* ── 전역 헤더 로그인/로그아웃 업데이트 (모든 페이지 공통) ── */
-function _imUpdateHeaderAuth(){
+function _imUpdateHeaderAuth(freshData){
   var loginsDiv=document.querySelector('.header-logins');
   if(!loginsDiv) return;
-  window._IM_auth().then(function(data){
+  var doUpdate=function(data){
     if(data&&data.id){
       loginsDiv.innerHTML=
         '<span style="font-size:14px;font-weight:600;color:#2e2e2e">'+(data.nickname||data.email)+'님</span>'+
         '<div class="divider"></div>'+
         '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
-      document.getElementById('_im_logout_btn').addEventListener('click',function(e){
+      var btn=document.getElementById('_im_logout_btn');
+      if(btn) btn.addEventListener('click',function(e){
         e.stopImmediatePropagation();
         fetch('/api/auth/logout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'}})
           .catch(function(){}).then(function(){ location.href='/'; });
@@ -1313,8 +1314,24 @@ function _imUpdateHeaderAuth(){
         '<div class="divider"></div>'+
         '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
     }
-  });
+  };
+  if(freshData!==undefined){
+    doUpdate(freshData);
+  } else {
+    window._IM_auth().then(doUpdate);
+  }
 }
+/* bfcache 복원 시 서버에서 실제 세션 재검증 — no-store 헤더의 보조 방어선 */
+window.addEventListener('pageshow',function(e){
+  if(!e.persisted) return;
+  fetch('/api/auth/me',{credentials:'include'})
+    .then(function(r){ return r.ok?r.json():null; })
+    .catch(function(){ return null; })
+    .then(function(data){
+      window._IM_USER = data;
+      _imUpdateHeaderAuth(data);
+    });
+});
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',_imUpdateHeaderAuth);
 }else{
@@ -6208,7 +6225,7 @@ router.get(["/", ""], async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveItemmania(staticHtml, user));
@@ -6246,7 +6263,7 @@ router.get(["/join", "/join/", "/portal/user/join.html", "/portal/user/"], async
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.send(joinHtml);
 });
 // 회원가입 2단계 – 약관 동의
@@ -6256,7 +6273,7 @@ router.get(["/join/agree", "/join/agree/", "/portal/user/join_agreement.html"], 
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.send(joinAgreeHtml);
 });
 // 회원가입 3단계 – 정보 입력
@@ -6266,7 +6283,7 @@ router.get(["/join/form", "/join/form/", "/portal/user/join_form.html"], async (
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.send(joinFormHtml);
 });
 router.get(["/myroom", "/myroom/"], async (req, res): Promise<void> => {
@@ -6281,7 +6298,7 @@ router.get(
       return;
     }
     res.set("Content-Type", "text/html; charset=utf-8");
-    res.set("Cache-Control", "no-cache");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const user = await getSessionUser(req);
 
     res.send(serveLogin(loginHtml, user));
@@ -6295,7 +6312,7 @@ router.get(["/giftcard", "/portal/giftcard", "/portal/giftcard/"], async (req, r
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveGiftcard(giftcardHtml, user));
@@ -6308,7 +6325,7 @@ router.get(["/game-charge", "/game_charge", "/game_charge/"], async (req, res): 
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveGameCharge(gamechargeHtml, user));
@@ -6338,7 +6355,7 @@ router.get(
       return;
     }
     res.set("Content-Type", "text/html; charset=utf-8");
-    res.set("Cache-Control", "no-cache");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const user = await getSessionUser(req);
 
     res.send(serveLineageClassic(html, user));
@@ -6362,7 +6379,7 @@ router.get(["/sell/register.html", "/sell/", "/sell"], async (req, res): Promise
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveSellRegister(sellRegisterHtml, user));
@@ -6376,7 +6393,7 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
   }
   const productId = req.query.id as string | undefined;
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
 
   const SELL_INDEX_VIEW_INTERCEPT_SCRIPT = `
 <script>
@@ -6495,7 +6512,7 @@ router.get("/buy/register.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveBuyRegister(buyRegisterHtml, user));
@@ -6508,7 +6525,7 @@ router.get("/sell/new.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveSellNew(sellNewHtml, user));
@@ -6521,7 +6538,7 @@ router.get("/buy/new.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveBuyNew(sellNewHtml, user));
@@ -6534,7 +6551,7 @@ router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => 
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveBatchGoods(batchGoodsHtml, user));
@@ -6556,7 +6573,7 @@ for (const page of CHARGE_PAGES) {
   router.get(page.paths, async (req, res): Promise<void> => {
     if (!page.html) { res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>"); return; }
     res.set("Content-Type", "text/html; charset=utf-8");
-    res.set("Cache-Control", "no-cache");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const user = await getSessionUser(req);
     res.send(serveCharge(page.html, user));
   });
@@ -6573,7 +6590,7 @@ router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Prom
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveMyroom(myroomHtml, user));
@@ -6591,7 +6608,7 @@ router.get(["/myroom/mileage/payment/index.html", "/myroom/mileage/payment/", "/
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
   res.send(servePaymentIndex(paymentIndexHtml, user));
 });
@@ -6603,7 +6620,7 @@ router.get("/myroom/mileage/payment/payment_phone.html", async (req, res): Promi
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
   res.send(servePaymentPhone(paymentPhoneHtml, user));
 });
@@ -6615,7 +6632,7 @@ router.get("/myroom/mileage/payment/payment_list.html", async (req, res): Promis
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
   res.send(servePaymentList(paymentListHtml, user));
 });
@@ -6627,7 +6644,7 @@ router.get("/myroom/mileage/payment/payment_phone_list.html", async (req, res): 
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
   res.send(servePaymentPhoneList(paymentPhoneListHtml, user));
 });
@@ -6658,7 +6675,7 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
@@ -6686,7 +6703,7 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
@@ -6715,7 +6732,7 @@ router.get("/buy/list.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveBuy(buyLineageClassicHtml, user));
@@ -6739,7 +6756,7 @@ router.get("/myroom/chat/new_chat.html", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveChatNew(chatNewHtml, user));
@@ -6760,7 +6777,7 @@ router.get(["/myroom/chat/list.html", "/myroom/chat/"], async (req, res): Promis
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveChat(html, user));
@@ -6773,7 +6790,7 @@ router.get("/gamemania", async (req, res): Promise<void> => {
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
   res.send(serveGamemania(gamemanaHtml, user));
