@@ -311,13 +311,58 @@ const INTERCEPT_SCRIPT = `
   var closeBtn = document.getElementById('_im_close');
   var currentUser = null;
 
-  // 등급 배지 업데이트 공통 함수
+  // 등급 배지 업데이트 공통 함수 (모든 페이지 grade 요소 대응)
   function applyGradeBadge(grade) {
-    var GRADE_CLASSES = ['regular','bronze','silver','gold','platinum','vip'];
-    var cls = (grade && GRADE_CLASSES.indexOf(grade) !== -1) ? grade : 'regular';
+    var GRADES = ['regular','bronze','silver','gold','platinum','vip'];
+    var GRADE_EN = {regular:'REGULAR',bronze:'BRONZE',silver:'SILVER',gold:'GOLD',platinum:'PLATINUM',vip:'VIP'};
+    var GRADE_KO = {regular:'레귤러',bronze:'브론즈',silver:'실버',gold:'골드',platinum:'플래티넘',vip:'VIP'};
+    var cls = (grade && GRADES.indexOf(grade) !== -1) ? grade : 'regular';
+    var enName = GRADE_EN[cls];
+    var koName = GRADE_KO[cls];
+
+    // 1. .credit_mark_new — chat 등 (class 교체 + 텍스트 소문자)
     document.querySelectorAll('.credit_mark_new').forEach(function(el) {
-      GRADE_CLASSES.forEach(function(g) { el.classList.remove(g); });
+      GRADES.forEach(function(g) { el.classList.remove(g); });
       el.classList.add(cls);
+      if (el.textContent.trim()) el.textContent = cls;
+    });
+
+    // 2. .credit_mark2 — myroom 큰 육각형 아이콘 (credit_GOLD → credit_PLATINUM 등)
+    document.querySelectorAll('.credit_mark2').forEach(function(el) {
+      GRADES.forEach(function(g) { el.classList.remove('credit_' + GRADE_EN[g]); });
+      el.classList.add('credit_' + enName);
+      el.textContent = enName;
+    });
+
+    // 3. .level_txt — myroom "GOLD" 큰 제목 (f_GOLD → f_PLATINUM + 텍스트)
+    document.querySelectorAll('.level_txt').forEach(function(el) {
+      GRADES.forEach(function(g) { el.classList.remove('f_' + GRADE_EN[g]); });
+      el.classList.add('f_' + enName);
+      el.textContent = enName;
+    });
+
+    // 4. .level_desc 내 f_GRADE span — myroom "골드 (81점)" 텍스트 부분
+    document.querySelectorAll('.level_desc span, .level_desc [class]').forEach(function(el) {
+      var fCls = [];
+      el.classList.forEach(function(c) { if (/^f_/.test(c)) fCls.push(c); });
+      if (!fCls.length) return;
+      fCls.forEach(function(c) { el.classList.remove(c); });
+      el.classList.add('f_' + enName);
+      // 텍스트 내 한국어 등급명만 교체 (점수 숫자는 유지)
+      var txt = el.textContent || '';
+      GRADES.forEach(function(g) { txt = txt.replace(GRADE_KO[g], koName); });
+      el.textContent = txt;
+    });
+
+    // 5. .level_desc > div 텍스트 노드 — "기우혁 회원님의 신용등급은 ..." 에서 등급명 교체
+    document.querySelectorAll('.level_desc > div').forEach(function(div) {
+      div.childNodes.forEach(function(node) {
+        if (node.nodeType === 3) {
+          var t = node.textContent || '';
+          GRADES.forEach(function(g) { t = t.replace(GRADE_KO[g], koName); });
+          node.textContent = t;
+        }
+      });
     });
   }
 
@@ -349,6 +394,9 @@ const INTERCEPT_SCRIPT = `
     var grade = e.detail && e.detail.grade;
     if (currentUser) currentUser.grade = grade || null;
     applyGradeBadge(grade);
+    setTimeout(function() { applyGradeBadge(grade); }, 300);
+    setTimeout(function() { applyGradeBadge(grade); }, 900);
+    setTimeout(function() { applyGradeBadge(grade); }, 2500);
   });
 
   // --- 모달 열기/닫기 ---
@@ -3767,8 +3815,13 @@ const MYROOM_INTERCEPT_SCRIPT = `
         // 인증 배지 상태 반영
         applyAuthBadges(d.authStates);
 
-        // 신용등급 배지 반영
-        applyGradeBadge(d.grade);
+        // 신용등급 배지 반영 — 스냅샷 JS 덮어쓰기 대비 재시도
+        (function(g) {
+          applyGradeBadge(g);
+          setTimeout(function() { applyGradeBadge(g); }, 300);
+          setTimeout(function() { applyGradeBadge(g); }, 900);
+          setTimeout(function() { applyGradeBadge(g); }, 2500);
+        })(d.grade);
 
         // ── 나의 거래 현황 수치 반영 ───────────────────────────────────
         fetch('/api/products/my/stats', { credentials: 'include' })
@@ -5824,12 +5877,50 @@ function serveCharge(html: string, user: Record<string, unknown> | null = null):
     : result + CHARGE_INTERCEPT_SCRIPT;
 }
 
+// 스냅샷에 하드코딩된 등급 데이터
+const SNAPSHOT_GRADE_EN = 'GOLD';
+const SNAPSHOT_GRADE_KO = '골드';
+
+const MYROOM_GRADE_EN: Record<string, string> = {
+  regular: 'REGULAR', bronze: 'BRONZE', silver: 'SILVER',
+  gold: 'GOLD', platinum: 'PLATINUM', vip: 'VIP',
+};
+const MYROOM_GRADE_KO: Record<string, string> = {
+  regular: '레귤러', bronze: '브론즈', silver: '실버',
+  gold: '골드', platinum: '플래티넘', vip: 'VIP',
+};
+
+function applyServerGrade(html: string, grade: string | null | undefined): string {
+  const key = (grade && MYROOM_GRADE_EN[grade]) ? grade : 'regular';
+  const enName = MYROOM_GRADE_EN[key];
+  const koName = MYROOM_GRADE_KO[key];
+  if (enName === SNAPSHOT_GRADE_EN) return html; // 스냅샷과 같으면 변경 없음
+  // 1. credit_mark2 아이콘 클래스 + 텍스트
+  let out = html.replace(
+    `class="credit_mark2 credit_${SNAPSHOT_GRADE_EN} _lg">${SNAPSHOT_GRADE_EN}`,
+    `class="credit_mark2 credit_${enName} _lg">${enName}`,
+  );
+  // 2. level_txt 클래스 + 텍스트 (공백 포함)
+  out = out.replace(
+    new RegExp(`class="level_txt f_${SNAPSHOT_GRADE_EN}">\\s*${SNAPSHOT_GRADE_EN}\\s*<`, 'g'),
+    `class="level_txt f_${enName}">\n ${enName} <`,
+  );
+  // 3. level_desc f_GRADE span 클래스 + 한국어 등급명
+  out = out.replace(
+    `<span class=f_${SNAPSHOT_GRADE_EN}> ${SNAPSHOT_GRADE_KO}`,
+    `<span class=f_${enName}> ${koName}`,
+  );
+  return out;
+}
+
 function serveMyroom(html: string, user: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
   // 스냅샷에 하드코딩된 이전 유저 이름 → 실제 로그인 유저 닉네임으로 교체
   if (user) {
     const nick = (user.nickname as string) || (user.email as string) || '';
     if (nick) result = result.replace(/기우혁/g, nick);
+    // 스냅샷 GOLD 등급 → 실제 사용자 등급으로 서버 사이드 교체
+    result = applyServerGrade(result, user.grade as string | null);
   }
   return result.includes("</body>")
     ? result.replace("</body>", MYROOM_INTERCEPT_SCRIPT + "</body>")
