@@ -6093,6 +6093,10 @@ function serveMyroom(html: string, user: Record<string, unknown> | null = null):
     if (nick) result = result.replace(/기우혁/g, nick);
     // 스냅샷 GOLD 등급 → 실제 사용자 등급으로 서버 사이드 교체
     result = applyServerGrade(result, user.grade as string | null);
+    // 스냅샷의 신용점수 (81점) → 실제 사용자 신용점수로 서버 사이드 교체
+    // client-side applyScore()가 늦게 실행되며 발생하는 "초기화" 플래시 버그 방지
+    const score = typeof user.creditScore === 'number' ? user.creditScore : 0;
+    result = result.replace(/\(\d+점\)/g, `(${score}점)`);
   }
   return result.includes("</body>")
     ? result.replace("</body>", MYROOM_INTERCEPT_SCRIPT + "</body>")
