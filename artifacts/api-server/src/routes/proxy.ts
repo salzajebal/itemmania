@@ -1677,10 +1677,10 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     li.setAttribute('data-ts', String(p.createdAt ? new Date(p.createdAt).getTime() : 0));
     var href = '/' + type + '/application.html?id=' + p.id;
     var GRADE_LETTERS = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
-    var gradeKey = p.sellerGrade && (GRADE_LETTERS as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
+    var gradeKey = p.sellerGrade && GRADE_LETTERS[p.sellerGrade] ? p.sellerGrade : null;
     var sellerId = p.sellerId ? String(p.sellerId) : '';
     var gradeHtml = gradeKey
-      ? '<span class="credit_mark_new ' + gradeKey + '" data-seller-id="' + sellerId + '">' + (GRADE_LETTERS as Record<string,string>)[gradeKey] + '</span>'
+      ? '<span class="credit_mark_new ' + gradeKey + '" data-seller-id="' + sellerId + '">' + GRADE_LETTERS[gradeKey] + '</span>'
       : '<span class="credit_mark_new regular" data-seller-id="' + sellerId + '"></span>';
     li.innerHTML =
       '<div class="col info">' + gradeHtml + '</div>' +
@@ -1726,29 +1726,66 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var currentServer = params.get('search_server') || '';
     var currentKeyword = params.get('keyword') || '';
 
-    // ── 카테고리 탭 ──────────────────────────────────────
+    // ── 카테고리 탭: 버튼을 <a> 링크로 교체해 원본 JS 이벤트 완전 우회 ─
     document.querySelectorAll('button.tab_bx[data-value]').forEach(function(btn) {
       var val = btn.getAttribute('data-value');
       var mapped = ITEM_CAT_MAP[val] !== undefined ? ITEM_CAT_MAP[val] : '';
-      if (mapped === currentItemCat) btn.classList.add('selected');
-      else btn.classList.remove('selected');
-      btn.addEventListener('click', function() {
-        navigate({ itemCategory: mapped || null });
-      });
+      var q = new URLSearchParams(location.search);
+      q.delete('page');
+      if (mapped) q.set('itemCategory', mapped);
+      else q.delete('itemCategory');
+      var a = document.createElement('a');
+      a.className = btn.className;
+      a.innerHTML = btn.innerHTML;
+      a.setAttribute('data-value', val);
+      a.href = location.pathname + '?' + q.toString();
+      a.style.cssText = 'display:inline-block;cursor:pointer;text-decoration:none';
+      if (mapped === currentItemCat) a.classList.add('selected');
+      else a.classList.remove('selected');
+      if (btn.parentNode) btn.parentNode.replaceChild(a, btn);
     });
 
     // ── 정렬 버튼 (data-type=1/2/3만, sell/buy 탭 제외) ──
     document.querySelectorAll('button[data-type]').forEach(function(btn) {
       var t = btn.getAttribute('data-type');
-      if (!SORT_MAP[t]) return; // sell/buy 탭은 스킵
+      if (!SORT_MAP[t]) return;
       var sortVal = SORT_MAP[t];
       if (sortVal === currentSort || (sortVal === 'recent' && currentSort === 'recent')) {
         btn.classList.add('active');
         btn.style.fontWeight = '800';
         btn.style.color = '#159EFD';
       }
-      btn.addEventListener('click', function() {
-        navigate({ sort: sortVal === 'recent' ? null : sortVal });
+      var q2 = new URLSearchParams(location.search);
+      q2.delete('page');
+      if (sortVal === 'recent') q2.delete('sort'); else q2.set('sort', sortVal);
+      var a2 = document.createElement('a');
+      a2.className = btn.className;
+      a2.innerHTML = btn.innerHTML;
+      a2.href = location.pathname + '?' + q2.toString();
+      a2.style.cssText = 'display:inline-block;cursor:pointer;text-decoration:none';
+      if (btn.parentNode) btn.parentNode.replaceChild(a2, btn);
+    });
+
+    // ── 필터 전체보기 토글 ────────────────────────────────
+    document.querySelectorAll('button.toggles').forEach(function(toggleBtn) {
+      /* 버튼을 클론해 원본 핸들러 제거 후 우리 핸들러만 붙임 */
+      var clone = toggleBtn.cloneNode(true);
+      if (toggleBtn.parentNode) toggleBtn.parentNode.replaceChild(clone, toggleBtn);
+      clone.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var box = document.querySelector('.detail_search .search_box');
+        if (!box) return;
+        var isOpen = box.classList.contains('_im_open');
+        if (isOpen) {
+          box.style.maxHeight = '0';
+          box.classList.remove('_im_open');
+          clone.textContent = '필터 전체보기';
+        } else {
+          box.style.transition = 'max-height .3s ease-in-out';
+          box.style.maxHeight = box.scrollHeight + 'px';
+          box.classList.add('_im_open');
+          clone.textContent = '필터 접기 ▲';
+        }
       });
     });
 
@@ -1783,7 +1820,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     });
 
     // ── 초기화 버튼 ──────────────────────────────────────
-    document.querySelectorAll('button.reset_btn, a.reset_btn, .filter_reset').forEach(function(btn) {
+    document.querySelectorAll('button.reset_btn, a.reset_btn, .filter_reset, button.search_reset').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         var q = new URLSearchParams();

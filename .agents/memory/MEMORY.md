@@ -3,6 +3,7 @@
 - [Orval path+query collision](orval-collision.md) — having both path param AND query param on same route causes GetXxxParams TS2308 collision; remove query param from spec or rename operationId.
 - [Snapshot JS listener interference](snapshot-js-listener-interference.md) — snapshot JS attaches listeners to #searchRegGameServer; always cloneNode+removeAttribute('id') before setupGameSearch.
 - [Template literal JS escaping](template-literal-js-escaping.md) — single-quote escapes in JS embedded inside TS template literals must use \\\\ not \\; use node --check to verify.
+- [TypeScript cast in template literal](ts-cast-in-template-literal.md) — TS type casts (as X) inside template literals survive compilation and reach the browser as-is, causing SyntaxError → entire script block silently fails. Use plain JS instead.
 - [Template literal regex slash](template-literal-regex-slash.md) — in TS template literal, \\/ becomes / so /\\/(pat)/ outputs //(pat)/ — a JS line comment. Use /[/](pat)/ instead.
 - [SingleFile charge page clipping](singlefile-charge-clipping.md) — #g_POPUP inner anonymous div clips content after .mile_detail; fix by dynamically injecting charge UI after #g_POPUP via JS, not inside clipped area.
 - [Snapshot HTML data injection](snapshot-html-injection.md) — client-side JS injection into SingleFile snapshots unreliable; do server-side string/regex replace in applyProductToHtml() before serving.
