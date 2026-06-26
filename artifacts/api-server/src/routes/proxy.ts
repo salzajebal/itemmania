@@ -348,6 +348,7 @@ const INTERCEPT_SCRIPT = `
     }
 
     // 2. .credit_mark2 — myroom 큰 육각형 아이콘 (credit_GOLD → credit_PLATINUM 등)
+    // 아이콘 CSS는 서버 사이드에서 <head>에 주입 (gradeIconCss). 여기선 클래스만 교체.
     document.querySelectorAll('.credit_mark2').forEach(function(el) {
       GRADES.forEach(function(g) { el.classList.remove('credit_' + GRADE_EN[g]); });
       el.classList.add('credit_' + enName);
@@ -1106,7 +1107,7 @@ function imPathOf(url){for(var i=0;i<IM_API_ORIGINS.length;i++)if(url.startsWith
 function proxyImFetch(url,init){
   var path=imPathOf(url);
   /* 상품 검색/목록 */
-  if(/\/(item|goods|product|search|list)/.test(path)){
+  if(/[/](item|goods|product|search|list)/.test(path)){
     var qs=path.includes('?')?path.slice(path.indexOf('?')):'';
     var params=new URLSearchParams(qs);
     var apiUrl='/api/products';
@@ -1119,7 +1120,7 @@ function proxyImFetch(url,init){
     return fetch(apiUrl,{credentials:'include'});
   }
   /* 로그인 상태 확인 */
-  if(/\/(session|auth|login|member|user)/.test(path)){
+  if(/[/](session|auth|login|member|user)/.test(path)){
     return window._IM_auth();
   }
   /* 나머지 → 빈 JSON */
@@ -5938,6 +5939,30 @@ const MYROOM_GRADE_KO: Record<string, string> = {
   gold: '골드', platinum: '플래티넘', vip: 'VIP',
 };
 
+/** SVG 헥사곤 data URI CSS — 스냅샷에 credit_GOLD만 있고 나머지 없으므로 직접 주입 */
+function buildGradeIconStyle(): string {
+  const grades: Array<[string, string, string]> = [
+    ['REGULAR', '#cccccc', ''],
+    ['BRONZE',  '#5CB85C', 'B'],
+    ['SILVER',  '#9B9EA4', 'S'],
+    ['GOLD',    '#D4941C', 'G'],
+    ['PLATINUM','#E84060', 'P'],
+    ['VIP',     '#7B5CAA', 'V'],
+  ];
+  const rules = grades.map(([g, color, letter]) => {
+    const inner = letter
+      ? `<text x="26" y="43" text-anchor="middle" font-size="26" font-weight="bold" fill="white" font-family="Arial,Helvetica,sans-serif">${letter}</text>`
+      : '';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62" viewBox="0 0 52 62"><polygon points="26,1 51,15 51,47 26,61 1,47 1,15" fill="${color}"/>${inner}</svg>`;
+    const uri = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    if (g === 'REGULAR') return `.credit_mark2.credit_REGULAR{background-image:none!important}`;
+    return `.credit_mark2.credit_${g}{background-image:${uri}!important;background-repeat:no-repeat!important;background-size:100% auto!important}`;
+  });
+  return `<style id="_im_grade_icons">${rules.join('')}</style>`;
+}
+
+const GRADE_ICON_STYLE = buildGradeIconStyle();
+
 function applyServerGrade(html: string, grade: string | null | undefined): string {
   const key = (grade && MYROOM_GRADE_EN[grade]) ? grade : 'regular';
   const enName = MYROOM_GRADE_EN[key];
@@ -5963,6 +5988,10 @@ function applyServerGrade(html: string, grade: string | null | undefined): strin
 
 function serveMyroom(html: string, user: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
+  // 등급 아이콘 CSS 주입 (스냅샷에는 credit_GOLD만 있음)
+  result = result.includes("</head>")
+    ? result.replace("</head>", GRADE_ICON_STYLE + "</head>")
+    : GRADE_ICON_STYLE + result;
   // 스냅샷에 하드코딩된 이전 유저 이름 → 실제 로그인 유저 닉네임으로 교체
   if (user) {
     const nick = (user.nickname as string) || (user.email as string) || '';
