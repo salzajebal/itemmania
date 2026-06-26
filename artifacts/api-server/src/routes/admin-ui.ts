@@ -587,6 +587,7 @@ async function saveUserEdit(){
     if(nickEl)nickEl.textContent=d.nickname||'-';
     if(phoneEl)phoneEl.textContent=d.phone||'-';
     if(gradeEl){var gm={vip:['#7B5CAA','V'],platinum:['#E84060','P'],gold:['#D4941C','G'],silver:['#9B9EA4','S'],bronze:['#5CB85C','B']};var ge=d.grade?gm[d.grade]:null;gradeEl.innerHTML=ge?'<svg width="22" height="26" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg" title="'+d.grade.toUpperCase()+'"><polygon points="11,0 22,6.5 22,19.5 11,26 0,19.5 0,6.5" fill="'+ge[0]+'"/><text x="11" y="19" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">'+ge[1]+'</text></svg>':'-';}
+    btn.disabled=false;
     showToast('✅ 회원 정보가 수정되었습니다');
     closeUserEditModal();
     loadUsers();
