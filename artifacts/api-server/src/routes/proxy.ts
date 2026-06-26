@@ -1310,6 +1310,7 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
       nickname: usersTable.nickname,
       role: usersTable.role,
       grade: usersTable.grade,
+      creditScore: usersTable.creditScore,
       authStates: usersTable.authStates,
     }).from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return null;
@@ -1319,6 +1320,7 @@ async function getSessionUser(req: Request): Promise<Record<string, unknown> | n
       nickname: user.nickname,
       role: user.role,
       grade: user.grade ?? null,
+      creditScore: user.creditScore ?? 0,
       authStates: user.authStates ?? { excellent: false, phone: false, email: false, ipin: false, withdraw: false },
     };
   } catch {
@@ -1383,6 +1385,12 @@ const BALANCE_SSE_SCRIPT = `<script>
     try{
       var d=JSON.parse(e.data);
       window.dispatchEvent(new CustomEvent('im:grade',{detail:{grade:d.grade||null}}));
+    }catch(ex){}
+  });
+  es.addEventListener('credit_score',function(e){
+    try{
+      var d=JSON.parse(e.data);
+      window.dispatchEvent(new CustomEvent('im:credit_score',{detail:{score:d.score??0}}));
     }catch(ex){}
   });
 })();
@@ -3734,6 +3742,19 @@ const MYROOM_INTERCEPT_SCRIPT = `
     });
   }
 
+  function applyScore(score) {
+    var s = parseInt(score, 10);
+    if (isNaN(s)) s = 0;
+    var txt = '(' + s + '점)';
+    document.querySelectorAll('.level_desc span, .level_desc [class]').forEach(function(el) {
+      var hasFCls = false;
+      el.classList.forEach(function(c) { if (c.indexOf('f_') === 0) hasFCls = true; });
+      if (!hasFCls) return;
+      var cur = el.textContent || '';
+      el.textContent = cur.replace(/\(\d+점\)/, txt);
+    });
+  }
+
   function init() {
     // ── 충전하기 버튼 → 충전 팝업 ─────────────────────────────────────
     document.querySelectorAll('button.mileage_charge_btn,.mileage_charge_btn').forEach(function(btn) {
@@ -3885,6 +3906,14 @@ const MYROOM_INTERCEPT_SCRIPT = `
           setTimeout(function() { applyGradeBadge(g); }, 2500);
         })(d.grade);
 
+        // 신용점수 반영
+        (function(sc) {
+          applyScore(sc);
+          setTimeout(function() { applyScore(sc); }, 300);
+          setTimeout(function() { applyScore(sc); }, 900);
+          setTimeout(function() { applyScore(sc); }, 2500);
+        })(d.creditScore != null ? d.creditScore : 0);
+
         // ── 나의 거래 현황 수치 반영 ───────────────────────────────────
         fetch('/api/products/my/stats', { credentials: 'include' })
           .then(function(r) { return r.ok ? r.json() : null; })
@@ -3967,6 +3996,15 @@ const MYROOM_INTERCEPT_SCRIPT = `
     setTimeout(function() { applyGradeBadge(grade); }, 300);
     setTimeout(function() { applyGradeBadge(grade); }, 900);
     setTimeout(function() { applyGradeBadge(grade); }, 2500);
+  });
+
+  // 어드민에서 신용점수 변경 시 SSE → im:credit_score CustomEvent → 마이룸 실시간 반영
+  window.addEventListener('im:credit_score', function(e) {
+    var score = e.detail && e.detail.score != null ? e.detail.score : 0;
+    applyScore(score);
+    setTimeout(function() { applyScore(score); }, 300);
+    setTimeout(function() { applyScore(score); }, 900);
+    setTimeout(function() { applyScore(score); }, 2500);
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

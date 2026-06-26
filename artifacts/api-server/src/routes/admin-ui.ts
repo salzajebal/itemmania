@@ -279,6 +279,8 @@ tbody tr:hover{background:#fafbff}
     <input type="text" id="userEditName" placeholder="홍길동">
     <label>전화번호</label>
     <input type="tel" id="userEditPhone" placeholder="예: 010-1234-5678">
+    <label>신용점수</label>
+    <input type="number" id="userEditScore" min="0" max="9999" placeholder="0" style="width:100%;box-sizing:border-box">
     <label>신용등급</label>
     <select id="userEditGrade">
       <option value="">없음</option>
@@ -541,6 +543,7 @@ function openUserEditModal(u){
   document.getElementById('userEditNickname').value=u.nickname||'';
   document.getElementById('userEditName').value=u.name||'';
   document.getElementById('userEditPhone').value=u.phone||'';
+  document.getElementById('userEditScore').value=u.creditScore!=null?u.creditScore:0;
   document.getElementById('userEditGrade').value=u.grade||'';
   document.getElementById('userEditErr').textContent='';
   document.getElementById('userEditModal').classList.add('open');
@@ -558,6 +561,8 @@ async function saveUserEdit(){
   var name=document.getElementById('userEditName').value.trim();
   var phone=document.getElementById('userEditPhone').value.trim();
   var grade=document.getElementById('userEditGrade').value;
+  var creditScore=parseInt(document.getElementById('userEditScore').value,10);
+  if(isNaN(creditScore)||creditScore<0)creditScore=0;
   var errEl=document.getElementById('userEditErr');
   errEl.textContent='';
 
@@ -571,7 +576,7 @@ async function saveUserEdit(){
       method:'PATCH',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
-      body:JSON.stringify({email,nickname,name:name||null,phone:phone||null,grade:grade||''})
+      body:JSON.stringify({email,nickname,name:name||null,phone:phone||null,grade:grade||'',creditScore})
     });
     var d=await r.json();
     if(!r.ok){errEl.textContent=d.error||'저장 실패';btn.disabled=false;return;}

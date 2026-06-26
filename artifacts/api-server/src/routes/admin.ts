@@ -21,6 +21,7 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
       phone: usersTable.phone,
       role: usersTable.role,
       grade: usersTable.grade,
+      creditScore: usersTable.creditScore,
       balance: walletsTable.balance,
       createdAt: usersTable.createdAt,
     })
@@ -36,6 +37,7 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
     phone: u.phone,
     role: u.role,
     grade: u.grade ?? null,
+    creditScore: u.creditScore ?? 0,
     balance: u.balance !== null ? Number(u.balance) : null,
     createdAt: u.createdAt,
   })));
@@ -207,7 +209,7 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
 
-  const { nickname, name, phone, email, role, grade } = req.body as Record<string, string>;
+  const { nickname, name, phone, email, role, grade, creditScore } = req.body as Record<string, string>;
   const updates: Partial<typeof usersTable.$inferInsert> = {};
 
   if (nickname !== undefined) updates.nickname = String(nickname).trim();
@@ -220,6 +222,10 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
   if (grade !== undefined) {
     const VALID_GRADES = ["vip", "platinum", "gold", "silver", "bronze"];
     updates.grade = (grade && VALID_GRADES.includes(grade)) ? grade : null;
+  }
+  if (creditScore !== undefined) {
+    const score = parseInt(String(creditScore), 10);
+    updates.creditScore = isNaN(score) ? 0 : Math.max(0, score);
   }
 
   if (Object.keys(updates).length === 0) {
@@ -239,9 +245,11 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
         phone: usersTable.phone,
         role: usersTable.role,
         grade: usersTable.grade,
+      creditScore: usersTable.creditScore,
       });
     pushToUser(id, "nickname", { nickname: updated.nickname });
     pushToUser(id, "grade", { grade: updated.grade ?? null });
+    pushToUser(id, "credit_score", { score: updated.creditScore ?? 0 });
     res.json(updated);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

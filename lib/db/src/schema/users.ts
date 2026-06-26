@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, pgEnum, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -30,6 +30,7 @@ export const usersTable = pgTable("users", {
   role: userRoleEnum("role").notNull().default("user"),
   authStates: jsonb("auth_states").$type<AuthStates>().notNull().default(DEFAULT_AUTH_STATES),
   grade: text("grade"),
+  creditScore: integer("credit_score").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
