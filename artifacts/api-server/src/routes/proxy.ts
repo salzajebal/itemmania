@@ -195,6 +195,27 @@ const SELL_HTML_MAP: Record<string, string> = {
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
+/* ── 메인 배너 Swiper 스냅샷 height:100% 오버라이드 ──────────────────────────
+   스냅샷에 height:100%로 고정된 컨테이너/슬라이드/이미지를 콘텐츠 기반 높이로 복원.
+   CSS !important는 JS가 나중에 set하는 inline style도 오버라이드함. */
+.main-banner .banner_content > div {
+  height: auto !important;
+  overflow: hidden;
+}
+.swiper-container-main {
+  height: auto !important;
+  overflow: hidden;
+}
+.swiper-container-main .swiper-wrapper {
+  height: auto !important;
+}
+.swiper-container-main .swiper-slide {
+  height: auto !important;
+}
+.swiper-container-main .swiper-slide img {
+  height: auto !important;
+}
+/* ────────────────────────────────────────────────────────────────────────── */
 #_im_overlay {
   display: none;
   position: fixed;
@@ -1422,7 +1443,33 @@ function prepare(html: string, user: Record<string, unknown> | null = null): str
 }
 
 function serveItemmania(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+  let result = prepare(html, user);
+
+  // ── 메인 배너 스냅샷 상태 리셋 ──────────────────────────────────────────
+  // SingleFile 스냅샷이 Swiper 초기화 완료 상태를 굳혀 저장하기 때문에,
+  // 페이지를 다시 열 때 스냅샷 시점의 잘못된 값들이 그대로 남음.
+  //
+  // 1) 외부 래퍼 div: height:100% 제거
+  //    height:100%가 조상 컨테이너(g_container min-height 등)로부터 뷰포트 높이를
+  //    상속해 배너가 화면 전체 높이로 부풀어오르는 것을 차단.
+  result = result.replace(
+    "style=width:100%;height:100%;overflow:hidden",
+    "style=width:100%;overflow:hidden"
+  );
+  // 2) swiper-wrapper transform 초기화: 스냅샷 시점 5번째 슬라이드 위치 → 0번으로 리셋
+  result = result.replace(
+    "transform:translate3d(-5400px,0px,0px);transition-delay:0ms",
+    "transform:translate3d(0px,0px,0px);transition-delay:0ms"
+  );
+  // 3) 배너 슬라이드 이미지: height:100% → height:auto (자연 비율 표시)
+  //    adSwipeId 이미지만 대상으로 하여 다른 이미지에 영향 없음
+  result = result.replace(
+    /(<img[^>]+___adSwipeId___slt_itemmania_83[^>]+style=cursor:pointer;width:100%);height:100%/g,
+    "$1;height:auto"
+  );
+  // 4) swiper-container/wrapper/slide의 height:100% 오버라이드는 INTERCEPT_SCRIPT
+  //    CSS (!important)로 처리 → Swiper.js가 JS로 set하는 inline style도 무력화
+
   if (result.includes("</body>")) {
     return result.replace("</body>", INTERCEPT_SCRIPT + "</body>");
   }
