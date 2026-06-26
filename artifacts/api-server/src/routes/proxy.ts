@@ -4861,13 +4861,39 @@ const CHAT_INTERCEPT_SCRIPT = `
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-  function fmtTime(iso) {
+  function fmtDateTime(iso) {
     if (!iso) return '';
-    var d = new Date(iso), now = new Date();
-    var diff = Math.floor((now - d) / 86400000);
-    if (diff === 0) return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-    if (diff < 7) return ['일','월','화','수','목','금','토'][d.getDay()] + '요일';
-    return (d.getMonth()+1) + '/' + d.getDate();
+    var d = new Date(iso);
+    var yy = String(d.getFullYear()).slice(2);
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var dd = String(d.getDate()).padStart(2,'0');
+    var hh = String(d.getHours()).padStart(2,'0');
+    var min = String(d.getMinutes()).padStart(2,'0');
+    return yy + '-' + mm + '-' + dd + ' ' + hh + ':' + min;
+  }
+  function makeTid(r) {
+    var d = new Date(r.createdAt || Date.now());
+    var yy = String(d.getFullYear());
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var day = String(d.getDate()).padStart(2,'0');
+    var hh = String(d.getHours()).padStart(2,'0');
+    var min = String(d.getMinutes()).padStart(2,'0');
+    var rid = String(r.id).padStart(4,'0');
+    return yy + mm + day + hh + min + rid;
+  }
+  function maskEmail(email) {
+    var id = email ? email.split('@')[0] : '';
+    if (!id) return '***';
+    if (id.length <= 1) return id + '***';
+    if (id.length <= 4) return id[0] + '***';
+    return id[0] + '***' + id.slice(4);
+  }
+  var GRADE_LETTERS_CHAT = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+  function gradeIcon(grade, email) {
+    var g = grade && GRADE_LETTERS_CHAT[grade] ? grade : null;
+    var letter = g ? GRADE_LETTERS_CHAT[g] : '';
+    var icon = g ? '<span class="credit_mark_new ' + g + '" style="margin-right:3px">' + letter + '</span>' : '';
+    return icon + maskEmail(email);
   }
 
   var STATUS_FILTER = { pending:'a', active:'b', ended:'c', cancelled:'d', rejected:'e' };
@@ -4923,12 +4949,15 @@ const CHAT_INTERCEPT_SCRIPT = `
     var stateClass = isBuyer ? (STATUS_CLASS_BUY[stateKey] || 'buy_wait') : (STATUS_CLASS_SELL[stateKey] || 'sell_wait');
     var stateLabel = STATUS_LABEL[stateKey] || '거래대기';
     var stateFilter = STATUS_FILTER[stateKey] || 'a';
-    var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
+    var partnerEmail = isBuyer ? (r.sellerEmail || '') : (r.buyerEmail || '');
+    var partnerGrade = isBuyer ? (r.sellerGrade || null) : (r.buyerGrade || null);
     var productTitle = r.productTitle || '상품 문의';
     var price = r.productPrice ? Number(r.productPrice).toLocaleString() + '원' : '-';
     var roomIdStr = String(r.id);
+    var tidStr = makeTid(r);
     var lastMsg = r.lastMessage || '';
-    var lastTime = fmtTime(r.lastMessageAt || r.createdAt);
+    var lastTime = fmtDateTime(r.lastMessageAt || r.createdAt);
+    var breadcrumb = [r.gameName, r.serverName, r.itemCategory].filter(Boolean).join(' > ') || '';
 
     /* ─── 서브 리스트 아이템: 원본 chat_list_item flex 구조 완전 일치 ─── */
     /* .chat_group(67px) + .chat_info_area(flex:1) + .chat_user(110px) + .dt(120px) + .chat_proc(124px) */
@@ -4939,9 +4968,9 @@ const CHAT_INTERCEPT_SCRIPT = `
         '</div>' +
         '<div class=chat_info_area>' +
           '<div class="subject reply">' + esc(lastMsg || '새 채팅을 시작하세요') + '</div>' +
-          '<div class=sub_info>' + esc(partnerName) + '</div>' +
+          '<div class=sub_info>' + (breadcrumb ? esc(breadcrumb) : '') + '</div>' +
         '</div>' +
-        '<div class=chat_user><span>1:1</span>&nbsp;채팅</div>' +
+        '<div class=chat_user>' + gradeIcon(partnerGrade, partnerEmail) + '</div>' +
         '<div class=dt>' + lastTime + '</div>' +
         '<div class=chat_proc>' +
           '<button type=button class=chat_exit data-roomid="' + roomIdStr + '">채팅종료</button>' +
@@ -4966,9 +4995,9 @@ const CHAT_INTERCEPT_SCRIPT = `
       '</div>' +
       '<div class=chat_info_area>' +
         '<div class="trade_state ' + stateClass + '">' + stateLabel + '</div>' +
-        '<div class=tid>#' + roomIdStr + '</div>' +
+        '<div class=tid>#' + tidStr + '</div>' +
         '<div class=subject>' + esc(productTitle) + '</div>' +
-        '<div class=sub_info>' + esc(partnerName) + '</div>' +
+        '<div class=sub_info>' + (breadcrumb ? esc(breadcrumb) : '') + '</div>' +
       '</div>' +
       '<div class=chat_user><span>1명과</span> 대화중</div>' +
       '<div class=dt>' + price + '</div>' +

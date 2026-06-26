@@ -13,15 +13,21 @@ async function enrichRoom(r: typeof chatRoomsTable.$inferSelect) {
     .orderBy(desc(chatMessagesTable.id))
     .limit(1);
 
-  const [buyer] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, r.buyerId));
-  const [seller] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, r.sellerId));
+  const [buyer] = await db.select({ nickname: usersTable.nickname, email: usersTable.email, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, r.buyerId));
+  const [seller] = await db.select({ nickname: usersTable.nickname, email: usersTable.email, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, r.sellerId));
 
   let productTitle: string | null = null;
   let productPrice: number | null = null;
+  let gameName: string | null = null;
+  let serverName: string | null = null;
+  let itemCategory: string | null = null;
   if (r.productId) {
-    const [prod] = await db.select({ title: productsTable.title, price: productsTable.price }).from(productsTable).where(eq(productsTable.id, r.productId));
+    const [prod] = await db.select({ title: productsTable.title, price: productsTable.price, gameName: productsTable.gameName, serverName: productsTable.serverName, itemCategory: productsTable.itemCategory }).from(productsTable).where(eq(productsTable.id, r.productId));
     productTitle = prod?.title ?? null;
     productPrice = prod?.price ?? null;
+    gameName = prod?.gameName ?? null;
+    serverName = prod?.serverName ?? null;
+    itemCategory = prod?.itemCategory ?? null;
   }
 
   return {
@@ -33,8 +39,15 @@ async function enrichRoom(r: typeof chatRoomsTable.$inferSelect) {
     status: r.status,
     buyerNickname: buyer?.nickname ?? String(r.buyerId),
     sellerNickname: seller?.nickname ?? String(r.sellerId),
+    buyerEmail: buyer?.email ?? null,
+    sellerEmail: seller?.email ?? null,
+    buyerGrade: buyer?.grade ?? null,
+    sellerGrade: seller?.grade ?? null,
     productTitle,
     productPrice,
+    gameName,
+    serverName,
+    itemCategory,
     lastMessage: lastMsg?.content ?? null,
     lastMessageAt: lastMsg?.createdAt ?? r.createdAt,
     createdAt: r.createdAt,
