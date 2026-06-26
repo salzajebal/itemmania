@@ -637,12 +637,14 @@ const INTERCEPT_SCRIPT = `
       }
     });
 
-    // 채팅 버튼 → 채팅 목록으로 이동
+    // 채팅 버튼 → 채팅 목록 별도 창으로 열기
     var chatBtn = document.querySelector('#chat_notice button[aria-label="채팅"], #chat_notice button');
     if (chatBtn) {
       chatBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/myroom/chat/list.html';
+        var nOpen = window._nativeOpen || window.open.bind(window);
+        var w = nOpen('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        if (!w || w.closed) { location.href = '/myroom/chat/list.html'; }
       }, true);
     }
 
@@ -5088,7 +5090,12 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
           var knownProduct = window._IM_PRODUCT || null;
 
           function openChatWithProduct(prod) {
-            if (!prod || !prod.sellerId) { window.open('/myroom/chat/list.html', '_self'); return; }
+            if (!prod || !prod.sellerId) {
+              var nOpen0 = window._nativeOpen || window.open.bind(window);
+              var w0 = nOpen0('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+              if (!w0 || w0.closed) { location.href = '/myroom/chat/list.html'; }
+              return;
+            }
             if (Number(prod.sellerId) === Number(user.id)) {
               alert('자신의 상품에는 채팅할 수 없습니다.'); return;
             }
