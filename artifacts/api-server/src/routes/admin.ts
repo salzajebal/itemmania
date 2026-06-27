@@ -402,6 +402,68 @@ async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: strin
   }
 }
 
+async function fetchDetailHtml(tid: string, scraperApiKey?: string): Promise<string | null> {
+  const targetUrl = `https://www.itemmania.com/sell/application.html?id=${tid}`;
+  const fetchUrl = scraperApiKey
+    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`
+    : targetUrl;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const resp = await fetch(fetchUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" },
+    });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseDetailFromHtml(html: string): {
+  description: string | null;
+  thumbnailUrl: string | null;
+  sellerName: string | null;
+} {
+  let description: string | null = null;
+  let thumbnailUrl: string | null = null;
+
+  const ldBlocks = html.match(/<script type=application\/ld\+json>([\s\S]*?)<\/script>/g) || [];
+  for (const block of ldBlocks) {
+    try {
+      const inner = block.replace(/<script type=application\/ld\+json>/, "").replace(/<\/script>/, "");
+      const data = JSON.parse(inner) as Record<string, unknown>;
+      const graph = data["@graph"] as Array<Record<string, unknown>> | undefined;
+      if (!graph) continue;
+      const product = graph.find(n => n["@type"] === "Product");
+      if (!product) continue;
+
+      if (typeof product["description"] === "string") {
+        description = product["description"].trim() || null;
+      }
+      const img = typeof product["image"] === "string" ? product["image"] : null;
+      if (img && !img.includes("/common/") && !img.includes("og_")) {
+        thumbnailUrl = img;
+      }
+      break;
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  const $ = cheerio.load(html);
+  const sellerEl = $(".user_nick").first().text().trim()
+    || $(".user_info strong:not(.vip_txt)").first().text().trim()
+    || null;
+  const sellerName = sellerEl || null;
+
+  return { description, thumbnailUrl, sellerName };
+}
+
 function parseProductsFromHtml(html: string, gameId: number): Array<{
   itemmaniaid: string;
   title: string;
@@ -437,7 +499,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       serverName: serverName || "",
       category: "sell",
       itemCategory: itemCategory || "",
-      detailUrl: `https://www.itemmania.com/sell/view.html?no=${tid}`,
+      detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
     });
   });
 
@@ -446,10 +508,11 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
 
 // 크롤링 API
 router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
-  const { gameIds, pages = 1, scraperApiKey } = req.body as {
+  const { gameIds, pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
     gameIds?: number[];
     pages?: number;
     scraperApiKey?: string;
+    crawlDetail?: boolean;
   };
 
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
@@ -460,6 +523,8 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
   const maxPages = Math.min(Math.max(1, pages), 5);
   let totalUpserted = 0;
   let totalFailed = 0;
+  let detailFetched = 0;
+  let detailFailed = 0;
   const log: string[] = [];
 
   for (const game of targetGames) {
@@ -498,6 +563,7 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
               gameName: p.gameName,
               serverName: p.serverName,
               itemCategory: p.itemCategory,
+              detailUrl: p.detailUrl,
               status: "active",
               crawledAt: new Date(),
             },
@@ -505,16 +571,39 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
           totalUpserted++;
         } catch {
           totalFailed++;
+          continue;
+        }
+
+        if (crawlDetail) {
+          const detailHtml = await fetchDetailHtml(p.itemmaniaid, apiKey);
+          if (detailHtml) {
+            const detail = parseDetailFromHtml(detailHtml);
+            try {
+              await db.update(productsTable)
+                .set({
+                  description: detail.description,
+                  thumbnailUrl: detail.thumbnailUrl,
+                  sellerName: detail.sellerName,
+                })
+                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
+              detailFetched++;
+            } catch {
+              detailFailed++;
+            }
+          } else {
+            detailFailed++;
+          }
+          await new Promise(r => setTimeout(r, 300));
         }
       }
 
-      log.push(`[완료] ${game.name} ${page}페이지 - ${products.length}개 저장`);
+      log.push(`[완료] ${game.name} ${page}페이지 - ${products.length}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}`);
 
       if (page < maxPages) await new Promise(r => setTimeout(r, 500));
     }
   }
 
-  res.json({ ok: true, upserted: totalUpserted, failed: totalFailed, log });
+  res.json({ ok: true, upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed, log });
 });
 
 // 크롤링 대상 게임 목록

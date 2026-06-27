@@ -235,7 +235,7 @@ tbody tr:hover{background:#fafbff}
             <div id="crawlGameList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
           </div>
 
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
             <label style="font-size:14px;font-weight:600">페이지 수:
               <select id="crawlPages" style="margin-left:8px;padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none">
                 <option value="1">1페이지 (약 20개/게임)</option>
@@ -244,6 +244,18 @@ tbody tr:hover{background:#fafbff}
                 <option value="5">5페이지 (약 100개/게임)</option>
               </select>
             </label>
+          </div>
+          <div style="margin-bottom:16px;padding:12px 16px;background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:8px">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+              <input type="checkbox" id="crawlDetailCheck" style="width:16px;height:16px;margin-top:2px;accent-color:#159EFD;flex-shrink:0">
+              <span style="font-size:13px;color:#333">
+                <b style="color:#159EFD">상세 페이지 크롤 포함</b>
+                <span style="display:block;color:#666;margin-top:3px">판매자명·상세설명을 함께 수집합니다. ScraperAPI 크레딧이 상품 1개당 1회 추가 소모됩니다.</span>
+                <span id="crawlDetailCost" style="display:block;color:#e57c00;margin-top:3px;font-size:12px"></span>
+              </span>
+            </label>
+          </div>
+          <div style="margin-bottom:20px">
             <button id="crawlBtn" onclick="startCrawl()" style="padding:12px 24px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🕷️ 크롤링 시작</button>
           </div>
 
@@ -465,9 +477,12 @@ async function initCrawlTab(){
           crawlSelectedGames.add(g.id);
           btn.style.background='#e8f4fe';btn.style.color='#0d6efd';btn.style.borderColor='#159EFD';
         }
+        updateCrawlCostEstimate();
       };
       container.appendChild(btn);
     });
+    document.getElementById('crawlPages').onchange=updateCrawlCostEstimate;
+    document.getElementById('crawlDetailCheck').onchange=updateCrawlCostEstimate;
     var origin=location.origin;
     document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl/script';
     document.getElementById('crawlApiBaseUrl').textContent=origin;
@@ -494,19 +509,38 @@ async function testApiKey(){
   }
 }
 
+function updateCrawlCostEstimate(){
+  var selectedIds=Array.from(crawlSelectedGames);
+  var pages=parseInt((document.getElementById('crawlPages')||{value:'1'}).value)||1;
+  var withDetail=document.getElementById('crawlDetailCheck')&&document.getElementById('crawlDetailCheck').checked;
+  var estProducts=selectedIds.length*pages*55;
+  var listCredits=selectedIds.length*pages;
+  var totalCredits=withDetail?listCredits+estProducts:listCredits;
+  var costEl=document.getElementById('crawlDetailCost');
+  if(costEl){
+    if(withDetail){
+      costEl.textContent='예상 크레딧 소모: 목록 '+listCredits+'회 + 상세 ~'+estProducts+'회 = 총 ~'+totalCredits+'회 ('+selectedIds.length+'게임×'+pages+'페이지×약55개)';
+    }else{
+      costEl.textContent='';
+    }
+  }
+}
+
 async function startCrawl(){
   var selectedIds=Array.from(crawlSelectedGames);
   if(selectedIds.length===0){showToast('게임을 선택하세요.');return;}
   var pages=parseInt(document.getElementById('crawlPages').value)||1;
   var apiKey=document.getElementById('crawlApiKeyInput').value.trim();
+  var withDetail=!!(document.getElementById('crawlDetailCheck')&&document.getElementById('crawlDetailCheck').checked);
 
   document.getElementById('crawlBtn').disabled=true;
   document.getElementById('crawlStatus').style.display='block';
   document.getElementById('crawlResult').style.display='none';
-  document.getElementById('crawlStatusText').textContent='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지)';
+  var statusMsg='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지'+(withDetail?', 상세 포함':'')+')';
+  document.getElementById('crawlStatusText').textContent=statusMsg;
 
   try{
-    var body={gameIds:selectedIds,pages:pages};
+    var body={gameIds:selectedIds,pages:pages,crawlDetail:withDetail};
     if(apiKey)body.scraperApiKey=apiKey;
     var r=await fetch('/api/admin/crawl',{
       method:'POST',
@@ -517,7 +551,9 @@ async function startCrawl(){
     var d=await r.json();
     document.getElementById('crawlStatus').style.display='none';
     document.getElementById('crawlResult').style.display='block';
-    document.getElementById('crawlResultSummary').textContent='완료: '+d.upserted+'개 저장, '+d.failed+'개 실패';
+    var summary='완료: '+d.upserted+'개 저장, '+d.failed+'개 실패';
+    if(withDetail) summary+=' / 상세: '+d.detailFetched+'개 수집, '+d.detailFailed+'개 실패';
+    document.getElementById('crawlResultSummary').textContent=summary;
     document.getElementById('crawlResultLog').textContent=(d.log||[]).join('\n');
     loadStats();
     loadProducts();
