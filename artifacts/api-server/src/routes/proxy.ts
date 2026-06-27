@@ -6691,10 +6691,13 @@ router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Prom
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
+  const user = await getSessionUser(req);
+  if (!user) {
+    res.redirect(302, "/login?redirect=/myroom/index.html");
+    return;
+  }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  const user = await getSessionUser(req);
-
   res.send(serveMyroom(myroomHtml, user));
 });
 
