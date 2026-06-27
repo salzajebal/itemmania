@@ -329,7 +329,7 @@ async function doLogin(){
   errEl.style.display='none';
   if(!email||!pw){errEl.textContent='이메일과 비밀번호를 입력하세요.';errEl.style.display='block';return;}
   try{
-    var r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({email,password:pw})});
+    var r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({email,password:pw})});
     var d=await r.json();
     if(!r.ok){errEl.textContent=d.error||'로그인 실패';errEl.style.display='block';return;}
     if(d.role!=='admin'){errEl.textContent='관리자 계정이 아닙니다.';errEl.style.display='block';return;}
@@ -355,7 +355,7 @@ function showAdmin(user){
 }
 
 async function doLogout(){
-  await fetch('/api/auth/logout',{method:'POST',credentials:'include'});
+  await fetch('/api/admin/logout',{method:'POST',credentials:'include'});
   location.reload();
 }
 

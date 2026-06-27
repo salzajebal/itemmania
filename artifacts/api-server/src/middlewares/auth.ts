@@ -9,11 +9,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.session?.userId) {
-    res.status(401).json({ error: "로그인이 필요합니다." });
+  if (!req.session?.adminId) {
+    res.status(401).json({ error: "관리자 로그인이 필요합니다." });
     return;
   }
-  if (req.session.userRole !== "admin") {
+  if (req.session.adminRole !== "admin") {
     res.status(403).json({ error: "관리자 권한이 필요합니다." });
     return;
   }

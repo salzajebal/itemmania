@@ -118,6 +118,40 @@ router.post("/auth/logout", (req, res): void => {
   });
 });
 
+router.post("/admin/login", async (req, res): Promise<void> => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    res.status(400).json({ error: "이메일과 비밀번호를 입력하세요." });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (!user) {
+    res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
+    return;
+  }
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
+    return;
+  }
+  if (user.role !== "admin") {
+    res.status(403).json({ error: "관리자 권한이 없습니다." });
+    return;
+  }
+  req.session.adminId = user.id;
+  req.session.adminRole = user.role;
+  await new Promise<void>((resolve) => req.session.save(() => resolve()));
+  res.json({ id: user.id, email: user.email, nickname: user.nickname, role: user.role });
+});
+
+router.post("/admin/logout", (req, res): void => {
+  req.session.adminId = undefined;
+  req.session.adminRole = undefined;
+  req.session.save(() => {
+    res.json({ ok: true });
+  });
+});
+
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
   if (!user) {
