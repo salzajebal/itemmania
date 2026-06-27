@@ -1,70 +1,102 @@
 #!/usr/bin/env node
 /**
  * itemmania.com 로컬 크롤러
- * 
+ *
  * 사용법:
- *   node crawl-itemmania.mjs --api-url https://your-app.replit.app --session-cookie "connect.sid=..."
- * 
+ *   node crawl-itemmania.mjs --api-url https://your-app.replit.app --admin-email admin@example.com --admin-pw yourpw
+ *
  * 옵션:
- *   --api-url       우리 서버 URL (기본: http://localhost:80)
- *   --games         크롤링할 게임 slug 목록, 쉼표 구분 (기본: 전체)
- *                   lostark, maplestory, dnf, lineage-classic, aion2, mabinogi, geosang
- *   --pages         페이지 수 (기본: 1, 최대: 10)
- *   --session-cookie 어드민 세션 쿠키 (예: "connect.sid=s%3Axxx...")
- *   --scraper-key   ScraperAPI 키 (있으면 API를 통해 서버에서 크롤링, 없으면 로컬 직접 크롤링)
- * 
+ *   --api-url        우리 서버 URL (필수)
+ *   --admin-email    어드민 이메일 (자동 로그인용)
+ *   --admin-pw       어드민 비밀번호
+ *   --games          게임 slug 목록, 쉼표 구분 (기본: 전체)
+ *                    lostark, maplestory, dnf, lineage-classic, aion2, mabinogi, geosang
+ *   --pages          페이지 수 (기본: 1, 최대: 10)
+ *   --with-detail    상세 페이지까지 크롤 (판매자명·설명·이미지 수집)
+ *   --batch-size     한 번에 업로드할 상품 수 (기본: 50)
+ *
  * 예시:
- *   node crawl-itemmania.mjs --api-url https://myapp.replit.app --games lostark,maplestory --pages 2
+ *   node crawl-itemmania.mjs \
+ *     --api-url https://myapp.replit.app \
+ *     --admin-email admin@example.com \
+ *     --admin-pw mypassword \
+ *     --games lostark,maplestory,dnf \
+ *     --pages 3 \
+ *     --with-detail
  */
 
-import { createRequire } from 'module';
 import { JSDOM } from 'jsdom';
 
-const require = createRequire(import.meta.url);
-
 const GAMES = {
-  lostark:        { id: 2696, name: '로스트아크' },
-  maplestory:     { id: 138,  name: '메이플스토리' },
-  dnf:            { id: 281,  name: '던전앤파이터' },
-  'lineage-classic': { id: 5913, name: '리니지 클래식' },
-  aion2:          { id: 5799, name: '아이온2' },
-  mabinogi:       { id: 155,  name: '마비노기' },
-  geosang:        { id: 101,  name: '거상' },
+  lostark:           { id: 2696, name: '로스트아크' },
+  maplestory:        { id: 138,  name: '메이플스토리' },
+  dnf:               { id: 281,  name: '던전앤파이터' },
+  'lineage-classic': { id: 5913, name: '리니지클래식' },
+  aion2:             { id: 5799, name: '아이온2' },
+  mabinogi:          { id: 155,  name: '마비노기' },
+  geosang:           { id: 101,  name: '거상' },
 };
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
 function parseArgs() {
   const args = process.argv.slice(2);
   const opts = {
-    apiUrl: 'http://localhost:80',
+    apiUrl: '',
+    adminEmail: '',
+    adminPw: '',
     games: Object.keys(GAMES),
     pages: 1,
-    sessionCookie: '',
-    scraperKey: '',
+    withDetail: false,
+    batchSize: 50,
   };
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--api-url') opts.apiUrl = args[++i];
-    else if (args[i] === '--games') opts.games = args[++i].split(',').map(s => s.trim());
-    else if (args[i] === '--pages') opts.pages = Math.min(parseInt(args[++i]) || 1, 10);
-    else if (args[i] === '--session-cookie') opts.sessionCookie = args[++i];
-    else if (args[i] === '--scraper-key') opts.scraperKey = args[++i];
+    if (args[i] === '--api-url')       opts.apiUrl = args[++i];
+    else if (args[i] === '--admin-email') opts.adminEmail = args[++i];
+    else if (args[i] === '--admin-pw')    opts.adminPw = args[++i];
+    else if (args[i] === '--games')       opts.games = args[++i].split(',').map(s => s.trim());
+    else if (args[i] === '--pages')       opts.pages = Math.min(parseInt(args[++i]) || 1, 10);
+    else if (args[i] === '--with-detail') opts.withDetail = true;
+    else if (args[i] === '--batch-size')  opts.batchSize = parseInt(args[++i]) || 50;
   }
   return opts;
 }
 
-async function fetchHtml(gameId, page, scraperKey) {
-  const targetUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
-  const url = scraperKey
-    ? `https://api.scraperapi.com/?api_key=${scraperKey}&url=${encodeURIComponent(targetUrl)}`
-    : targetUrl;
-  const resp = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0 Safari/537.36' },
-    signal: AbortSignal.timeout(20000),
+async function adminLogin(apiUrl, email, pw) {
+  const r = await fetch(`${apiUrl}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pw }),
+    signal: AbortSignal.timeout(10000),
+    redirect: 'manual',
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.text();
+  const setCookie = r.headers.get('set-cookie') || '';
+  const match = setCookie.match(/(connect\.sid=[^;]+)/);
+  if (!match) throw new Error('로그인 실패: 세션 쿠키를 받지 못했습니다.');
+  return match[1];
 }
 
-function parseProducts(html, gameId, gameName) {
+async function fetchListHtml(gameId, page) {
+  const url = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
+  const r = await fetch(url, {
+    headers: { 'User-Agent': UA },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.text();
+}
+
+async function fetchDetailHtml(tid) {
+  const url = `https://www.itemmania.com/sell/application.html?id=${tid}`;
+  const r = await fetch(url, {
+    headers: { 'User-Agent': UA },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) return null;
+  return r.text();
+}
+
+function parseListProducts(html, gameId, gameName) {
   const dom = new JSDOM(html);
   const doc = dom.window.document;
   const items = doc.querySelectorAll('li.list_item');
@@ -88,82 +120,183 @@ function parseProducts(html, gameId, gameName) {
       serverName: serverSel?.getAttribute('data-title') || serverSel?.textContent?.trim() || '',
       category: 'sell',
       itemCategory: categoryEl?.textContent?.trim() || '',
-      detailUrl: `https://www.itemmania.com/sell/view.html?no=${tid}`,
+      detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
     });
   }
   return products;
 }
 
-async function uploadProducts(products, apiUrl, sessionCookie) {
-  let ok = 0, fail = 0;
-  for (const p of products) {
+function parseDetailData(html) {
+  let description = null;
+  let thumbnailUrl = null;
+  let sellerName = null;
+
+  const ldBlocks = html.match(/<script type=application\/ld\+json>([\s\S]*?)<\/script>/g) || [];
+  for (const block of ldBlocks) {
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (sessionCookie) headers['Cookie'] = sessionCookie;
-      const r = await fetch(`${apiUrl}/api/admin/products`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(p),
-        signal: AbortSignal.timeout(10000),
-      });
-      if (r.ok) ok++;
-      else fail++;
+      const inner = block
+        .replace(/<script type=application\/ld\+json>/, '')
+        .replace(/<\/script>/, '');
+      const data = JSON.parse(inner);
+      const graph = data['@graph'];
+      if (!Array.isArray(graph)) continue;
+      const product = graph.find(n => n['@type'] === 'Product');
+      if (!product) continue;
+      if (typeof product['description'] === 'string') {
+        description = product['description'].trim() || null;
+      }
+      const img = typeof product['image'] === 'string' ? product['image'] : null;
+      if (img && !img.includes('/common/') && !img.includes('og_')) {
+        thumbnailUrl = img;
+      }
+      break;
     } catch {
-      fail++;
+      // ignore
     }
   }
-  return { ok, fail };
+
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  const nickEl = doc.querySelector('.user_nick')
+    || doc.querySelector('.user_info strong:not(.vip_txt)');
+  sellerName = nickEl?.textContent?.trim() || null;
+
+  return { description, thumbnailUrl, sellerName };
+}
+
+async function uploadBatch(products, apiUrl, cookie) {
+  const r = await fetch(`${apiUrl}/api/admin/crawl/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookie,
+    },
+    body: JSON.stringify({ products }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!r.ok) throw new Error(`업로드 실패: HTTP ${r.status}`);
+  return r.json();
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 async function main() {
   const opts = parseArgs();
-  console.log('🕷️  itemmania.com 로컬 크롤러 시작');
-  console.log(`   서버: ${opts.apiUrl}`);
-  console.log(`   게임: ${opts.games.join(', ')}`);
-  console.log(`   페이지: ${opts.pages}`);
-  if (opts.scraperKey) console.log('   ScraperAPI 키: 사용');
-  console.log('');
+
+  if (!opts.apiUrl) {
+    console.error('오류: --api-url 이 필요합니다. (예: --api-url https://myapp.replit.app)');
+    process.exit(1);
+  }
+  if (!opts.adminEmail || !opts.adminPw) {
+    console.error('오류: --admin-email 과 --admin-pw 가 필요합니다.');
+    process.exit(1);
+  }
 
   const targetGames = opts.games
     .map(s => ({ slug: s, ...GAMES[s] }))
     .filter(g => g.id);
 
   if (targetGames.length === 0) {
-    console.error('오류: 유효한 게임을 선택하세요.');
+    console.error('오류: 유효한 게임 slug를 선택하세요.');
+    console.error('사용 가능:', Object.keys(GAMES).join(', '));
+    process.exit(1);
+  }
+
+  console.log('🕷️  itemmania.com 로컬 크롤러');
+  console.log(`   서버: ${opts.apiUrl}`);
+  console.log(`   게임: ${targetGames.map(g => g.name).join(', ')}`);
+  console.log(`   페이지: ${opts.pages}`);
+  console.log(`   상세 크롤: ${opts.withDetail ? '포함' : '미포함'}`);
+  console.log('');
+
+  process.stdout.write('🔑 어드민 로그인 중...');
+  let cookie;
+  try {
+    cookie = await adminLogin(opts.apiUrl, opts.adminEmail, opts.adminPw);
+    console.log(' 완료');
+  } catch (e) {
+    console.error('\n오류:', e.message);
     process.exit(1);
   }
 
   let totalSaved = 0;
   let totalFail = 0;
+  let detailOk = 0;
+  let detailFail = 0;
 
   for (const game of targetGames) {
+    console.log(`\n[${game.name}]`);
     for (let page = 1; page <= opts.pages; page++) {
-      process.stdout.write(`  [${game.name}] ${page}페이지 크롤링 중...`);
+      process.stdout.write(`  ${page}페이지 목록 크롤링...`);
+      let products;
       try {
-        const html = await fetchHtml(game.id, page, opts.scraperKey);
-        const products = parseProducts(html, game.id, game.name);
-        process.stdout.write(` ${products.length}개 파싱됨`);
-        if (products.length > 0) {
-          const { ok, fail } = await uploadProducts(products, opts.apiUrl, opts.sessionCookie);
-          process.stdout.write(` → ${ok}개 저장, ${fail}개 실패\n`);
-          totalSaved += ok;
-          totalFail += fail;
-        } else {
-          process.stdout.write(' → 상품 없음\n');
-        }
+        const html = await fetchListHtml(game.id, page);
+        products = parseListProducts(html, game.id, game.name);
+        process.stdout.write(` ${products.length}개 파싱`);
       } catch (e) {
-        process.stdout.write(` → 실패: ${e.message}\n`);
+        console.log(` 실패: ${e.message}`);
         totalFail++;
+        continue;
       }
-      if (page < opts.pages) await new Promise(r => setTimeout(r, 600));
+
+      if (products.length === 0) {
+        console.log(' → 상품 없음');
+        continue;
+      }
+
+      if (opts.withDetail) {
+        process.stdout.write(`\n    상세 크롤링 중`);
+        for (let i = 0; i < products.length; i++) {
+          const p = products[i];
+          try {
+            const dhtml = await fetchDetailHtml(p.itemmaniaid);
+            if (dhtml) {
+              const detail = parseDetailData(dhtml);
+              if (detail.description)  p.description  = detail.description;
+              if (detail.thumbnailUrl) p.thumbnailUrl = detail.thumbnailUrl;
+              if (detail.sellerName)   p.sellerName   = detail.sellerName;
+              detailOk++;
+            } else {
+              detailFail++;
+            }
+          } catch {
+            detailFail++;
+          }
+          if (i % 10 === 9) process.stdout.write('.');
+          await sleep(300);
+        }
+        console.log(` 완료 (성공 ${detailOk}개)`);
+        process.stdout.write(`    DB 저장 중...`);
+      } else {
+        process.stdout.write(' → 저장 중...');
+      }
+
+      try {
+        const result = await uploadBatch(products, opts.apiUrl, cookie);
+        console.log(` ${result.upserted}개 저장, ${result.failed}개 실패`);
+        totalSaved += result.upserted;
+        totalFail  += result.failed;
+      } catch (e) {
+        console.log(` 업로드 실패: ${e.message}`);
+        totalFail += products.length;
+      }
+
+      if (page < opts.pages) await sleep(600);
     }
   }
 
   console.log('');
-  console.log(`✅ 완료: ${totalSaved}개 저장, ${totalFail}개 실패`);
+  console.log('━'.repeat(40));
+  console.log(`✅ 완료`);
+  console.log(`   상품 저장: ${totalSaved}개 성공, ${totalFail}개 실패`);
+  if (opts.withDetail) {
+    console.log(`   상세 크롤: ${detailOk}개 성공, ${detailFail}개 실패`);
+  }
 }
 
 main().catch(e => {
-  console.error('오류:', e.message);
+  console.error('\n오류:', e.message);
   process.exit(1);
 });

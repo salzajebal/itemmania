@@ -612,6 +612,74 @@ router.get("/admin/crawl/games", requireAdmin, (_req, res): void => {
   res.json({ games: GAME_LIST, hasApiKey });
 });
 
+// 로컬 크롤러 배치 upsert (itemmaniaid 기준 중복 방지)
+router.post("/admin/crawl/batch", requireAdmin, async (req, res): Promise<void> => {
+  const { products } = req.body as {
+    products?: Array<{
+      itemmaniaid: string;
+      title: string;
+      price: number;
+      gameName?: string;
+      serverName?: string;
+      itemCategory?: string;
+      category?: string;
+      detailUrl?: string;
+      description?: string;
+      thumbnailUrl?: string;
+      sellerName?: string;
+    }>;
+  };
+
+  if (!Array.isArray(products) || products.length === 0) {
+    res.status(400).json({ error: "products 배열이 필요합니다." });
+    return;
+  }
+
+  let upserted = 0;
+  let failed = 0;
+
+  for (const p of products) {
+    if (!p.itemmaniaid || !p.title) { failed++; continue; }
+    try {
+      await db.insert(productsTable).values({
+        itemmaniaid: p.itemmaniaid,
+        title: p.title,
+        price: Number(p.price) || 0,
+        gameName: p.gameName || null,
+        serverName: p.serverName || null,
+        itemCategory: p.itemCategory || null,
+        category: p.category || "sell",
+        detailUrl: p.detailUrl || null,
+        description: p.description || null,
+        thumbnailUrl: p.thumbnailUrl || null,
+        sellerName: p.sellerName || null,
+        status: "active",
+        crawledAt: new Date(),
+      }).onConflictDoUpdate({
+        target: productsTable.itemmaniaid,
+        set: {
+          title: p.title,
+          price: Number(p.price) || 0,
+          gameName: p.gameName || null,
+          serverName: p.serverName || null,
+          itemCategory: p.itemCategory || null,
+          detailUrl: p.detailUrl || null,
+          ...(p.description !== undefined && { description: p.description }),
+          ...(p.thumbnailUrl !== undefined && { thumbnailUrl: p.thumbnailUrl }),
+          ...(p.sellerName !== undefined && { sellerName: p.sellerName }),
+          status: "active",
+          crawledAt: new Date(),
+        },
+      });
+      upserted++;
+    } catch {
+      failed++;
+    }
+  }
+
+  res.json({ ok: true, upserted, failed });
+});
+
 // 로컬 크롤러 스크립트 다운로드
 router.get("/admin/crawl/script", requireAdmin, (_req, res): void => {
   const fs = require("node:fs");

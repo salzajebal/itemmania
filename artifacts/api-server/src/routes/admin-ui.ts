@@ -277,10 +277,18 @@ tbody tr:hover{background:#fafbff}
               자신의 PC에서 아래 스크립트를 실행하면 itemmania.com에서 직접 크롤링하여 이 서버 DB에 저장합니다.
             </p>
             <div style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:13px;overflow-x:auto">
-              <div style="color:#6a9955"># 1. 스크립트 다운로드</div>
+              <div style="color:#6a9955"># 1. 스크립트 다운로드 (Node.js 18+ 필요)</div>
               <div>curl -O <span id="crawlScriptUrl" style="color:#ce9178">/api/admin/crawl/script</span></div>
-              <div style="margin-top:8px;color:#6a9955"># 2. 실행 (Node.js 18+ 필요)</div>
-              <div>node crawl-itemmania.mjs --api-url <span id="crawlApiBaseUrl" style="color:#ce9178">https://your-app.replit.app</span> --games lostark,maplestory,dnf</div>
+              <div style="margin-top:8px;color:#6a9955"># 2. 기본 실행 (목록만)</div>
+              <div>node crawl-itemmania.mjs \</div>
+              <div>&nbsp;&nbsp;--api-url <span id="crawlApiBaseUrl" style="color:#ce9178">https://your-app.replit.app</span> \</div>
+              <div>&nbsp;&nbsp;--admin-email <span style="color:#9cdcfe">admin@example.com</span> \</div>
+              <div>&nbsp;&nbsp;--admin-pw <span style="color:#9cdcfe">yourpassword</span> \</div>
+              <div>&nbsp;&nbsp;--games lostark,maplestory,dnf --pages 3</div>
+              <div style="margin-top:8px;color:#6a9955"># 3. 상세 포함 (판매자명·설명·이미지까지)</div>
+              <div>node crawl-itemmania.mjs --api-url <span class="crawlApiBaseUrlRef" style="color:#ce9178">https://your-app.replit.app</span> \</div>
+              <div>&nbsp;&nbsp;--admin-email <span style="color:#9cdcfe">admin@example.com</span> --admin-pw <span style="color:#9cdcfe">yourpassword</span> \</div>
+              <div>&nbsp;&nbsp;--games all --pages 3 --with-detail</div>
             </div>
           </div>
         </div>
