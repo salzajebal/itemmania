@@ -4,6 +4,7 @@ import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTa
 import type { AuthStates } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
+import * as cheerio from "cheerio";
 
 const router: IRouter = Router();
 
@@ -366,6 +367,175 @@ router.get("/admin/stats", requireAdmin, async (_req, res): Promise<void> => {
     pendingOrders: pendingOrderCount.count,
     revenue: Number(totalRevenue.total),
   });
+});
+
+// ─── 크롤러 설정 ───────────────────────────────────────────────────────────────
+const GAME_LIST: { id: number; name: string; slug: string }[] = [
+  { id: 2696, name: "로스트아크",       slug: "lostark" },
+  { id: 138,  name: "메이플스토리",     slug: "maplestory" },
+  { id: 281,  name: "던전앤파이터",     slug: "dnf" },
+  { id: 5913, name: "리니지 클래식",   slug: "lineage-classic" },
+  { id: 5799, name: "아이온2",          slug: "aion2" },
+  { id: 155,  name: "마비노기",         slug: "mabinogi" },
+  { id: 101,  name: "거상",             slug: "geosang" },
+];
+
+async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: string): Promise<string | null> {
+  const targetUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
+  const fetchUrl = scraperApiKey
+    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`
+    : targetUrl;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const resp = await fetch(fetchUrl, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" },
+    });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseProductsFromHtml(html: string, gameId: number): Array<{
+  itemmaniaid: string;
+  title: string;
+  price: number;
+  gameName: string;
+  serverName: string;
+  category: string;
+  itemCategory: string;
+  detailUrl: string;
+}> {
+  const $ = cheerio.load(html);
+  const products: ReturnType<typeof parseProductsFromHtml> = [];
+
+  $("li.list_item").each((_i, el) => {
+    const tid = $(el).attr("data-tid");
+    if (!tid) return;
+
+    const gameName = $(el).find("[data-search=game]").first().text().trim();
+    const serverName = $(el).find("[data-search=server]").first().attr("data-title")
+      || $(el).find("[data-search=server]").first().text().trim();
+    const itemCategory = $(el).find("[data-search=goods]").first().text().trim();
+    const title = $(el).find(".kind_title").first().text().trim();
+    const priceText = $(el).find(".trade_money").first().text().replace(/[^0-9]/g, "");
+    const price = parseInt(priceText, 10) || 0;
+
+    if (!title) return;
+
+    products.push({
+      itemmaniaid: tid,
+      title,
+      price,
+      gameName: gameName || GAME_LIST.find(g => g.id === gameId)?.name || "",
+      serverName: serverName || "",
+      category: "sell",
+      itemCategory: itemCategory || "",
+      detailUrl: `https://www.itemmania.com/sell/view.html?no=${tid}`,
+    });
+  });
+
+  return products;
+}
+
+// 크롤링 API
+router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
+  const { gameIds, pages = 1, scraperApiKey } = req.body as {
+    gameIds?: number[];
+    pages?: number;
+    scraperApiKey?: string;
+  };
+
+  const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
+  const targetGames = gameIds && gameIds.length > 0
+    ? GAME_LIST.filter(g => gameIds.includes(g.id))
+    : GAME_LIST.slice(0, 3);
+
+  const maxPages = Math.min(Math.max(1, pages), 5);
+  let totalUpserted = 0;
+  let totalFailed = 0;
+  const log: string[] = [];
+
+  for (const game of targetGames) {
+    for (let page = 1; page <= maxPages; page++) {
+      const html = await fetchPageHtml(game.id, page, apiKey);
+      if (!html) {
+        log.push(`[실패] ${game.name} ${page}페이지 - HTML 가져오기 실패`);
+        totalFailed++;
+        continue;
+      }
+
+      const products = parseProductsFromHtml(html, game.id);
+      if (products.length === 0) {
+        log.push(`[경고] ${game.name} ${page}페이지 - 상품 없음`);
+        continue;
+      }
+
+      for (const p of products) {
+        try {
+          await db.insert(productsTable).values({
+            itemmaniaid: p.itemmaniaid,
+            title: p.title,
+            price: p.price,
+            category: p.category,
+            itemCategory: p.itemCategory,
+            gameName: p.gameName,
+            serverName: p.serverName,
+            detailUrl: p.detailUrl,
+            status: "active",
+            crawledAt: new Date(),
+          }).onConflictDoUpdate({
+            target: productsTable.itemmaniaid,
+            set: {
+              title: p.title,
+              price: p.price,
+              gameName: p.gameName,
+              serverName: p.serverName,
+              itemCategory: p.itemCategory,
+              status: "active",
+              crawledAt: new Date(),
+            },
+          });
+          totalUpserted++;
+        } catch {
+          totalFailed++;
+        }
+      }
+
+      log.push(`[완료] ${game.name} ${page}페이지 - ${products.length}개 저장`);
+
+      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  res.json({ ok: true, upserted: totalUpserted, failed: totalFailed, log });
+});
+
+// 크롤링 대상 게임 목록
+router.get("/admin/crawl/games", requireAdmin, (_req, res): void => {
+  const hasApiKey = !!process.env.SCRAPER_API_KEY;
+  res.json({ games: GAME_LIST, hasApiKey });
+});
+
+// 로컬 크롤러 스크립트 다운로드
+router.get("/admin/crawl/script", requireAdmin, (_req, res): void => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const scriptPath = path.join(process.cwd(), "scripts/src/crawl-itemmania.mjs");
+  try {
+    const content = fs.readFileSync(scriptPath, "utf-8");
+    res.set("Content-Type", "application/javascript; charset=utf-8");
+    res.set("Content-Disposition", 'attachment; filename="crawl-itemmania.mjs"');
+    res.send(content);
+  } catch {
+    res.status(404).json({ error: "스크립트 파일을 찾을 수 없습니다." });
+  }
 });
 
 export default router;

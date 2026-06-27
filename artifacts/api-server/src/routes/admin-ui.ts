@@ -85,6 +85,7 @@ tbody tr:hover{background:#fafbff}
 .modal .save-btn:hover{background:#0e8de0}
 #toast{position:fixed;bottom:28px;right:28px;background:#222;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:9999}
 #toast.show{opacity:1}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -121,6 +122,7 @@ tbody tr:hover{background:#fafbff}
       <button class="tab-btn" onclick="switchTab('users')">👥 회원 관리</button>
       <button class="tab-btn" onclick="switchTab('orders')">🛒 주문 관리</button>
       <button class="tab-btn" onclick="switchTab('withdrawals')">💸 출금 관리</button>
+      <button class="tab-btn" onclick="switchTab('crawl')">🕷️ 크롤링</button>
     </div>
 
     <!-- 상품 탭 -->
@@ -207,6 +209,69 @@ tbody tr:hover{background:#fafbff}
           <thead><tr><th>ID</th><th>유저ID</th><th>금액</th><th>은행</th><th>계좌번호</th><th>예금주</th><th>상태</th><th>메모</th><th>신청일</th><th>처리</th></tr></thead>
           <tbody id="withdrawalsBody"><tr class="empty-row"><td colspan="10">로딩 중...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- 크롤링 탭 -->
+    <div class="tab-panel" id="tab-crawl">
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span class="title">itemmania.com 상품 크롤링</span>
+        </div>
+        <div style="padding:24px">
+          <div id="crawlApiKeySection" style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin-bottom:20px">
+            <b>⚠️ ScraperAPI 키 필요</b>
+            <p style="font-size:13px;color:#555;margin:8px 0">itemmania.com이 Replit 서버 IP를 차단하고 있어 ScraperAPI 경유가 필요합니다.<br>
+            <a href="https://www.scraperapi.com/" target="_blank" style="color:#159EFD">scraperapi.com</a>에서 무료 계정 생성 → API 키 발급 (무료 5,000회/월)</p>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <input type="password" id="crawlApiKeyInput" placeholder="ScraperAPI 키 입력 (또는 환경변수 SCRAPER_API_KEY 설정)" style="flex:1;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;outline:none">
+              <button onclick="testApiKey()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">테스트</button>
+            </div>
+            <div id="crawlApiKeyStatus" style="font-size:12px;margin-top:6px;color:#888"></div>
+          </div>
+
+          <div style="margin-bottom:20px">
+            <b style="display:block;margin-bottom:10px">크롤링 대상 게임</b>
+            <div id="crawlGameList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+            <label style="font-size:14px;font-weight:600">페이지 수:
+              <select id="crawlPages" style="margin-left:8px;padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none">
+                <option value="1">1페이지 (약 20개/게임)</option>
+                <option value="2">2페이지 (약 40개/게임)</option>
+                <option value="3">3페이지 (약 60개/게임)</option>
+                <option value="5">5페이지 (약 100개/게임)</option>
+              </select>
+            </label>
+            <button id="crawlBtn" onclick="startCrawl()" style="padding:12px 24px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🕷️ 크롤링 시작</button>
+          </div>
+
+          <div id="crawlStatus" style="display:none">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div id="crawlSpinner" style="width:20px;height:20px;border:3px solid #e0e0e0;border-top-color:#159EFD;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+              <span id="crawlStatusText" style="font-size:14px;color:#333">크롤링 중...</span>
+            </div>
+          </div>
+
+          <div id="crawlResult" style="display:none;background:#f8f9fa;border-radius:8px;padding:16px;margin-top:12px">
+            <div id="crawlResultSummary" style="font-weight:700;margin-bottom:10px"></div>
+            <div id="crawlResultLog" style="font-size:12px;color:#555;max-height:200px;overflow-y:auto;line-height:1.6;font-family:monospace;white-space:pre-wrap"></div>
+          </div>
+
+          <div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee">
+            <b style="display:block;margin-bottom:8px">💻 로컬 크롤러 (ScraperAPI 없이 무료 사용)</b>
+            <p style="font-size:13px;color:#555;margin-bottom:12px">
+              자신의 PC에서 아래 스크립트를 실행하면 itemmania.com에서 직접 크롤링하여 이 서버 DB에 저장합니다.
+            </p>
+            <div style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:13px;overflow-x:auto">
+              <div style="color:#6a9955"># 1. 스크립트 다운로드</div>
+              <div>curl -O <span id="crawlScriptUrl" style="color:#ce9178">/api/admin/crawl/script</span></div>
+              <div style="margin-top:8px;color:#6a9955"># 2. 실행 (Node.js 18+ 필요)</div>
+              <div>node crawl-itemmania.mjs --api-url <span id="crawlApiBaseUrl" style="color:#ce9178">https://your-app.replit.app</span> --games lostark,maplestory,dnf</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -361,10 +426,109 @@ async function doLogout(){
 
 function switchTab(tab){
   currentTab=tab;
-  var tabs=['products','users','orders','withdrawals'];
+  var tabs=['products','users','orders','withdrawals','crawl'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',tabs[i]===tab);});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='crawl')initCrawlTab();
+}
+
+var crawlGamesData=[];
+var crawlSelectedGames=new Set();
+
+async function initCrawlTab(){
+  if(crawlGamesData.length>0)return;
+  try{
+    var r=await fetch('/api/admin/crawl/games',{credentials:'include'});
+    var d=await r.json();
+    crawlGamesData=d.games||[];
+    var hasKey=d.hasApiKey;
+    if(hasKey){
+      document.getElementById('crawlApiKeySection').style.background='#d4edda';
+      document.getElementById('crawlApiKeySection').style.borderColor='#28a745';
+      document.getElementById('crawlApiKeyStatus').textContent='✅ 환경변수 SCRAPER_API_KEY 설정됨';
+      document.getElementById('crawlApiKeyStatus').style.color='#155724';
+    }
+    var container=document.getElementById('crawlGameList');
+    container.innerHTML='';
+    crawlGamesData.forEach(function(g){
+      crawlSelectedGames.add(g.id);
+      var btn=document.createElement('button');
+      btn.textContent=g.name;
+      btn.dataset.id=g.id;
+      btn.style.cssText='padding:8px 14px;border:2px solid #159EFD;border-radius:20px;background:#e8f4fe;color:#0d6efd;font-size:13px;cursor:pointer;font-weight:600';
+      btn.onclick=function(){
+        if(crawlSelectedGames.has(g.id)){
+          crawlSelectedGames.delete(g.id);
+          btn.style.background='#f8f9fa';btn.style.color='#666';btn.style.borderColor='#ddd';
+        }else{
+          crawlSelectedGames.add(g.id);
+          btn.style.background='#e8f4fe';btn.style.color='#0d6efd';btn.style.borderColor='#159EFD';
+        }
+      };
+      container.appendChild(btn);
+    });
+    var origin=location.origin;
+    document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl/script';
+    document.getElementById('crawlApiBaseUrl').textContent=origin;
+  }catch(e){console.error(e);}
+}
+
+async function testApiKey(){
+  var key=document.getElementById('crawlApiKeyInput').value.trim();
+  if(!key){document.getElementById('crawlApiKeyStatus').textContent='키를 입력하세요.';return;}
+  document.getElementById('crawlApiKeyStatus').textContent='테스트 중...';
+  try{
+    var r=await fetch('https://api.scraperapi.com/account?api_key='+encodeURIComponent(key));
+    var d=await r.json();
+    if(d.requestCount!==undefined){
+      document.getElementById('crawlApiKeyStatus').textContent='✅ 유효한 키 (사용: '+d.requestCount+'/'+d.requestLimit+')';
+      document.getElementById('crawlApiKeyStatus').style.color='#155724';
+    }else{
+      document.getElementById('crawlApiKeyStatus').textContent='❌ 유효하지 않은 키';
+      document.getElementById('crawlApiKeyStatus').style.color='#721c24';
+    }
+  }catch(e){
+    document.getElementById('crawlApiKeyStatus').textContent='테스트 실패: '+e.message;
+    document.getElementById('crawlApiKeyStatus').style.color='#721c24';
+  }
+}
+
+async function startCrawl(){
+  var selectedIds=Array.from(crawlSelectedGames);
+  if(selectedIds.length===0){showToast('게임을 선택하세요.');return;}
+  var pages=parseInt(document.getElementById('crawlPages').value)||1;
+  var apiKey=document.getElementById('crawlApiKeyInput').value.trim();
+
+  document.getElementById('crawlBtn').disabled=true;
+  document.getElementById('crawlStatus').style.display='block';
+  document.getElementById('crawlResult').style.display='none';
+  document.getElementById('crawlStatusText').textContent='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지)';
+
+  try{
+    var body={gameIds:selectedIds,pages:pages};
+    if(apiKey)body.scraperApiKey=apiKey;
+    var r=await fetch('/api/admin/crawl',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify(body)
+    });
+    var d=await r.json();
+    document.getElementById('crawlStatus').style.display='none';
+    document.getElementById('crawlResult').style.display='block';
+    document.getElementById('crawlResultSummary').textContent='완료: '+d.upserted+'개 저장, '+d.failed+'개 실패';
+    document.getElementById('crawlResultLog').textContent=(d.log||[]).join('\n');
+    loadStats();
+    loadProducts();
+  }catch(e){
+    document.getElementById('crawlStatus').style.display='none';
+    document.getElementById('crawlResult').style.display='block';
+    document.getElementById('crawlResultSummary').textContent='오류: '+e.message;
+    document.getElementById('crawlResultLog').textContent='';
+  }finally{
+    document.getElementById('crawlBtn').disabled=false;
+  }
 }
 
 function fmtDate(d){if(!d)return'-';return new Date(d).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
