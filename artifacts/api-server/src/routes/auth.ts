@@ -124,6 +124,12 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     res.status(401).json({ error: "사용자를 찾을 수 없습니다." });
     return;
   }
+  // 세션 userRole이 DB 실제 role과 다를 경우 동기화
+  // (서버 재시작 후 구 세션에 userRole 없는 경우, 권한 변경 후 기존 세션 등 대비)
+  if (req.session.userRole !== user.role) {
+    req.session.userRole = user.role;
+    await new Promise<void>((resolve) => req.session.save(() => resolve()));
+  }
   res.json({
     id: user.id,
     email: user.email,
