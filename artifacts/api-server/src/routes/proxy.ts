@@ -1294,27 +1294,48 @@ document.addEventListener('submit',function(e){
   }
 },true);
 /* ── 전역 헤더 로그인/로그아웃 업데이트 (모든 페이지 공통) ── */
-function _imUpdateHeaderAuth(freshData){
+var _imHeaderObserver=null;
+function _imApplyHeader(data){
   var loginsDiv=document.querySelector('.header-logins');
   if(!loginsDiv) return;
+  if(data&&data.id){
+    loginsDiv.innerHTML=
+      '<span style="font-size:14px;font-weight:600;color:#2e2e2e">'+(data.nickname||data.email)+'님</span>'+
+      '<div class="divider"></div>'+
+      '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
+    var btn=document.getElementById('_im_logout_btn');
+    if(btn) btn.addEventListener('click',function(e){
+      e.stopImmediatePropagation();
+      fetch('/api/auth/logout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'}})
+        .catch(function(){}).then(function(){ location.href='/'; });
+    },true);
+  } else {
+    loginsDiv.innerHTML=
+      '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>'+
+      '<div class="divider"></div>'+
+      '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
+  }
+  /* 원본 itemmania JS가 .header-logins를 덮어쓸 경우 즉시 재적용 (MutationObserver) */
+  if(_imHeaderObserver) _imHeaderObserver.disconnect();
+  _imHeaderObserver=new MutationObserver(function(){
+    _imHeaderObserver.disconnect();
+    _imApplyHeader(data);
+    setTimeout(function(){
+      var t=document.querySelector('.header-logins');
+      if(t) _imHeaderObserver.observe(t,{childList:true,subtree:true,characterData:true});
+    },50);
+  });
+  var t=document.querySelector('.header-logins');
+  if(t) _imHeaderObserver.observe(t,{childList:true,subtree:true,characterData:true});
+}
+function _imUpdateHeaderAuth(freshData){
+  var loginsDiv=document.querySelector('.header-logins');
+  if(!loginsDiv){ setTimeout(function(){_imUpdateHeaderAuth(freshData);},200); return; }
   var doUpdate=function(data){
-    if(data&&data.id){
-      loginsDiv.innerHTML=
-        '<span style="font-size:14px;font-weight:600;color:#2e2e2e">'+(data.nickname||data.email)+'님</span>'+
-        '<div class="divider"></div>'+
-        '<button type="button" id="_im_logout_btn" style="font-size:14px;font-weight:600;background:none;border:none;cursor:pointer;color:#2e2e2e">로그아웃</button>';
-      var btn=document.getElementById('_im_logout_btn');
-      if(btn) btn.addEventListener('click',function(e){
-        e.stopImmediatePropagation();
-        fetch('/api/auth/logout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'}})
-          .catch(function(){}).then(function(){ location.href='/'; });
-      },true);
-    } else {
-      loginsDiv.innerHTML=
-        '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>'+
-        '<div class="divider"></div>'+
-        '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
-    }
+    _imApplyHeader(data);
+    /* 원본 JS가 늦게 실행돼도 최종 상태 보장 */
+    setTimeout(function(){_imApplyHeader(data);},400);
+    setTimeout(function(){_imApplyHeader(data);},1000);
   };
   if(freshData!==undefined){
     doUpdate(freshData);
@@ -1334,7 +1355,7 @@ window.addEventListener('pageshow',function(e){
     });
 });
 if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',_imUpdateHeaderAuth);
+  document.addEventListener('DOMContentLoaded',function(){_imUpdateHeaderAuth();});
 }else{
   _imUpdateHeaderAuth();
 }
