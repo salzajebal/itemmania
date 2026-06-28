@@ -381,58 +381,51 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 101,  name: "거상",               slug: "geosang" },
 ];
 
-async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: string): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
-  const targetUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
-  const fetchUrl = scraperApiKey
-    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr`
-    : targetUrl;
+function scraperUrl(targetUrl: string, apiKey: string, sessionNumber: number): string {
+  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&session_number=${sessionNumber}`;
+}
 
+async function scraperFetch(url: string, apiKey: string | undefined, sessionNumber: number, timeoutMs = 55000): Promise<{text: string | null; status: number | null; error: string | null}> {
+  const fetchUrl = apiKey ? scraperUrl(url, apiKey, sessionNumber) : url;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), scraperApiKey ? 55000 : 20000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const resp = await fetch(fetchUrl, {
       signal: ctrl.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept-Language": "ko-KR,ko;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+        "Referer": "https://www.itemmania.com/",
       },
     });
-    if (!resp.ok) return {html: null, statusCode: resp.status, error: `HTTP ${resp.status}`};
+    if (!resp.ok) return {text: null, status: resp.status, error: `HTTP ${resp.status}`};
     const text = await resp.text();
-    if (!text || text.trim().length < 100) return {html: null, statusCode: resp.status, error: `빈 응답 (${text.trim().length}바이트)`};
-    return {html: text, statusCode: resp.status, error: null};
+    if (!text || text.trim().length < 200) return {text: null, status: resp.status, error: `빈 응답 (${text.trim().length}바이트)`};
+    return {text, status: resp.status, error: null};
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     const isTimeout = msg.includes("abort") || msg.includes("timeout");
-    return {html: null, statusCode: null, error: isTimeout ? "타임아웃" : msg.slice(0, 80)};
+    return {text: null, status: null, error: isTimeout ? "타임아웃" : msg.slice(0, 80)};
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function fetchDetailHtml(tid: string, scraperApiKey?: string): Promise<string | null> {
-  const targetUrl = `https://www.itemmania.com/sell/application.html?id=${tid}`;
-  const fetchUrl = scraperApiKey
-    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&keep_headers=true`
-    : targetUrl;
+async function initSession(apiKey: string, sessionNumber: number): Promise<void> {
+  await scraperFetch("https://www.itemmania.com/", apiKey, sessionNumber, 30000);
+}
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), scraperApiKey ? 55000 : 20000);
-  try {
-    const resp = await fetch(fetchUrl, {
-      signal: ctrl.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept-Language": "ko-KR,ko;q=0.9",
-      },
-    });
-    if (!resp.ok) return null;
-    return await resp.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchPageHtml(gameId: number, page: number, apiKey: string | undefined, sessionNumber: number): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
+  const url = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
+  const {text, status, error} = await scraperFetch(url, apiKey, sessionNumber);
+  return {html: text, statusCode: status, error};
+}
+
+async function fetchDetailHtml(tid: string, apiKey: string | undefined, sessionNumber: number): Promise<string | null> {
+  const url = `https://www.itemmania.com/sell/application.html?id=${tid}`;
+  const {text} = await scraperFetch(url, apiKey, sessionNumber);
+  return text;
 }
 
 function parseDetailFromHtml(html: string): {
@@ -527,6 +520,7 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
   };
 
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
+  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
   const targetGames = gameIds && gameIds.length > 0
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
@@ -538,9 +532,11 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
   let detailFailed = 0;
   const log: string[] = [];
 
+  if (apiKey) await initSession(apiKey, sessionNumber);
+
   for (const game of targetGames) {
     for (let page = 1; page <= maxPages; page++) {
-      const {html, error} = await fetchPageHtml(game.id, page, apiKey);
+      const {html, error} = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
       if (!html) {
         log.push(`[실패] ${game.name} ${page}페이지 - ${error ?? "HTML 없음"}`);
         totalFailed++;
@@ -549,7 +545,7 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
 
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
-        log.push(`[경고] ${game.name} ${page}페이지 - 상품 없음`);
+        log.push(`[경고] ${game.name} ${page}페이지 - 상품 없음 (HTML ${html.length}바이트, list_item: ${(html.match(/list_item/g) || []).length}개)`);
         continue;
       }
 
@@ -586,7 +582,7 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
         }
 
         if (crawlDetail) {
-          const detailHtml = await fetchDetailHtml(p.itemmaniaid, apiKey);
+          const detailHtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
           if (detailHtml) {
             const detail = parseDetailFromHtml(detailHtml);
             try {
@@ -636,6 +632,7 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
   };
 
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
+  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
   const targetGames = gameIds && gameIds.length > 0
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
@@ -646,20 +643,27 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
   let detailFetched = 0;
   let detailFailed = 0;
 
+  if (apiKey) {
+    send({ type: "progress", message: `  🌐 세션 초기화 중... (session #${sessionNumber})` });
+    await initSession(apiKey, sessionNumber);
+    send({ type: "progress", message: `  ✓ 세션 초기화 완료` });
+  }
+
   for (const game of targetGames) {
     send({ type: "game", message: `\n▶ [${game.name}] 시작` });
     for (let page = 1; page <= maxPages; page++) {
       send({ type: "progress", message: `  ${page}/${maxPages}페이지 크롤 중...` });
-      const {html, error} = await fetchPageHtml(game.id, page, apiKey);
+      const {html, error} = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
       if (!html) {
         send({ type: "fail", message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
         totalFailed++;
         continue;
       }
 
+      const listItemCount = (html.match(/list_item/g) || []).length;
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
-        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음` });
+        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (HTML ${html.length}바이트, list_item ${listItemCount}개)` });
         continue;
       }
 
@@ -686,7 +690,7 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
         }
 
         if (crawlDetail) {
-          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey);
+          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
           if (dhtml) {
             const detail = parseDetailFromHtml(dhtml);
             try {
