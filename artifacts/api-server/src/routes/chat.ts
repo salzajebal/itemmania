@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, lt, desc } from "drizzle-orm";
-import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable } from "@workspace/db";
+import { eq, and, or, lt, desc, sql } from "drizzle-orm";
+import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { pushToUser } from "../lib/sse";
 
 const router: IRouter = Router();
 
@@ -129,6 +130,43 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
   }
 
   await db.update(chatRoomsTable).set({ status }).where(eq(chatRoomsTable.id, roomId));
+
+  // 구매자가 인수하기(ended) 처리 → 판매자에게 거래금액 마일리지 지급
+  if (status === "ended" && userId === room.buyerId && room.productId) {
+    const [prod] = await db
+      .select({ price: productsTable.price })
+      .from(productsTable)
+      .where(eq(productsTable.id, room.productId));
+
+    if (prod?.price) {
+      const price = Number(prod.price);
+      // 판매자 지갑 upsert: 없으면 생성, 있으면 잔액 추가
+      const [existing] = await db
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, room.sellerId));
+
+      let newBalance: number;
+      if (existing) {
+        const [updated] = await db
+          .update(walletsTable)
+          .set({ balance: sql`${walletsTable.balance} + ${price}` })
+          .where(eq(walletsTable.userId, room.sellerId))
+          .returning();
+        newBalance = Number(updated.balance);
+      } else {
+        const [created] = await db
+          .insert(walletsTable)
+          .values({ userId: room.sellerId, balance: price })
+          .returning();
+        newBalance = Number(created.balance);
+      }
+
+      // SSE로 판매자 마이룸에 실시간 반영
+      pushToUser(room.sellerId, "balance", { balance: newBalance });
+    }
+  }
+
   res.json({ id: roomId, status });
 });
 
