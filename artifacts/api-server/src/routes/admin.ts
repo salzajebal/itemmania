@@ -384,15 +384,18 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
 async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: string): Promise<string | null> {
   const targetUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
   const fetchUrl = scraperApiKey
-    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`
+    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&keep_headers=true`
     : targetUrl;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), scraperApiKey ? 55000 : 20000);
   try {
     const resp = await fetch(fetchUrl, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
     });
     if (!resp.ok) return null;
     return await resp.text();
@@ -406,15 +409,18 @@ async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: strin
 async function fetchDetailHtml(tid: string, scraperApiKey?: string): Promise<string | null> {
   const targetUrl = `https://www.itemmania.com/sell/application.html?id=${tid}`;
   const fetchUrl = scraperApiKey
-    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`
+    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&keep_headers=true`
     : targetUrl;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), scraperApiKey ? 55000 : 20000);
   try {
     const resp = await fetch(fetchUrl, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
     });
     if (!resp.ok) return null;
     return await resp.text();
