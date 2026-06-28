@@ -138,6 +138,9 @@ router.post("/admin/login", async (req, res): Promise<void> => {
     res.status(403).json({ error: "관리자 권한이 없습니다." });
     return;
   }
+  // userId/userRole도 함께 설정 — 프로덕션에서 세션 쿠키가 발급되도록 보장
+  req.session.userId = user.id;
+  req.session.userRole = user.role;
   req.session.adminId = user.id;
   req.session.adminRole = user.role;
   await new Promise<void>((resolve) => req.session.save(() => resolve()));
