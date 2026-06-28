@@ -88,11 +88,15 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
 
   const [existing] = await db.select().from(chatRoomsTable).where(and(...conditions)).limit(1);
   if (existing) {
-    if (characterName && !existing.characterName) {
-      await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, existing.id));
+    // 종료/취소/불가 상태 방은 재사용하지 않고 새 방 생성
+    const closedStatuses = ["ended", "cancelled", "rejected"];
+    if (!closedStatuses.includes(existing.status)) {
+      if (characterName && !existing.characterName) {
+        await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, existing.id));
+      }
+      res.json({ id: existing.id, created: false });
+      return;
     }
-    res.json({ id: existing.id, created: false });
-    return;
   }
 
   const [room] = await db

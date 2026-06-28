@@ -4978,16 +4978,7 @@ const CHAT_INTERCEPT_SCRIPT = `
 
   function openChat(roomId, isBuyer) {
     var url = '/myroom/chat/new_chat.html?roomId=' + roomId + '&type=' + (isBuyer ? 'buy' : 'sell');
-    var opener = window._nativeOpen || window.open.bind(window);
-    var w = opener(url, '_chat_' + roomId, 'width=900,height=700,resizable=yes,scrollbars=yes');
-    if (!w || w.closed) {
-      /* 팝업 차단됨 → 새 탭으로 재시도 */
-      w = opener(url, '_blank');
-      if (!w || w.closed) {
-        /* 새 탭도 차단됨 → 현재 탭 이동 */
-        location.href = url;
-      }
-    }
+    location.href = url;
   }
 
   /* chat_sub_list 열기/닫기 — li.expanded 클래스로 상태 추적 */
@@ -5390,10 +5381,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
             }).then(function(r) { return r.json(); })
             .then(function(room) {
               if (room && room.id) {
-                var opener2 = window._nativeOpen || window.open.bind(window);
-                var w2 = opener2('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
-                if (!w2 || w2.closed) { w2 = opener2('/myroom/chat/new_chat.html?roomId=' + room.id, '_blank'); }
-                if (!w2 || w2.closed) { location.href = '/myroom/chat/new_chat.html?roomId=' + room.id; }
+                location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
               } else { location.href = '/myroom/chat/list.html'; }
             }).catch(function() { location.href = '/myroom/chat/list.html'; });
           }
