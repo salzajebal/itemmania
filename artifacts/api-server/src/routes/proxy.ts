@@ -5330,8 +5330,9 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
         }
         var total = getPrice() * qty;
         var tf = fmtKr(total);
-        var payEl = document.querySelector('.pay_mileage');
-        if (payEl) payEl.textContent = tf;
+        var tmEl2 = document.getElementById('trade_money');
+        if (tmEl2) tmEl2.textContent = tf;
+        document.querySelectorAll('.pay_mileage').forEach(function(el) { el.textContent = tf; });
         document.querySelectorAll('.add_pay.price_font, .add_pay').forEach(function(el) { el.textContent = tf; });
         document.querySelectorAll('.settle_amount, .final_amount').forEach(function(el) { el.textContent = tf; });
       }
@@ -5719,6 +5720,11 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     }
     var tradeMoneySp = document.getElementById('trade_money');
     if (tradeMoneySp) tradeMoneySp.textContent = fmt(p.price);
+    // 총 구매금액·결제 해야할 금액 — 스냅샷 JS 덮어쓰기 방지용 전체 교체
+    var pf = fmt(p.price);
+    document.querySelectorAll('.pay_mileage').forEach(function(el) { el.textContent = pf; });
+    document.querySelectorAll('.add_pay.price_font, .add_pay').forEach(function(el) { el.textContent = pf; });
+    document.querySelectorAll('.settle_amount, .final_amount').forEach(function(el) { el.textContent = pf; });
 
     // ── 게임/서버/카테고리 breadcrumb (.kind) ────────────
     var kindEl = document.querySelector('.kind');
@@ -6176,10 +6182,10 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // unit_info: "아데나" 등 게임화폐 텍스트 → "개"
   r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*[가-힣]{2,6}/g, '$1 개');
   r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*아데나/g, '$1 개');
-  // pay_mileage (총 구매금액)
-  r = r.replace(/(<span\b[^>]*\bclass=pay_mileage\b[^>]*>)[^<]*(<\/span>)/i, `$1${priceFmt}$2`);
-  // settle_amount / final_amount
-  r = r.replace(/(<span\b[^>]*\bclass=settle_amount\b[^>]*>)[^<]*(<\/span>)/i, `$1${priceFmt}$2`);
+  // pay_mileage (총 구매금액) — 본문+하단 바 모두 교체
+  r = r.replace(/(<span\b[^>]*\bclass=pay_mileage\b[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
+  // settle_amount / final_amount — 모두 교체
+  r = r.replace(/(<span\b[^>]*\bclass=settle_amount\b[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
   // add_pay price_font (결제 해야할 금액)
   r = r.replace(/(<span\b[^>]*class="add_pay price_font"[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
 
