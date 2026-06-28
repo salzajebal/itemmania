@@ -1500,8 +1500,31 @@ const BALANCE_SSE_SCRIPT = `<script>
 })();
 </script>`;
 
+/* ── 마이룸 사이드바/탭 링크 서버사이드 로컬 경로 치환 ───────────────────
+ *  href="https://www.itemmania.com/myroom/sell/sell_pay_wait.html?..."
+ *  → href="/myroom/sell/sell_pay_wait.html"
+ *  JS 클릭 인터셉터 의존 없이 브라우저 기본 링크 이동으로 처리.
+ * ────────────────────────────────────────────────────────────────────── */
+const MYROOM_NAV_REWRITE: Array<[RegExp, string]> = [
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/sell\/sell_pay_wait\.html[^"'\s]*/g, "/myroom/sell/sell_pay_wait.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/sell\/sell_ing\.html[^"'\s]*/g,      "/myroom/sell/sell_ing.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/sell\/sell_check\.html[^"'\s]*/g,    "/myroom/sell/sell_check.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/sell\/sell_regist\.html[^"'\s]*/g,   "/myroom/sell/sell_regist.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/buy\/buy_pay_wait\.html[^"'\s]*/g,   "/myroom/buy/buy_pay_wait.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/buy\/buy_ing\.html[^"'\s]*/g,        "/myroom/buy/buy_ing.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/buy\/buy_check\.html[^"'\s]*/g,      "/myroom/buy/buy_check.html"],
+  [/https?:\/\/(?:www\.)?itemmania\.com\/myroom\/buy\/buy_regist\.html[^"'\s]*/g,     "/myroom/buy/buy_regist.html"],
+];
+function fixMyroomNavLinks(html: string): string {
+  let result = html;
+  for (const [pattern, replacement] of MYROOM_NAV_REWRITE) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+
 function prepare(html: string, user: Record<string, unknown> | null = null): string {
-  const clean = rewriteExternalLinks(stripCsp(html));
+  const clean = fixMyroomNavLinks(rewriteExternalLinks(stripCsp(html)));
   const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
   // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
   let result: string;
