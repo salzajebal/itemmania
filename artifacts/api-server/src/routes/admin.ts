@@ -381,10 +381,10 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 101,  name: "거상",               slug: "geosang" },
 ];
 
-async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: string): Promise<string | null> {
+async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: string): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
   const targetUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
   const fetchUrl = scraperApiKey
-    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&keep_headers=true`
+    ? `https://api.scraperapi.com/?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr`
     : targetUrl;
 
   const ctrl = new AbortController();
@@ -397,10 +397,14 @@ async function fetchPageHtml(gameId: number, page: number, scraperApiKey?: strin
         "Accept-Language": "ko-KR,ko;q=0.9",
       },
     });
-    if (!resp.ok) return null;
-    return await resp.text();
-  } catch {
-    return null;
+    if (!resp.ok) return {html: null, statusCode: resp.status, error: `HTTP ${resp.status}`};
+    const text = await resp.text();
+    if (!text || text.trim().length < 100) return {html: null, statusCode: resp.status, error: `빈 응답 (${text.trim().length}바이트)`};
+    return {html: text, statusCode: resp.status, error: null};
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isTimeout = msg.includes("abort") || msg.includes("timeout");
+    return {html: null, statusCode: null, error: isTimeout ? "타임아웃" : msg.slice(0, 80)};
   } finally {
     clearTimeout(timer);
   }
@@ -536,9 +540,9 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
 
   for (const game of targetGames) {
     for (let page = 1; page <= maxPages; page++) {
-      const html = await fetchPageHtml(game.id, page, apiKey);
+      const {html, error} = await fetchPageHtml(game.id, page, apiKey);
       if (!html) {
-        log.push(`[실패] ${game.name} ${page}페이지 - HTML 가져오기 실패`);
+        log.push(`[실패] ${game.name} ${page}페이지 - ${error ?? "HTML 없음"}`);
         totalFailed++;
         continue;
       }
@@ -646,9 +650,9 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
     send({ type: "game", message: `\n▶ [${game.name}] 시작` });
     for (let page = 1; page <= maxPages; page++) {
       send({ type: "progress", message: `  ${page}/${maxPages}페이지 크롤 중...` });
-      const html = await fetchPageHtml(game.id, page, apiKey);
+      const {html, error} = await fetchPageHtml(game.id, page, apiKey);
       if (!html) {
-        send({ type: "fail", message: `  ✗ ${game.name} ${page}페이지 - 실패 (HTML 없음)` });
+        send({ type: "fail", message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
         totalFailed++;
         continue;
       }
