@@ -6253,7 +6253,12 @@ function serveApplication(html: string, user: Record<string, unknown> | null = n
 }
 
 function serveChat(html: string, user: Record<string, unknown> | null = null): string {
-  const result = prepare(html, user);
+  let result = prepare(html, user);
+  // 스냅샷에 하드코딩된 채팅 목록 항목 제거 — JS 교체 전 잠깐 보이는 현상 방지
+  result = result.replace(
+    /(<ul\b[^>]*\bclass=[^>]*\bchat_list\b[^>]*>)[\s\S]*?(<\/ul>)/,
+    '$1$2'
+  );
   if (result.includes("</body>")) {
     return result.replace("</body>", CHAT_INTERCEPT_SCRIPT + "</body>");
   }
