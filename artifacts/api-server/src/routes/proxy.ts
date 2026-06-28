@@ -6451,10 +6451,19 @@ const MYROOM_SELL_SCRIPT = `<script>
 (function(){
   window.addEventListener('DOMContentLoaded',function(){
     if(!window._IM_USER||!window._IM_USER.id){location.replace('/login');return;}
+    /* 행 클릭 → 상세 페이지 이동 (캡처 단계로 스냅샷 JS 우선 처리) */
+    document.addEventListener('click',function(e){
+      if(e.target.closest&&e.target.closest('.list_icon')) return;
+      var tr=e.target.closest&&e.target.closest('tr[data-href]');
+      if(!tr) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      location.href=tr.getAttribute('data-href');
+    },true);
+    /* 삭제 버튼 */
     document.addEventListener('click',function(e){
       var btn=e.target.closest&&e.target.closest('.list_icon.delete[data-id]');
       if(!btn)return;
-      e.preventDefault();
+      e.preventDefault(); e.stopImmediatePropagation();
       var pid=btn.getAttribute('data-id');
       if(!pid||!confirm('이 물품을 삭제하시겠습니까?'))return;
       fetch('/api/products/'+pid,{method:'DELETE',credentials:'include'})
@@ -6487,13 +6496,12 @@ function serveSellMyregist(
       const cat = p.itemCategory || p.category || "아이템";
       const price = fmtKRW(p.price);
       const date = fmtKRDate(p.createdAt);
+      const detailHref = `/sell/application.html?id=${p.id}`;
       return (
-        "<tr>" +
-        `<td class="first f_left"><a href="/sell/application.html?id=${p.id}">` +
-        `<strong>${game}</strong><br>${server}</a></td>` +
+        `<tr data-href="${detailHref}" style="cursor:pointer">` +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
-        `<td class=left><a href="/sell/application.html?id=${p.id}">` +
-        `<div class=trade_title>${p.title}</div></a></td>` +
+        `<td class=left><div class=trade_title>${p.title}</div></td>` +
         `<td class="right td_money">${price}원</td>` +
         `<td class=flex_box><p class=f_gray>${date}</p>` +
         `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${p.id}" data-desc=삭제>` +
@@ -6624,10 +6632,19 @@ const MYROOM_BUY_SCRIPT = `<script>
 (function(){
   window.addEventListener('DOMContentLoaded',function(){
     if(!window._IM_USER||!window._IM_USER.id){location.replace('/login');return;}
+    /* 행 클릭 → 상세 페이지 이동 (캡처 단계로 스냅샷 JS 우선 처리) */
+    document.addEventListener('click',function(e){
+      if(e.target.closest&&e.target.closest('.list_icon')) return;
+      var tr=e.target.closest&&e.target.closest('tr[data-href]');
+      if(!tr) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      location.href=tr.getAttribute('data-href');
+    },true);
+    /* 취소 버튼 */
     document.addEventListener('click',function(e){
       var btn=e.target.closest&&e.target.closest('.list_icon.delete[data-id]');
       if(!btn)return;
-      e.preventDefault();
+      e.preventDefault(); e.stopImmediatePropagation();
       var oid=btn.getAttribute('data-id');
       if(!oid||!confirm('이 구매 신청을 취소하시겠습니까?'))return;
       fetch('/api/orders/'+oid+'/cancel',{method:'POST',credentials:'include'})
@@ -6658,14 +6675,15 @@ function serveBuyMyregist(
       const cat = o.itemCategory || o.category || "아이템";
       const price = fmtKRW(o.amount);
       const date = fmtKRDate(o.createdAt);
-      const titleLink = o.productId
-        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
-        : `<div class=trade_title>${o.productTitle}</div>`;
+      const detailHref = o.productId ? `/sell/application.html?id=${o.productId}` : null;
+      const trOpen = detailHref
+        ? `<tr data-href="${detailHref}" style="cursor:pointer">`
+        : "<tr>";
       return (
-        "<tr>" +
+        trOpen +
         `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
-        `<td class=left>${titleLink}</td>` +
+        `<td class=left><div class=trade_title>${o.productTitle}</div></td>` +
         `<td class="right td_money">${price}원</td>` +
         `<td class=flex_box><p class=f_gray>${date}</p>` +
         `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${o.id}" data-desc=취소>` +
