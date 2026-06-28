@@ -182,6 +182,10 @@ const sellMyroomRegistHtml    = loadSellHtml("sell/sell_regist.html");
 const sellMyroomCheckHtml     = loadSellHtml("sell/sell_check.html");
 const sellMyroomPayWaitHtml   = loadSellHtml("sell/sell_pay_wait.html");
 const sellMyroomIngHtml       = loadSellHtml("sell/sell_ing.html");
+const buyMyroomRegistHtml     = loadSellHtml("buy/buy_regist.html");
+const buyMyroomCheckHtml      = loadSellHtml("buy/buy_check.html");
+const buyMyroomPayWaitHtml    = loadSellHtml("buy/buy_pay_wait.html");
+const buyMyroomIngHtml        = loadSellHtml("buy/buy_ing.html");
 
 // game_id → html 매핑 (TOP 10)
 const SELL_HTML_MAP: Record<string, string> = {
@@ -1028,6 +1032,10 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/myroom/sell/sell_check'))                return '/myroom/sell/sell_check.html';
   if (base.startsWith('/myroom/sell/sell_pay_wait'))             return '/myroom/sell/sell_pay_wait.html';
   if (base.startsWith('/myroom/sell/sell_ing'))                  return '/myroom/sell/sell_ing.html';
+  if (base.startsWith('/myroom/buy/buy_regist'))                 return '/myroom/buy/buy_regist.html';
+  if (base.startsWith('/myroom/buy/buy_check'))                  return '/myroom/buy/buy_check.html';
+  if (base.startsWith('/myroom/buy/buy_pay_wait'))               return '/myroom/buy/buy_pay_wait.html';
+  if (base.startsWith('/myroom/buy/buy_ing'))                    return '/myroom/buy/buy_ing.html';
   if (base === '/myroom' || base === '/myroom/')                 return '/myroom/index.html';
   if (base.startsWith('/game_charge'))                           return '/game-charge';
   if (base.startsWith('/portal/giftcard'))                       return '/giftcard';
@@ -1111,6 +1119,10 @@ var ROUTE_MAP=[
   ['/myroom/sell/sell_check.html','/myroom/sell/sell_check.html'],
   ['/myroom/sell/sell_pay_wait.html','/myroom/sell/sell_pay_wait.html'],
   ['/myroom/sell/sell_ing.html','/myroom/sell/sell_ing.html'],
+  ['/myroom/buy/buy_regist.html','/myroom/buy/buy_regist.html'],
+  ['/myroom/buy/buy_check.html','/myroom/buy/buy_check.html'],
+  ['/myroom/buy/buy_pay_wait.html','/myroom/buy/buy_pay_wait.html'],
+  ['/myroom/buy/buy_ing.html','/myroom/buy/buy_ing.html'],
   ['/game_charge/','/game-charge'],
   ['/game_charge','/game-charge'],
   ['/portal/giftcard/','/giftcard'],
@@ -6591,6 +6603,181 @@ function serveSellMying(
     : result + MYROOM_SELL_SCRIPT;
 }
 
+// ─── 마이룸 구매관련 serve 함수 ────────────────────────────────────────
+
+function injectBuyTableRows(html: string, rowsHtml: string): string {
+  const tableMarker = '<table class="g_green_table tb_list';
+  const tIdx = html.indexOf(tableMarker);
+  if (tIdx === -1) return html;
+  const tbodyStart = html.indexOf("<tbody>", tIdx);
+  if (tbodyStart === -1) return html;
+  const tableEnd = html.indexOf("</table>", tbodyStart);
+  if (tableEnd === -1) return html;
+  return (
+    html.slice(0, tbodyStart) +
+    "<tbody>" + rowsHtml + "</tbody>\n" +
+    html.slice(tableEnd)
+  );
+}
+
+const MYROOM_BUY_SCRIPT = `<script>
+(function(){
+  window.addEventListener('DOMContentLoaded',function(){
+    if(!window._IM_USER||!window._IM_USER.id){location.replace('/login');return;}
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest&&e.target.closest('.list_icon.delete[data-id]');
+      if(!btn)return;
+      e.preventDefault();
+      var oid=btn.getAttribute('data-id');
+      if(!oid||!confirm('이 구매 신청을 취소하시겠습니까?'))return;
+      fetch('/api/orders/'+oid+'/cancel',{method:'POST',credentials:'include'})
+        .then(function(r){if(r.ok)location.reload();else alert('취소 실패');})
+        .catch(function(){alert('취소 실패');});
+    });
+  });
+})();
+</script>`;
+
+function serveBuyMyregist(
+  html: string,
+  user: Record<string, unknown> | null,
+  orders: Array<{
+    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (orders.length === 0) {
+    rowsHtml = "<tr><td colspan=5 class=empty_item>등록된 구매 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = orders.map((o) => {
+      const game = o.gameName || "";
+      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
+      const cat = o.itemCategory || o.category || "아이템";
+      const price = fmtKRW(o.amount);
+      const date = fmtKRDate(o.createdAt);
+      const titleLink = o.productId
+        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
+        : `<div class=trade_title>${o.productTitle}</div>`;
+      return (
+        "<tr>" +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td>${cat}</td>` +
+        `<td class=left>${titleLink}</td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p>` +
+        `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${o.id}" data-desc=취소>` +
+        `<span class=list_icon_img></span></a></div></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectBuyTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
+    : result + MYROOM_BUY_SCRIPT;
+}
+
+function serveBuyMycheck(html: string, user: Record<string, unknown> | null): string {
+  const result = prepare(html, user);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
+    : result + MYROOM_BUY_SCRIPT;
+}
+
+function serveBuyMypaywait(
+  html: string,
+  user: Record<string, unknown> | null,
+  orders: Array<{
+    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (orders.length === 0) {
+    rowsHtml = "<tr><td colspan=6 class=empty_item>입금 해야할 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = orders.map((o) => {
+      const game = o.gameName || "";
+      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
+      const cat = o.itemCategory || o.category || "아이템";
+      const price = fmtKRW(o.amount);
+      const date = fmtKRDate(o.createdAt);
+      const titleLink = o.productId
+        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
+        : `<div class=trade_title>${o.productTitle}</div>`;
+      const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=buy`;
+      return (
+        "<tr>" +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td>${cat}</td>` +
+        `<td class=left>${titleLink}</td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td>대기중</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p>` +
+        `<div class=icon_box><a href="${chatHref}" class="list_icon chat" data-desc=채팅>` +
+        `<span class=list_icon_img></span></a></div></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectBuyTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
+    : result + MYROOM_BUY_SCRIPT;
+}
+
+function serveBuyMying(
+  html: string,
+  user: Record<string, unknown> | null,
+  orders: Array<{
+    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (orders.length === 0) {
+    rowsHtml = "<tr><td colspan=6 class=empty_item>구매중인 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = orders.map((o) => {
+      const game = o.gameName || "";
+      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
+      const cat = o.itemCategory || o.category || "아이템";
+      const price = fmtKRW(o.amount);
+      const date = fmtKRDate(o.createdAt);
+      const titleLink = o.productId
+        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
+        : `<div class=trade_title>${o.productTitle}</div>`;
+      const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=buy`;
+      return (
+        "<tr>" +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td>${cat}</td>` +
+        `<td class=left>${titleLink}</td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td>구매중</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p>` +
+        `<div class=icon_box><a href="${chatHref}" class="list_icon chat" data-desc=채팅>` +
+        `<span class=list_icon_img></span></a></div></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectBuyTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
+    : result + MYROOM_BUY_SCRIPT;
+}
+
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
 router.get(["/", ""], async (req, res): Promise<void> => {
   if (!staticHtml) {
@@ -7407,6 +7594,117 @@ router.get("/myroom/sell/sell_ing.html", async (req, res): Promise<void> => {
     .orderBy(desc(ordersTable.createdAt));
 
   res.send(serveSellMying(sellMyroomIngHtml, user, rows.map((r) => ({
+    id: r.o.id,
+    productId: r.o.productId,
+    productTitle: r.o.productTitle,
+    amount: Number(r.o.amount),
+    createdAt: r.o.createdAt,
+    gameName: r.p?.gameName ?? null,
+    serverName: r.p?.serverName ?? null,
+    itemCategory: r.p?.itemCategory ?? null,
+    category: r.p?.category ?? null,
+  }))));
+});
+
+// ─── 마이룸 구매관련 4개 페이지 ────────────────────────────────────────
+
+// 구매등록물품 (orders WHERE buyerId=userId AND status='pending')
+router.get("/myroom/buy/buy_regist.html", async (req, res): Promise<void> => {
+  if (!buyMyroomRegistHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const rows = await db
+    .select({ o: ordersTable, p: productsTable })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(eq(ordersTable.buyerId, user.id as number), eq(ordersTable.status, "pending")))
+    .orderBy(desc(ordersTable.createdAt));
+
+  res.send(serveBuyMyregist(buyMyroomRegistHtml, user, rows.map((r) => ({
+    id: r.o.id,
+    productId: r.o.productId,
+    productTitle: r.o.productTitle,
+    amount: Number(r.o.amount),
+    createdAt: r.o.createdAt,
+    gameName: r.p?.gameName ?? null,
+    serverName: r.p?.serverName ?? null,
+    itemCategory: r.p?.itemCategory ?? null,
+    category: r.p?.category ?? null,
+  }))));
+});
+
+// 흥정신청된 물품 (우리 시스템엔 흥정 없음 → 항상 빈 목록)
+router.get("/myroom/buy/buy_check.html", async (req, res): Promise<void> => {
+  if (!buyMyroomCheckHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+  res.send(serveBuyMycheck(buyMyroomCheckHtml, user));
+});
+
+// 입금해야할 물품 (orders WHERE buyerId=userId AND status='pending')
+router.get("/myroom/buy/buy_pay_wait.html", async (req, res): Promise<void> => {
+  if (!buyMyroomPayWaitHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const rows = await db
+    .select({ o: ordersTable, p: productsTable })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(eq(ordersTable.buyerId, user.id as number), eq(ordersTable.status, "pending")))
+    .orderBy(desc(ordersTable.createdAt));
+
+  res.send(serveBuyMypaywait(buyMyroomPayWaitHtml, user, rows.map((r) => ({
+    id: r.o.id,
+    productId: r.o.productId,
+    productTitle: r.o.productTitle,
+    amount: Number(r.o.amount),
+    createdAt: r.o.createdAt,
+    gameName: r.p?.gameName ?? null,
+    serverName: r.p?.serverName ?? null,
+    itemCategory: r.p?.itemCategory ?? null,
+    category: r.p?.category ?? null,
+  }))));
+});
+
+// 구매중인 물품 (orders WHERE buyerId=userId AND status IN ['shipped','confirmed'])
+router.get("/myroom/buy/buy_ing.html", async (req, res): Promise<void> => {
+  if (!buyMyroomIngHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const rows = await db
+    .select({ o: ordersTable, p: productsTable })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(
+      eq(ordersTable.buyerId, user.id as number),
+      inArray(ordersTable.status, ["shipped", "confirmed"])
+    ))
+    .orderBy(desc(ordersTable.createdAt));
+
+  res.send(serveBuyMying(buyMyroomIngHtml, user, rows.map((r) => ({
     id: r.o.id,
     productId: r.o.productId,
     productTitle: r.o.productTitle,
