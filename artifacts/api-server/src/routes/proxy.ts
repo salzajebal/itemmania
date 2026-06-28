@@ -2,8 +2,8 @@ import { Router, type IRouter, type Request } from "express";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
-import { db, usersTable, productsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, productsTable, ordersTable } from "@workspace/db";
+import { eq, and, inArray, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -178,6 +178,10 @@ const sellLineageMHtml        = loadSellHtml("sell-lineage-m.html");
 const sellGeosangHtml         = loadSellHtml("sell-geosang.html");
 const sellAion2Html           = loadSellHtml("sell-aion2.html");
 const sellDnfHtml             = loadSellHtml("sell-dnf.html");
+const sellMyroomRegistHtml    = loadSellHtml("sell/sell_regist.html");
+const sellMyroomCheckHtml     = loadSellHtml("sell/sell_check.html");
+const sellMyroomPayWaitHtml   = loadSellHtml("sell/sell_pay_wait.html");
+const sellMyroomIngHtml       = loadSellHtml("sell/sell_ing.html");
 
 // game_id → html 매핑 (TOP 10)
 const SELL_HTML_MAP: Record<string, string> = {
@@ -1020,6 +1024,10 @@ function mapImPath(rawPath: string): string {
   if (base.startsWith('/myroom/chat/new_chat'))                  return '/myroom/chat/new_chat.html';
   if (base.startsWith('/myroom/chat/list'))                      return '/myroom/chat/list.html' + qs;
   if (base.startsWith('/myroom/chat'))                           return '/myroom/chat/list.html';
+  if (base.startsWith('/myroom/sell/sell_regist'))               return '/myroom/sell/sell_regist.html';
+  if (base.startsWith('/myroom/sell/sell_check'))                return '/myroom/sell/sell_check.html';
+  if (base.startsWith('/myroom/sell/sell_pay_wait'))             return '/myroom/sell/sell_pay_wait.html';
+  if (base.startsWith('/myroom/sell/sell_ing'))                  return '/myroom/sell/sell_ing.html';
   if (base === '/myroom' || base === '/myroom/')                 return '/myroom/index.html';
   if (base.startsWith('/game_charge'))                           return '/game-charge';
   if (base.startsWith('/portal/giftcard'))                       return '/giftcard';
@@ -1099,6 +1107,10 @@ var ROUTE_MAP=[
   ['/myroom/chat/list.html','/myroom/chat/list.html'],
   ['/myroom/chat/','/myroom/chat/list.html'],
   ['/myroom/chat','/myroom/chat/list.html'],
+  ['/myroom/sell/sell_regist.html','/myroom/sell/sell_regist.html'],
+  ['/myroom/sell/sell_check.html','/myroom/sell/sell_check.html'],
+  ['/myroom/sell/sell_pay_wait.html','/myroom/sell/sell_pay_wait.html'],
+  ['/myroom/sell/sell_ing.html','/myroom/sell/sell_ing.html'],
   ['/game_charge/','/game-charge'],
   ['/game_charge','/game-charge'],
   ['/portal/giftcard/','/giftcard'],
@@ -6394,6 +6406,191 @@ function serveChatNew(html: string, user: Record<string, unknown> | null = null)
     : result + CHAT_NEW_INTERCEPT_SCRIPT;
 }
 
+// ─── 마이룸 판매관련 페이지 공통 유틸 ────────────────────────────────────
+
+function fmtKRW(n: number): string {
+  return n.toLocaleString("ko-KR");
+}
+
+function fmtKRDate(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
+
+function injectSellTableRows(html: string, rowsHtml: string): string {
+  const tableMarker = '<table class="g_blue_table tb_list">';
+  const tIdx = html.indexOf(tableMarker);
+  if (tIdx === -1) return html;
+  const tbodyStart = html.indexOf("<tbody>", tIdx);
+  if (tbodyStart === -1) return html;
+  const tableEnd = html.indexOf("</table>", tbodyStart);
+  if (tableEnd === -1) return html;
+  return (
+    html.slice(0, tbodyStart) +
+    "<tbody>" + rowsHtml + "</tbody>\n" +
+    html.slice(tableEnd)
+  );
+}
+
+const MYROOM_SELL_SCRIPT = `<script>
+(function(){
+  window.addEventListener('DOMContentLoaded',function(){
+    if(!window._IM_USER||!window._IM_USER.id){location.replace('/login');return;}
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest&&e.target.closest('.list_icon.delete[data-id]');
+      if(!btn)return;
+      e.preventDefault();
+      var pid=btn.getAttribute('data-id');
+      if(!pid||!confirm('이 물품을 삭제하시겠습니까?'))return;
+      fetch('/api/products/'+pid,{method:'DELETE',credentials:'include'})
+        .then(function(r){if(r.ok)location.reload();else alert('삭제 실패');})
+        .catch(function(){alert('삭제 실패');});
+    });
+  });
+})();
+</script>`;
+
+function serveSellMyregist(
+  html: string,
+  user: Record<string, unknown> | null,
+  products: Array<{
+    id: number; title: string; price: number;
+    gameName: string | null; serverName: string | null;
+    itemCategory: string | null; category: string | null;
+    createdAt: Date;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (products.length === 0) {
+    rowsHtml = "<tr><td colspan=5 class=empty_item>등록된 판매 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = products.map((p) => {
+      const game = p.gameName || "";
+      const server = p.serverName ? `<p class=f_gray>${p.serverName}</p>` : "";
+      const cat = p.itemCategory || p.category || "아이템";
+      const price = fmtKRW(p.price);
+      const date = fmtKRDate(p.createdAt);
+      return (
+        "<tr>" +
+        `<td class="first f_left"><a href="/sell/application.html?id=${p.id}">` +
+        `<strong>${game}</strong><br>${server}</a></td>` +
+        `<td>${cat}</td>` +
+        `<td class=left><a href="/sell/application.html?id=${p.id}">` +
+        `<div class=trade_title>${p.title}</div></a></td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p>` +
+        `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${p.id}" data-desc=삭제>` +
+        `<span class=list_icon_img></span></a></div></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectSellTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_SELL_SCRIPT + "</body>")
+    : result + MYROOM_SELL_SCRIPT;
+}
+
+function serveSellMycheck(html: string, user: Record<string, unknown> | null): string {
+  const result = prepare(html, user);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_SELL_SCRIPT + "</body>")
+    : result + MYROOM_SELL_SCRIPT;
+}
+
+function serveSellMypaywait(
+  html: string,
+  user: Record<string, unknown> | null,
+  orders: Array<{
+    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (orders.length === 0) {
+    rowsHtml = "<tr><td colspan=6 class=empty_item>입금 대기중인 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = orders.map((o) => {
+      const game = o.gameName || "";
+      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
+      const cat = o.itemCategory || o.category || "아이템";
+      const price = fmtKRW(o.amount);
+      const date = fmtKRDate(o.createdAt);
+      const titleLink = o.productId
+        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
+        : `<div class=trade_title>${o.productTitle}</div>`;
+      return (
+        "<tr>" +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td>${cat}</td>` +
+        `<td class=left>${titleLink}</td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td>구매자</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectSellTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_SELL_SCRIPT + "</body>")
+    : result + MYROOM_SELL_SCRIPT;
+}
+
+function serveSellMying(
+  html: string,
+  user: Record<string, unknown> | null,
+  orders: Array<{
+    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
+  }>
+): string {
+  let result = prepare(html, user);
+
+  let rowsHtml: string;
+  if (orders.length === 0) {
+    rowsHtml = "<tr><td colspan=6 class=empty_item>판매중인 물품이 없습니다.</td></tr>";
+  } else {
+    rowsHtml = orders.map((o) => {
+      const game = o.gameName || "";
+      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
+      const cat = o.itemCategory || o.category || "아이템";
+      const price = fmtKRW(o.amount);
+      const date = fmtKRDate(o.createdAt);
+      const titleLink = o.productId
+        ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
+        : `<div class=trade_title>${o.productTitle}</div>`;
+      const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=sell`;
+      return (
+        "<tr>" +
+        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td>${cat}</td>` +
+        `<td class=left>${titleLink}</td>` +
+        `<td class="right td_money">${price}원</td>` +
+        `<td>구매자</td>` +
+        `<td class=flex_box><p class=f_gray>${date}</p>` +
+        `<div class=icon_box><a href="${chatHref}" class="list_icon chat" data-desc=채팅>` +
+        `<span class=list_icon_img></span></a></div></td>` +
+        "</tr>"
+      );
+    }).join("");
+  }
+
+  result = injectSellTableRows(result, rowsHtml);
+  return result.includes("</body>")
+    ? result.replace("</body>", MYROOM_SELL_SCRIPT + "</body>")
+    : result + MYROOM_SELL_SCRIPT;
+}
+
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
 router.get(["/", ""], async (req, res): Promise<void> => {
   if (!staticHtml) {
@@ -7111,6 +7308,115 @@ window.addEventListener('DOMContentLoaded', function(){
 </script>
 </body>
 </html>`);
+});
+
+// ─── 마이룸 판매관련 4개 페이지 ────────────────────────────────────────
+
+// 판매등록물품
+router.get("/myroom/sell/sell_regist.html", async (req, res): Promise<void> => {
+  if (!sellMyroomRegistHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const prods = await db
+    .select()
+    .from(productsTable)
+    .where(and(eq(productsTable.sellerId, user.id as number), eq(productsTable.status, "active")))
+    .orderBy(desc(productsTable.createdAt));
+
+  res.send(serveSellMyregist(sellMyroomRegistHtml, user, prods.map((p) => ({
+    id: p.id,
+    title: p.title,
+    price: Number(p.price),
+    gameName: p.gameName,
+    serverName: p.serverName,
+    itemCategory: p.itemCategory,
+    category: p.category,
+    createdAt: p.createdAt,
+  }))));
+});
+
+// 흥정신청된 물품 (우리 시스템엔 흥정 없음 → 항상 빈 목록)
+router.get("/myroom/sell/sell_check.html", async (req, res): Promise<void> => {
+  if (!sellMyroomCheckHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+  res.send(serveSellMycheck(sellMyroomCheckHtml, user));
+});
+
+// 입금대기 물품 (orders WHERE sellerId=userId AND status='pending')
+router.get("/myroom/sell/sell_pay_wait.html", async (req, res): Promise<void> => {
+  if (!sellMyroomPayWaitHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const rows = await db
+    .select({ o: ordersTable, p: productsTable })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(eq(ordersTable.sellerId, user.id as number), eq(ordersTable.status, "pending")))
+    .orderBy(desc(ordersTable.createdAt));
+
+  res.send(serveSellMypaywait(sellMyroomPayWaitHtml, user, rows.map((r) => ({
+    id: r.o.id,
+    productId: r.o.productId,
+    productTitle: r.o.productTitle,
+    amount: Number(r.o.amount),
+    createdAt: r.o.createdAt,
+    gameName: r.p?.gameName ?? null,
+    serverName: r.p?.serverName ?? null,
+    itemCategory: r.p?.itemCategory ?? null,
+    category: r.p?.category ?? null,
+  }))));
+});
+
+// 판매중인 물품 (orders WHERE sellerId=userId AND status IN ['shipped','confirmed'])
+router.get("/myroom/sell/sell_ing.html", async (req, res): Promise<void> => {
+  if (!sellMyroomIngHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+  if (!user) { res.redirect(302, "/login"); return; }
+
+  const rows = await db
+    .select({ o: ordersTable, p: productsTable })
+    .from(ordersTable)
+    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
+    .where(and(
+      eq(ordersTable.sellerId, user.id as number),
+      inArray(ordersTable.status, ["shipped", "confirmed"])
+    ))
+    .orderBy(desc(ordersTable.createdAt));
+
+  res.send(serveSellMying(sellMyroomIngHtml, user, rows.map((r) => ({
+    id: r.o.id,
+    productId: r.o.productId,
+    productTitle: r.o.productTitle,
+    amount: Number(r.o.amount),
+    createdAt: r.o.createdAt,
+    gameName: r.p?.gameName ?? null,
+    serverName: r.p?.serverName ?? null,
+    itemCategory: r.p?.itemCategory ?? null,
+    category: r.p?.category ?? null,
+  }))));
 });
 
 // /proxy 및 나머지 하위 경로 → itemmania.html 서빙
