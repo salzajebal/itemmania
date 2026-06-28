@@ -26,18 +26,94 @@
  */
 
 import { JSDOM } from 'jsdom';
+import https from 'https';
+import zlib from 'zlib';
 
 const GAMES = {
-  lostark:           { id: 2696, name: '로스트아크' },
-  maplestory:        { id: 138,  name: '메이플스토리' },
-  dnf:               { id: 281,  name: '던전앤파이터' },
-  'lineage-classic': { id: 5913, name: '리니지클래식' },
-  aion2:             { id: 5799, name: '아이온2' },
-  mabinogi:          { id: 155,  name: '마비노기' },
-  geosang:           { id: 101,  name: '거상' },
+  lostark:              { id: 2696, name: '로스트아크' },
+  maplestory:           { id: 138,  name: '메이플스토리' },
+  'maplestory-world':   { id: 5233, name: '메이플스토리월드' },
+  dnf:                  { id: 281,  name: '던전앤파이터' },
+  'lineage-classic':    { id: 5913, name: '리니지클래식' },
+  aion2:                { id: 5799, name: '아이온2' },
+  mabinogi:             { id: 155,  name: '마비노기' },
+  geosang:              { id: 101,  name: '거상' },
 };
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+let SESSION_COOKIES = '';
+
+const HTTPS_AGENT = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+});
+
+function httpsGet(url, extraHeaders = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const options = {
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      method: 'GET',
+      agent: HTTPS_AGENT,
+      timeout: 25000,
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Referer': 'https://www.itemmania.com/',
+        ...(SESSION_COOKIES ? { 'Cookie': SESSION_COOKIES } : {}),
+        ...extraHeaders,
+      },
+    };
+    const req = https.request(options, (res) => {
+      const setCookie = res.headers['set-cookie'];
+      if (setCookie) {
+        const cookies = setCookie.map(c => c.split(';')[0]).join('; ');
+        if (cookies) SESSION_COOKIES = cookies;
+      }
+      if (res.statusCode >= 301 && res.statusCode <= 302 && res.headers.location) {
+        const loc = res.headers.location.startsWith('http')
+          ? res.headers.location
+          : `https://www.itemmania.com${res.headers.location}`;
+        res.resume();
+        resolve(httpsGet(loc, extraHeaders));
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      const enc = res.headers['content-encoding'] || '';
+      let stream = res;
+      if (enc === 'gzip')   stream = res.pipe(zlib.createGunzip());
+      else if (enc === 'br') stream = res.pipe(zlib.createBrotliDecompress());
+      else if (enc === 'deflate') stream = res.pipe(zlib.createInflate());
+      const chunks = [];
+      stream.on('data', d => chunks.push(d));
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      stream.on('error', reject);
+    });
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function initSession() {
+  try {
+    await httpsGet('https://www.itemmania.com/');
+  } catch {
+  }
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -78,22 +154,16 @@ async function adminLogin(apiUrl, email, pw) {
 
 async function fetchListHtml(gameId, page) {
   const url = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
-  const r = await fetch(url, {
-    headers: { 'User-Agent': UA },
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.text();
+  return httpsGet(url);
 }
 
 async function fetchDetailHtml(tid) {
   const url = `https://www.itemmania.com/sell/application.html?id=${tid}`;
-  const r = await fetch(url, {
-    headers: { 'User-Agent': UA },
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!r.ok) return null;
-  return r.text();
+  try {
+    return await httpsGet(url);
+  } catch {
+    return null;
+  }
 }
 
 function parseListProducts(html, gameId, gameName) {
@@ -210,6 +280,10 @@ async function main() {
   console.log(`   페이지: ${opts.pages}`);
   console.log(`   상세 크롤: ${opts.withDetail ? '포함' : '미포함'}`);
   console.log('');
+
+  process.stdout.write('🌐 itemmania.com 세션 초기화 중...');
+  await initSession();
+  console.log(' 완료');
 
   process.stdout.write('🔑 어드민 로그인 중...');
   let cookie;
