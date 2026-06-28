@@ -562,7 +562,7 @@ async function startCrawl(){
     var summary='완료: '+d.upserted+'개 저장, '+d.failed+'개 실패';
     if(withDetail) summary+=' / 상세: '+d.detailFetched+'개 수집, '+d.detailFailed+'개 실패';
     document.getElementById('crawlResultSummary').textContent=summary;
-    document.getElementById('crawlResultLog').textContent=(d.log||[]).join('\n');
+    document.getElementById('crawlResultLog').textContent=(d.log||[]).join('\\n');
     loadStats();
     loadProducts();
   }catch(e){
