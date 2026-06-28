@@ -5692,6 +5692,112 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       if (buyInfo) buyInfo.style.setProperty('display', 'none', 'important');
     }
 
+    // ── 구매수량 컨트롤 완전 재구성 (최초 1회만) ────────────
+    (function() {
+      if (window._im_qty_setup) return;
+      var qtyInput = document.getElementById('buy_quantity');
+      var minusBtn = document.querySelector('.quantity_input button.minus, .quantity_input button[name=minus]');
+      var plusBtn  = document.querySelector('.quantity_input button.plus,  .quantity_input button[name=plus]');
+      var spnUnit  = document.getElementById('spnQuantity_Unit');
+      var spnQty   = document.getElementById('spnQuantity');
+      var spnTotal = document.getElementById('spnQuantity_total');
+      var payEl    = document.querySelector('.pay_mileage');
+      var settleEl = document.querySelector('.user_price .g_text_new, .settle_price, .final_price');
+
+      if (!qtyInput) return;
+      window._im_qty_setup = true;
+
+      // 단위 텍스트를 "1 x N번 = N개"로 고정
+      if (spnUnit)  spnUnit.textContent  = '1';
+      // "아데나" 등 뒤에 오는 텍스트 노드를 "개"로 교체
+      var unitInfoEl = document.querySelector('.unit_info');
+      if (unitInfoEl) {
+        // 텍스트 노드 중 "아데나" 등 게임머니 단어 → "개"
+        unitInfoEl.childNodes.forEach(function(node) {
+          if (node.nodeType === 3) {
+            node.textContent = node.textContent.replace(/[가-힣]+(?:아데나|냥|골드|머니|재화|코인|젠|실버|크로나|베릴|금화)/g, '개').replace(/\s*[가-힣]{2,6}\s*$/, ' 개');
+          }
+        });
+      }
+
+      // 수량 초기값 1로 설정 + minus disabled 해제
+      qtyInput.value = '1';
+      qtyInput.readOnly = false;
+      if (minusBtn) minusBtn.removeAttribute('disabled');
+
+      function getQty() {
+        var v = parseInt(qtyInput.value, 10);
+        return (isNaN(v) || v < 1) ? 1 : v;
+      }
+
+      function updateDisplay(qty) {
+        if (spnQty)   spnQty.textContent   = String(qty);
+        if (spnTotal) spnTotal.textContent = String(qty);
+        // minus 버튼 비활성화 처리
+        if (minusBtn) {
+          if (qty <= 1) minusBtn.setAttribute('disabled', '');
+          else          minusBtn.removeAttribute('disabled');
+        }
+        // 총 구매금액 = 단가 × 수량
+        var total = (Number(p.price) || 0) * qty;
+        if (payEl) payEl.textContent = fmt(total);
+        if (settleEl && settleEl.tagName === 'INPUT') {
+          settleEl.value = String(total);
+        } else if (settleEl) {
+          settleEl.textContent = fmt(total);
+        }
+        // .settle_amount / 결제해야할 금액 반영
+        var finalEls = document.querySelectorAll('.settle_amount, .final_amount, [class*=settle]');
+        finalEls.forEach(function(el) {
+          if (el.classList && !el.classList.contains('use_mileage')) {
+            el.textContent = fmt(total);
+          }
+        });
+      }
+
+      // 초기 렌더
+      updateDisplay(1);
+
+      // 이전 snapshot 이벤트 제거를 위해 cloneNode로 교체
+      if (minusBtn) {
+        var newMinus = minusBtn.cloneNode(true);
+        minusBtn.parentNode.replaceChild(newMinus, minusBtn);
+        minusBtn = newMinus;
+        minusBtn.setAttribute('disabled', '');
+        minusBtn.addEventListener('click', function(e) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          var q = getQty();
+          if (q > 1) { qtyInput.value = String(q - 1); updateDisplay(q - 1); }
+        }, true);
+      }
+      if (plusBtn) {
+        var newPlus = plusBtn.cloneNode(true);
+        plusBtn.parentNode.replaceChild(newPlus, plusBtn);
+        plusBtn = newPlus;
+        plusBtn.addEventListener('click', function(e) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          var q = getQty();
+          qtyInput.value = String(q + 1);
+          updateDisplay(q + 1);
+        }, true);
+      }
+
+      // input 직접 입력 지원
+      var newInput = qtyInput.cloneNode(true);
+      qtyInput.parentNode.replaceChild(newInput, qtyInput);
+      qtyInput = newInput;
+      qtyInput.readOnly = false;
+      qtyInput.addEventListener('input', function() {
+        var q = parseInt(qtyInput.value, 10);
+        if (!isNaN(q) && q >= 1) updateDisplay(q);
+      });
+      qtyInput.addEventListener('change', function() {
+        var q = parseInt(qtyInput.value, 10);
+        if (isNaN(q) || q < 1) { qtyInput.value = '1'; updateDisplay(1); }
+        else updateDisplay(q);
+      });
+    })();
+
     // ── 구매 박스 렌더링 ──────────────────────────────────
     if (p._source !== 'itemmania') {
       renderBuyBox(p);
@@ -6061,6 +6167,30 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   if (p.serverName) crumb += ' &gt; ' + escHtml(String(p.serverName));
   if (p.itemCategory) crumb += ' &gt; ' + escHtml(String(p.itemCategory));
   r = r.replace(/(<div class=kind>)[\s\S]*?(<\/div>)/, `$1${crumb}$2`);
+
+  // 7. 구매수량 컨트롤 초기값 리셋 (서버사이드)
+  const priceNum = Number(p.price || 0);
+  const priceFmt = priceNum.toLocaleString('ko-KR');
+  // minus 버튼 disabled 제거
+  r = r.replace(/(<button\b[^>]*\bname=minus\b[^>]*?)\s+disabled\b/gi, '$1');
+  r = r.replace(/(<button\b[^>]*\bclass=minus\b[^>]*?)\s+disabled\b/gi, '$1');
+  // buy_quantity: value 속성 → 1
+  r = r.replace(/(<input\b[^>]*\bid=buy_quantity\b[^>]*?\bvalue=)(\d+)/i, '$11');
+  // spnQuantity_Unit: "1만" 등 → "1"
+  r = r.replace(/(<span\b[^>]*\bid=spnQuantity_Unit\b[^>]*>)[^<]*(<\/span>)/i, '$11$2');
+  // spnQuantity: "50" → "1"
+  r = r.replace(/(<span\b[^>]*\bid=spnQuantity\b[^>]*>)[^<]*(<\/span>)/i, '$11$2');
+  // spnQuantity_total: "50만" → "1"
+  r = r.replace(/(<span\b[^>]*\bid=spnQuantity_total\b[^>]*>)[^<]*(<\/span>)/i, '$11$2');
+  // unit_info: "아데나" 등 게임화폐 텍스트 → "개"
+  r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*[가-힣]{2,6}/g, '$1 개');
+  r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*아데나/g, '$1 개');
+  // pay_mileage (총 구매금액)
+  r = r.replace(/(<span\b[^>]*\bclass=pay_mileage\b[^>]*>)[^<]*(<\/span>)/i, `$1${priceFmt}$2`);
+  // settle_amount / final_amount
+  r = r.replace(/(<span\b[^>]*\bclass=settle_amount\b[^>]*>)[^<]*(<\/span>)/i, `$1${priceFmt}$2`);
+  // add_pay price_font (결제 해야할 금액)
+  r = r.replace(/(<span\b[^>]*class="add_pay price_font"[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
 
   return r;
 }
