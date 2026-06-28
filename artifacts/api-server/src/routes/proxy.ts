@@ -5262,6 +5262,66 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
 
   function init() {
     loadUserTradeInfo();
+
+    // ── 구매수량 컨트롤 (document 레벨 위임, 초기화) ────────
+    (function() {
+      function fmtKr(n) { return Number(n||0).toLocaleString('ko-KR'); }
+      function getPrice() {
+        var prod = window.__PRODUCT__ || window._IM_PRODUCT;
+        return prod ? Number(prod.price) || 0 : 0;
+      }
+      function getQtyInput() { return document.getElementById('buy_quantity'); }
+      function getQty() {
+        var inp = getQtyInput();
+        if (!inp) return 1;
+        var v = parseInt(inp.value, 10);
+        return (isNaN(v) || v < 1) ? 1 : v;
+      }
+      function updateQtyDisplay(qty) {
+        var inp = getQtyInput();
+        if (!inp) return;
+        inp.value = String(qty);
+        var spnQty   = document.getElementById('spnQuantity');
+        var spnTotal = document.getElementById('spnQuantity_total');
+        var minusBtn = document.querySelector('.quantity_input button[name=minus], .quantity_input button.minus');
+        if (spnQty)   spnQty.textContent   = String(qty);
+        if (spnTotal) spnTotal.textContent = String(qty);
+        if (minusBtn) {
+          if (qty <= 1) minusBtn.setAttribute('disabled', '');
+          else          minusBtn.removeAttribute('disabled');
+        }
+        var total = getPrice() * qty;
+        var tf = fmtKr(total);
+        var payEl = document.querySelector('.pay_mileage');
+        if (payEl) payEl.textContent = tf;
+        document.querySelectorAll('.add_pay.price_font, .add_pay').forEach(function(el) { el.textContent = tf; });
+        document.querySelectorAll('.settle_amount, .final_amount').forEach(function(el) { el.textContent = tf; });
+      }
+      // document 레벨 위임: 어떤 타이밍에도 클릭 감지
+      document.addEventListener('click', function(e) {
+        var btn = e.target;
+        if (!btn || btn.tagName !== 'BUTTON') return;
+        var inQty = btn.closest ? btn.closest('.quantity_input') : null;
+        if (!inQty) return;
+        if (btn.name === 'plus' || btn.classList.contains('plus')) {
+          e.preventDefault();
+          updateQtyDisplay(getQty() + 1);
+        } else if ((btn.name === 'minus' || btn.classList.contains('minus')) && !btn.disabled) {
+          e.preventDefault();
+          var q = getQty();
+          if (q > 1) updateQtyDisplay(q - 1);
+        }
+      });
+      // input 직접 입력 지원 (change 이벤트)
+      document.addEventListener('change', function(e) {
+        var el = e.target;
+        if (!el || el.id !== 'buy_quantity') return;
+        var q = parseInt(el.value, 10);
+        if (isNaN(q) || q < 1) updateQtyDisplay(1);
+        else updateQtyDisplay(q);
+      });
+    })();
+
     // 구매신청 버튼 — form 제출 인터셉트
     var form = document.getElementById('frmSell');
     if (form) {
@@ -5681,122 +5741,20 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     }
 
     // ── 구매수량/구매할인 섹션 처리 ──────────────────────
-    // 게임머니 카테고리 여부: 아데나·골드·머니·코인 등 → true → 수량 섹션 유지
-    // 아이템·계정·파워레벨링 등 → false → 섹션 숨김
-    var moneyKws = ['머니', '아데나', '골드', '재화', '코인', '냥', '젠', '실버', '크로나', '베릴', '금화'];
-    var cat = (p.itemCategory || '').toString();
-    var isGameMoney = moneyKws.some(function(kw) { return cat.indexOf(kw) >= 0; });
-    if (!isGameMoney) {
-      // DB 상품 또는 아이템마니아 아이템 카테고리 → buy_info 숨김
-      var buyInfo = document.querySelector('.buy_info');
-      if (buyInfo) buyInfo.style.setProperty('display', 'none', 'important');
+    // DB 상품: 항상 수량 컨트롤 표시
+    // 아이템마니아 상품: 게임머니 카테고리만 표시, 나머지(아이템/계정 등) 숨김
+    if (p._source === 'itemmania') {
+      var moneyKws = ['머니', '아데나', '골드', '재화', '코인', '냥', '젠', '실버', '크로나', '베릴', '금화'];
+      var cat = (p.itemCategory || '').toString();
+      var isGameMoney = moneyKws.some(function(kw) { return cat.indexOf(kw) >= 0; });
+      if (!isGameMoney) {
+        var buyInfo = document.querySelector('.buy_info');
+        if (buyInfo) buyInfo.style.setProperty('display', 'none', 'important');
+      }
     }
 
-    // ── 구매수량 컨트롤 완전 재구성 (최초 1회만) ────────────
-    (function() {
-      if (window._im_qty_setup) return;
-      var qtyInput = document.getElementById('buy_quantity');
-      var minusBtn = document.querySelector('.quantity_input button.minus, .quantity_input button[name=minus]');
-      var plusBtn  = document.querySelector('.quantity_input button.plus,  .quantity_input button[name=plus]');
-      var spnUnit  = document.getElementById('spnQuantity_Unit');
-      var spnQty   = document.getElementById('spnQuantity');
-      var spnTotal = document.getElementById('spnQuantity_total');
-      var payEl    = document.querySelector('.pay_mileage');
-      var settleEl = document.querySelector('.user_price .g_text_new, .settle_price, .final_price');
-
-      if (!qtyInput) return;
-      window._im_qty_setup = true;
-
-      // 단위 텍스트를 "1 x N번 = N개"로 고정
-      if (spnUnit)  spnUnit.textContent  = '1';
-      // "아데나" 등 뒤에 오는 텍스트 노드를 "개"로 교체
-      var unitInfoEl = document.querySelector('.unit_info');
-      if (unitInfoEl) {
-        // 텍스트 노드 중 "아데나" 등 게임머니 단어 → "개"
-        unitInfoEl.childNodes.forEach(function(node) {
-          if (node.nodeType === 3) {
-            node.textContent = node.textContent.replace(/[가-힣]+(?:아데나|냥|골드|머니|재화|코인|젠|실버|크로나|베릴|금화)/g, '개').replace(/\s*[가-힣]{2,6}\s*$/, ' 개');
-          }
-        });
-      }
-
-      // 수량 초기값 1로 설정 + minus disabled 해제
-      qtyInput.value = '1';
-      qtyInput.readOnly = false;
-      if (minusBtn) minusBtn.removeAttribute('disabled');
-
-      function getQty() {
-        var v = parseInt(qtyInput.value, 10);
-        return (isNaN(v) || v < 1) ? 1 : v;
-      }
-
-      function updateDisplay(qty) {
-        if (spnQty)   spnQty.textContent   = String(qty);
-        if (spnTotal) spnTotal.textContent = String(qty);
-        // minus 버튼 비활성화 처리
-        if (minusBtn) {
-          if (qty <= 1) minusBtn.setAttribute('disabled', '');
-          else          minusBtn.removeAttribute('disabled');
-        }
-        // 총 구매금액 = 단가 × 수량
-        var total = (Number(p.price) || 0) * qty;
-        if (payEl) payEl.textContent = fmt(total);
-        if (settleEl && settleEl.tagName === 'INPUT') {
-          settleEl.value = String(total);
-        } else if (settleEl) {
-          settleEl.textContent = fmt(total);
-        }
-        // .settle_amount / 결제해야할 금액 반영
-        var finalEls = document.querySelectorAll('.settle_amount, .final_amount, [class*=settle]');
-        finalEls.forEach(function(el) {
-          if (el.classList && !el.classList.contains('use_mileage')) {
-            el.textContent = fmt(total);
-          }
-        });
-      }
-
-      // 초기 렌더
-      updateDisplay(1);
-
-      // 이전 snapshot 이벤트 제거를 위해 cloneNode로 교체
-      if (minusBtn) {
-        var newMinus = minusBtn.cloneNode(true);
-        minusBtn.parentNode.replaceChild(newMinus, minusBtn);
-        minusBtn = newMinus;
-        minusBtn.setAttribute('disabled', '');
-        minusBtn.addEventListener('click', function(e) {
-          e.preventDefault(); e.stopImmediatePropagation();
-          var q = getQty();
-          if (q > 1) { qtyInput.value = String(q - 1); updateDisplay(q - 1); }
-        }, true);
-      }
-      if (plusBtn) {
-        var newPlus = plusBtn.cloneNode(true);
-        plusBtn.parentNode.replaceChild(newPlus, plusBtn);
-        plusBtn = newPlus;
-        plusBtn.addEventListener('click', function(e) {
-          e.preventDefault(); e.stopImmediatePropagation();
-          var q = getQty();
-          qtyInput.value = String(q + 1);
-          updateDisplay(q + 1);
-        }, true);
-      }
-
-      // input 직접 입력 지원
-      var newInput = qtyInput.cloneNode(true);
-      qtyInput.parentNode.replaceChild(newInput, qtyInput);
-      qtyInput = newInput;
-      qtyInput.readOnly = false;
-      qtyInput.addEventListener('input', function() {
-        var q = parseInt(qtyInput.value, 10);
-        if (!isNaN(q) && q >= 1) updateDisplay(q);
-      });
-      qtyInput.addEventListener('change', function() {
-        var q = parseInt(qtyInput.value, 10);
-        if (isNaN(q) || q < 1) { qtyInput.value = '1'; updateDisplay(1); }
-        else updateDisplay(q);
-      });
-    })();
+    // 수량 컨트롤은 SELL_APPLICATION_INTERCEPT_SCRIPT의 init()에서
+    // document 레벨 위임으로 처리하므로 여기서는 생략
 
     // ── 구매 박스 렌더링 ──────────────────────────────────
     if (p._source !== 'itemmania') {
@@ -6171,9 +6129,7 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // 7. 구매수량 컨트롤 초기값 리셋 (서버사이드)
   const priceNum = Number(p.price || 0);
   const priceFmt = priceNum.toLocaleString('ko-KR');
-  // minus 버튼 disabled 제거
-  r = r.replace(/(<button\b[^>]*\bname=minus\b[^>]*?)\s+disabled\b/gi, '$1');
-  r = r.replace(/(<button\b[^>]*\bclass=minus\b[^>]*?)\s+disabled\b/gi, '$1');
+  // minus 버튼: 수량 1 초기값이므로 disabled 유지 (클라이언트 JS가 수량 변경 시 관리)
   // buy_quantity: value 속성 → 1
   r = r.replace(/(<input\b[^>]*\bid=buy_quantity\b[^>]*?\bvalue=)(\d+)/i, '$11');
   // spnQuantity_Unit: "1만" 등 → "1"
