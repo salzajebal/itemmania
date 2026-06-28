@@ -4788,14 +4788,19 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     list.scrollTop = list.scrollHeight;
   }
 
+  var isBuyerChat = false;
+
   function updateStatusUI(status) {
     var stateEl = document.getElementById('trade_state_text');
     if (stateEl) stateEl.textContent = STATUS_LABEL[status] || status;
+    var ti = document.getElementById('trade_ing');
+    var tc = document.getElementById('trade_cancel');
     if (status === 'ended' || status === 'cancelled' || status === 'rejected') {
-      var ti = document.getElementById('trade_ing');
-      var tc = document.getElementById('trade_cancel');
       if (ti) { ti.disabled = true; ti.style.opacity = '0.4'; }
       if (tc) { tc.disabled = true; tc.style.opacity = '0.4'; }
+    } else {
+      // 구매자 채팅창에서만 인수하기 표시
+      if (ti) { ti.style.display = isBuyerChat ? '' : 'none'; }
     }
   }
 
@@ -4806,6 +4811,10 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       if (data.room) {
         var r = data.room;
         var isBuyer = r.buyerId === myId;
+        isBuyerChat = isBuyer;
+        // 인수하기 버튼: 구매자 채팅창에서만 표시
+        var tiEl = document.getElementById('trade_ing');
+        if (tiEl) tiEl.style.display = isBuyer ? '' : 'none';
         var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
         var uidEl = document.querySelector('.chat_user .uid');
         if (uidEl) uidEl.textContent = partnerName;
@@ -4897,6 +4906,13 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     var params = new URLSearchParams(location.search);
     roomId = params.get('roomId') ? Number(params.get('roomId')) : null;
 
+    // 배너는 기본 숨김 — 인수하기 클릭 후에만 표시
+    var noticeEl = document.getElementById('chat_notice_txt');
+    if (noticeEl) noticeEl.style.display = 'none';
+    // 인수하기 버튼도 기본 숨김 — loadMessages에서 구매자 여부 확인 후 표시
+    var tiInit = document.getElementById('trade_ing');
+    if (tiInit) tiInit.style.display = 'none';
+
     var myroomBtn = document.querySelector('button.go_myroom');
     if (myroomBtn) myroomBtn.addEventListener('click', function(e) {
       e.preventDefault();
@@ -4921,7 +4937,13 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     if (tradeIngBtn) {
       tradeIngBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        changeStatus('ended', '거래완료(인수확인) 처리하시겠습니까?');
+        if (!confirm('거래완료(인수확인) 처리하시겠습니까?')) return;
+        // 인수 확인 후 배너 표시
+        var notice = document.getElementById('chat_notice_txt');
+        if (notice) notice.style.display = '';
+        api('PATCH', '/chat/rooms/' + roomId, { status: 'ended' }).then(function(res) {
+          if (res && res.status) updateStatusUI(res.status);
+        });
       }, true);
     }
 
