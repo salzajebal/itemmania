@@ -607,6 +607,100 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
   res.json({ ok: true, upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed, log });
 });
 
+// 크롤링 SSE 스트리밍 (실시간 진행상황)
+router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void> => {
+  const { gameIds, pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
+    gameIds?: number[];
+    pages?: number;
+    scraperApiKey?: string;
+    crawlDetail?: boolean;
+  };
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
+  const targetGames = gameIds && gameIds.length > 0
+    ? GAME_LIST.filter(g => gameIds.includes(g.id))
+    : GAME_LIST.slice(0, 3);
+  const maxPages = Math.min(Math.max(1, pages), 5);
+
+  let totalUpserted = 0;
+  let totalFailed = 0;
+  let detailFetched = 0;
+  let detailFailed = 0;
+
+  for (const game of targetGames) {
+    send({ type: "game", message: `\n▶ [${game.name}] 시작` });
+    for (let page = 1; page <= maxPages; page++) {
+      send({ type: "progress", message: `  ${page}/${maxPages}페이지 크롤 중...` });
+      const html = await fetchPageHtml(game.id, page, apiKey);
+      if (!html) {
+        send({ type: "fail", message: `  ✗ ${game.name} ${page}페이지 - 실패 (HTML 없음)` });
+        totalFailed++;
+        continue;
+      }
+
+      const products = parseProductsFromHtml(html, game.id);
+      if (products.length === 0) {
+        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음` });
+        continue;
+      }
+
+      let pageSaved = 0;
+      for (const p of products) {
+        try {
+          await db.insert(productsTable).values({
+            itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
+            category: p.category, itemCategory: p.itemCategory,
+            gameName: p.gameName, serverName: p.serverName,
+            detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+          }).onConflictDoUpdate({
+            target: productsTable.itemmaniaid,
+            set: {
+              title: p.title, price: p.price, gameName: p.gameName,
+              serverName: p.serverName, itemCategory: p.itemCategory,
+              detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+            },
+          });
+          totalUpserted++;
+          pageSaved++;
+        } catch {
+          totalFailed++;
+        }
+
+        if (crawlDetail) {
+          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey);
+          if (dhtml) {
+            const detail = parseDetailFromHtml(dhtml);
+            try {
+              await db.update(productsTable)
+                .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
+                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
+              detailFetched++;
+            } catch { detailFailed++; }
+          } else { detailFailed++; }
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      send({ type: "ok", message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
+      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  send({ type: "done", upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed,
+    message: `\n✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
+  res.end();
+});
+
+
 // 크롤링 대상 게임 목록
 router.get("/admin/crawl/games", requireAdmin, (_req, res): void => {
   const hasApiKey = !!process.env.SCRAPER_API_KEY;

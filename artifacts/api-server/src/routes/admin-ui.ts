@@ -260,10 +260,11 @@ tbody tr:hover{background:#fafbff}
           </div>
 
           <div id="crawlStatus" style="display:none">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
               <div id="crawlSpinner" style="width:20px;height:20px;border:3px solid #e0e0e0;border-top-color:#159EFD;border-radius:50%;animation:spin 0.8s linear infinite"></div>
               <span id="crawlStatusText" style="font-size:14px;color:#333">크롤링 중...</span>
             </div>
+            <div id="crawlLiveLog" style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:12px 16px;font-family:monospace;font-size:12px;max-height:320px;overflow-y:auto;line-height:1.8;white-space:pre-wrap"></div>
           </div>
 
           <div id="crawlResult" style="display:none;background:#f8f9fa;border-radius:8px;padding:16px;margin-top:12px">
@@ -544,34 +545,73 @@ async function startCrawl(){
   document.getElementById('crawlBtn').disabled=true;
   document.getElementById('crawlStatus').style.display='block';
   document.getElementById('crawlResult').style.display='none';
-  var statusMsg='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지'+(withDetail?', 상세 포함':'')+')';
-  document.getElementById('crawlStatusText').textContent=statusMsg;
+  document.getElementById('crawlStatusText').textContent='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지'+(withDetail?', 상세 포함':'')+')';
+  var liveLog=document.getElementById('crawlLiveLog');
+  liveLog.textContent='';
+
+  function appendLog(msg,color){
+    var span=document.createElement('span');
+    span.style.color=color||'#d4d4d4';
+    span.textContent=msg+'\\n';
+    liveLog.appendChild(span);
+    liveLog.scrollTop=liveLog.scrollHeight;
+  }
 
   try{
     var body={gameIds:selectedIds,pages:pages,crawlDetail:withDetail};
     if(apiKey)body.scraperApiKey=apiKey;
-    var r=await fetch('/api/admin/crawl',{
+    var resp=await fetch('/api/admin/crawl/stream',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
       body:JSON.stringify(body)
     });
-    var d=await r.json();
-    document.getElementById('crawlStatus').style.display='none';
-    document.getElementById('crawlResult').style.display='block';
-    var summary='완료: '+d.upserted+'개 저장, '+d.failed+'개 실패';
-    if(withDetail) summary+=' / 상세: '+d.detailFetched+'개 수집, '+d.detailFailed+'개 실패';
-    document.getElementById('crawlResultSummary').textContent=summary;
-    document.getElementById('crawlResultLog').textContent=(d.log||[]).join('\\n');
+    if(!resp.ok||!resp.body){throw new Error('스트림 연결 실패: '+resp.status);}
+
+    var reader=resp.body.getReader();
+    var decoder=new TextDecoder();
+    var buf='';
+    var lastData=null;
+
+    while(true){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buf+=decoder.decode(chunk.value,{stream:true});
+      var parts=buf.split('\\n\\n');
+      buf=parts.pop()||'';
+      for(var i=0;i<parts.length;i++){
+        var line=parts[i].trim();
+        if(!line.startsWith('data: '))continue;
+        try{
+          var ev=JSON.parse(line.slice(6));
+          lastData=ev;
+          if(ev.message){
+            var color='#d4d4d4';
+            if(ev.type==='ok')color='#6fcf97';
+            else if(ev.type==='fail')color='#eb5757';
+            else if(ev.type==='warn')color='#f2c94c';
+            else if(ev.type==='game')color='#56b6c2';
+            else if(ev.type==='done')color='#6fcf97';
+            appendLog(ev.message,color);
+          }
+        }catch(e){}
+      }
+    }
+
+    document.getElementById('crawlSpinner').style.display='none';
+    if(lastData&&lastData.type==='done'){
+      var summary='✅ 완료: '+lastData.upserted+'개 저장, '+lastData.failed+'개 실패';
+      if(withDetail)summary+=' / 상세 '+lastData.detailFetched+'개';
+      document.getElementById('crawlStatusText').textContent=summary;
+    }
     loadStats();
     loadProducts();
   }catch(e){
-    document.getElementById('crawlStatus').style.display='none';
-    document.getElementById('crawlResult').style.display='block';
-    document.getElementById('crawlResultSummary').textContent='오류: '+e.message;
-    document.getElementById('crawlResultLog').textContent='';
+    appendLog('\\n❌ 오류: '+e.message,'#eb5757');
+    document.getElementById('crawlStatusText').textContent='크롤링 오류';
   }finally{
     document.getElementById('crawlBtn').disabled=false;
+    document.getElementById('crawlSpinner').style.display='';
   }
 }
 
