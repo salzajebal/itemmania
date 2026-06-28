@@ -21,7 +21,7 @@ if (Number.isNaN(port) || port <= 0) {
 async function seedAdmin(): Promise<void> {
   try {
     const ADMIN_EMAIL = "admin";
-    const ADMIN_PASSWORD = "tkfwkwpqkf!@!";
+    const ADMIN_PASSWORD = "admin1234";
 
     const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
