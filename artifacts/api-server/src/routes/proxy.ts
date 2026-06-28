@@ -5428,10 +5428,20 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
               })
             }).then(function(r) { return r.json(); })
             .then(function(room) {
+              var nOpen = window._nativeOpen || window.open.bind(window);
               if (room && room.id) {
-                location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
-              } else { location.href = '/myroom/chat/list.html'; }
-            }).catch(function() { location.href = '/myroom/chat/list.html'; });
+                var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
+                var w = nOpen(chatUrl, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+                if (!w || w.closed) { location.href = chatUrl; }
+              } else {
+                var w2 = nOpen('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+                if (!w2 || w2.closed) { location.href = '/myroom/chat/list.html'; }
+              }
+            }).catch(function() {
+              var nOpen2 = window._nativeOpen || window.open.bind(window);
+              var w3 = nOpen2('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+              if (!w3 || w3.closed) { location.href = '/myroom/chat/list.html'; }
+            });
           }
 
           if (knownProduct) {
@@ -5440,9 +5450,15 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
             fetch('/api/products/' + productId2, { credentials: 'include' })
               .then(function(r) { return r.json(); })
               .then(function(prod) { openChatWithProduct(prod); })
-              .catch(function() { location.href = '/myroom/chat/list.html'; });
+              .catch(function() {
+                var nOpen3 = window._nativeOpen || window.open.bind(window);
+                var w4 = nOpen3('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+                if (!w4 || w4.closed) { location.href = '/myroom/chat/list.html'; }
+              });
           } else {
-            location.href = '/myroom/chat/list.html';
+            var nOpen4 = window._nativeOpen || window.open.bind(window);
+            var w5 = nOpen4('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+            if (!w5 || w5.closed) { location.href = '/myroom/chat/list.html'; }
           }
         });
       }, true);
