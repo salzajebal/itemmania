@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import express, { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
@@ -988,8 +988,73 @@ checkSession();
 
 router.get(["/admin", "/admin/"], (_req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
   res.send(ADMIN_HTML);
+});
+
+const ADMIN_LOGIN_PAGE = (error?: string) => `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>어드민 로그인</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f4f6fb;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{background:#fff;border-radius:16px;padding:48px 40px;width:360px;box-shadow:0 4px 32px rgba(0,0,0,.10)}
+h1{font-size:22px;font-weight:700;margin-bottom:8px}
+p{font-size:13px;color:#888;margin-bottom:28px}
+input{display:block;width:100%;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:12px;outline:none}
+input:focus{border-color:#159EFD}
+button{width:100%;padding:13px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer}
+button:hover{background:#0e8de0}
+.err{color:#e53e3e;font-size:13px;margin-top:10px;padding:10px;background:#fff5f5;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>어드민 로그인</h1>
+  <p>관리자 계정으로 로그인하세요</p>
+  <form method="POST" action="/admin-login">
+    <input type="text" name="email" placeholder="아이디 (admin)" autocomplete="username" required>
+    <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required>
+    <button type="submit">로그인</button>
+    ${error ? `<div class="err">${error}</div>` : ""}
+  </form>
+</div>
+</body>
+</html>`;
+
+router.get("/admin-login", (_req, res): void => {
+  res.set("Cache-Control", "no-store");
+  res.send(ADMIN_LOGIN_PAGE());
+});
+
+router.post("/admin-login", express.urlencoded({ extended: false }), async (req, res): Promise<void> => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  if (!email || !password) {
+    res.send(ADMIN_LOGIN_PAGE("아이디와 비밀번호를 입력하세요."));
+    return;
+  }
+  try {
+    const { db, usersTable } = await import("@workspace/db");
+    const { eq } = await import("drizzle-orm");
+    const bcrypt = await import("bcryptjs");
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.trim()));
+    if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.role !== "admin") {
+      res.send(ADMIN_LOGIN_PAGE("아이디 또는 비밀번호가 올바르지 않습니다."));
+      return;
+    }
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+    req.session.adminId = user.id;
+    req.session.adminRole = user.role;
+    await new Promise<void>((resolve) => req.session.save(() => resolve()));
+    res.redirect("/admin");
+  } catch {
+    res.send(ADMIN_LOGIN_PAGE("서버 오류가 발생했습니다."));
+  }
 });
 
 export default router;
