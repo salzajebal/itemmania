@@ -1,8 +1,23 @@
 import express, { Router, type IRouter } from "express";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 
 const router: IRouter = Router();
+
+function loadAdminScript(): string {
+  const cwd = process.cwd();
+  const candidates = [
+    path.join(cwd, "dist/admin-script.js"),
+    path.join(cwd, "src/admin-script.js"),
+    path.join(cwd, "artifacts/api-server/dist/admin-script.js"),
+    path.join(cwd, "artifacts/api-server/src/admin-script.js"),
+  ];
+  const found = candidates.find(existsSync);
+  if (!found) return "console.error('admin-script.js not found');";
+  return readFileSync(found, "utf-8");
+}
+
+const ADMIN_SCRIPT = loadAdminScript();
 
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="ko">
@@ -409,7 +424,7 @@ tbody tr:hover{background:#fafbff}
 
 <div id="toast"></div>
 
-<script src="/admin.js"></script>
+<script>${ADMIN_SCRIPT}</script>
 </body>
 </html>`;
 
