@@ -667,11 +667,14 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
       }
 
       const listItemCount = (html.match(/list_item/g) || []).length;
-      const htmlPreview = html.replace(/\s+/g, " ").slice(0, 300);
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
         send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item ${listItemCount}개)` });
-        send({ type: "progress", message: `  🔍 HTML앞300자: ${htmlPreview}` });
+        const listItemIdx = html.indexOf("list_item");
+        if (listItemIdx >= 0) {
+          const snippet = html.slice(Math.max(0, listItemIdx - 50), listItemIdx + 400).replace(/\s+/g, " ");
+          send({ type: "progress", message: `  🔍 list_item 주변: ${snippet}` });
+        }
         continue;
       }
 
