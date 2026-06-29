@@ -5908,6 +5908,30 @@ const BUY_INTERCEPT_SCRIPT = `
     }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
   }
 
+  // ── search_game으로 게임명 동적 교체 (기본 HTML은 리니지클래식) ───────
+  (function() {
+    var _gc = new URLSearchParams(location.search).get('search_game') || '5913';
+    if (_gc === '5913') return;
+    fetch('/api/games/bycode/' + encodeURIComponent(_gc), { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(g) {
+        if (!g || !g.name) return;
+        var gn = g.name;
+        function replaceText(node) {
+          if (node.nodeType === 3) {
+            if (node.nodeValue.indexOf('리니지클래식') >= 0) {
+              node.nodeValue = node.nodeValue.replace(/리니지클래식/g, gn);
+            }
+          } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+            for (var i = 0; i < node.childNodes.length; i++) replaceText(node.childNodes[i]);
+          }
+        }
+        replaceText(document.body);
+        document.title = document.title.replace(/리니지클래식/g, gn);
+      })
+      .catch(function() {});
+  })();
+
   function init() {
     // ── 상품등록(구매등록) 버튼 → /buy/register.html ──────────────────
     // trade-btn-blue 클릭: buy list에서는 모달 없이 바로 구매등록으로
