@@ -1,20 +1,10 @@
 import express, { Router, type IRouter } from "express";
-import path from "path";
-import { existsSync, readFileSync } from "fs";
+import { ADMIN_SCRIPT_CONTENT } from "../admin-script-content";
 
 const router: IRouter = Router();
 
 function loadAdminScript(): string {
-  const cwd = process.cwd();
-  const candidates = [
-    path.join(cwd, "dist/admin-script.js"),
-    path.join(cwd, "src/admin-script.js"),
-    path.join(cwd, "artifacts/api-server/dist/admin-script.js"),
-    path.join(cwd, "artifacts/api-server/src/admin-script.js"),
-  ];
-  const found = candidates.find(existsSync);
-  if (!found) return "console.error('admin-script.js not found');";
-  return readFileSync(found, "utf-8");
+  return ADMIN_SCRIPT_CONTENT;
 }
 
 const ADMIN_HTML = `<!DOCTYPE html>
@@ -496,19 +486,6 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
   } catch {
     res.send(ADMIN_LOGIN_PAGE("서버 오류가 발생했습니다."));
   }
-});
-
-router.get("/admin.js", (_req, res): void => {
-  // process.cwd() = workspace root in both dev and prod
-  const cwd = process.cwd(); // = artifacts/api-server in both dev and prod
-  const candidates = [
-    path.join(cwd, "dist/admin-script.js"), // prod (after build)
-    path.join(cwd, "src/admin-script.js"),  // dev
-  ];
-  const found = candidates.find(existsSync);
-  if (!found) { res.status(404).send("// admin-script.js not found"); return; }
-  res.set("Content-Type", "application/javascript; charset=utf-8");
-  res.sendFile(path.resolve(found));
 });
 
 export default router;

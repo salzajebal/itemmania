@@ -3,14 +3,25 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm, copyFile } from "node:fs/promises";
+import { rm, copyFile, readFile, writeFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
+async function generateAdminScriptContent() {
+  const src = path.resolve(artifactDir, "src/admin-script.js");
+  const out = path.resolve(artifactDir, "src/admin-script-content.ts");
+  const content = await readFile(src, "utf-8");
+  await writeFile(out,
+    "// AUTO-GENERATED — do not edit; edit admin-script.js instead\n" +
+    "export const ADMIN_SCRIPT_CONTENT = " + JSON.stringify(content) + ";\n"
+  );
+}
+
 async function buildAll() {
+  await generateAdminScriptContent();
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
