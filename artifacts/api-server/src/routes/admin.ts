@@ -632,9 +632,11 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
     const title = $(el).find(".kind_title").first().text().trim()
       || $(el).find(".tit").first().text().trim()
       || $(el).find("strong").first().text().trim();
-    const priceText = $(el).find(".trade_money").first().text().replace(/[^0-9]/g, "")
-      || $(el).find(".price").first().text().replace(/[^0-9]/g, "");
-    const price = parseInt(priceText, 10) || 0;
+    // 가격: "500원 (100만당)" / "10,000원" 등에서 첫 번째 숫자 덩어리만 추출
+    const priceRaw = $(el).find(".trade_money").first().text().trim()
+      || $(el).find(".price").first().text().trim();
+    const priceMatch = priceRaw.match(/^([0-9,]+)/);
+    const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
     if (!title) return;
     // 판매자 등급 파싱: credit_mark_new 클래스에서 추출
     let sellerGrade: string | null = null;
@@ -645,6 +647,8 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
         if (GRADE_CLASS_MAP[c]) { sellerGrade = GRADE_CLASS_MAP[c]; break; }
       }
     }
+    // 수량 범위 파싱: .col.quantity 또는 .quantity_box 등
+    const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
     products.push({
       itemmaniaid: tid,
       title,
@@ -655,6 +659,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       itemCategory: itemCategory || "",
       detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
       sellerGrade,
+      description: quantityText,
     });
   });
 

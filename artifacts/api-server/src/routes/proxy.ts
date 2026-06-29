@@ -1777,7 +1777,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         '</a>' +
       '</div>' +
       '<div class="col quickicon"></div>' +
-      '<div class="col quantity"></div>' +
+      '<div class="col quantity">' + (p.description || '') + '</div>' +
       '<div class="col price"><span class=trade_money>' + fmt(p.price) + '원</span></div>' +
       '<div class="col reg_date">' + timeLabel(p.createdAt) + '</div>';
     return li;
