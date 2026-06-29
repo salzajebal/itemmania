@@ -17,8 +17,6 @@ function loadAdminScript(): string {
   return readFileSync(found, "utf-8");
 }
 
-const ADMIN_SCRIPT = loadAdminScript();
-
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -424,15 +422,16 @@ tbody tr:hover{background:#fafbff}
 
 <div id="toast"></div>
 
-<script>${ADMIN_SCRIPT}</script>
+<!--ADMIN_SCRIPT-->
 </body>
 </html>`;
 
 router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (_req, res): void => {
+  const html = ADMIN_HTML.replace("<!--ADMIN_SCRIPT-->", "<script>\n" + loadAdminScript() + "\n</script>");
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
-  res.send(ADMIN_HTML);
+  res.send(html);
 });
 
 const ADMIN_LOGIN_PAGE = (error?: string) => `<!DOCTYPE html>
