@@ -1,5 +1,12 @@
 var currentTab='products';
 
+window.onerror=function(msg,src,line,col,err){
+  var d=document.createElement('div');
+  d.style='position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px 16px;z-index:99999;font-size:13px;font-family:monospace';
+  d.textContent='JS 오류: '+msg+' (line '+line+')';
+  document.body.appendChild(d);
+};
+
 async function doLogin(){
   var email=document.getElementById('loginEmail').value.trim();
   var pw=document.getElementById('loginPw').value;
@@ -637,4 +644,13 @@ function showToast(msg){
   setTimeout(function(){t.classList.remove('show');},2800);
 }
 
-checkSession();
+(async function(){
+  try{
+    await checkSession();
+  }catch(e){
+    var d=document.createElement('div');
+    d.style='position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px 16px;z-index:99999;font-size:13px;font-family:monospace';
+    d.textContent='checkSession 오류: '+e.message;
+    document.body.appendChild(d);
+  }
+})();
