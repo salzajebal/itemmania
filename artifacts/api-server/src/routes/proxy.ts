@@ -1276,10 +1276,28 @@ document.addEventListener('submit',function(e){
   if(!form||form.id!=='g_searchbar_form') return;
   e.preventDefault();
   e.stopImmediatePropagation();
+  // 자동완성으로 게임이 선택된 경우 → 해당 게임의 sell list로 이동 (code = itemmania 게임코드)
+  if(window._IM_sel_game && window._IM_sel_game.code){
+    location.href='/sell/list.html?search_game='+window._IM_sel_game.code;
+    return;
+  }
+  // 키워드 입력만 있는 경우 → /api/games/search 후 첫 결과 게임의 code로 이동
   var inp=form.querySelector('input[name="searchGameServer"],input.search_gs_name');
-  var keyword=(inp&&inp.value)||'';
+  var keyword=(inp&&inp.value.trim())||'';
   if(keyword){
-    location.href='/sell/list.html?search_word='+encodeURIComponent(keyword);
+    fetch('/api/games/search?q='+encodeURIComponent(keyword),{credentials:'include'})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(data){
+        var games=data&&data.items?data.items:(Array.isArray(data)?data:[]);
+        if(games.length && games[0].code){
+          location.href='/sell/list.html?search_game='+games[0].code;
+        } else {
+          location.href='/';
+        }
+      })
+      .catch(function(){
+        location.href='/';
+      });
   } else {
     location.href='/';
   }
@@ -3269,7 +3287,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
                   itemCategory: window._IM_sel_category || '',
                   title: title2,
                   price: parseInt(price.replace(/[^0-9]/g, ''), 10),
-                  gameCode: window._IM_sel_game ? (window._IM_sel_game.id || '') : ''
+                  gameCode: window._IM_sel_game ? (window._IM_sel_game.code || '') : ''
                 });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
