@@ -1971,8 +1971,20 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         var loadEl = document.getElementById('_im_loading');
         if (loadEl) loadEl.remove();
 
-        // 전체 건수 업데이트 (우리 DB + 아이템매니아 원본)
-        var totalCount = ourTotal + origNormalCount;
+        // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
+        var filteredOrig = itemCat ? origNormalItems.filter(function(el) {
+          var goodsEl = el.querySelector('[data-search=goods]');
+          return goodsEl && goodsEl.textContent.trim() === itemCat;
+        }) : origNormalItems;
+
+        // ── 프리미엄 섹션 itemCategory 필터 ────────────────────────
+        var filteredPremium = itemCat ? origPremiumItems.filter(function(el) {
+          var goodsEl = el.querySelector('[data-search=goods]');
+          return goodsEl && goodsEl.textContent.trim() === itemCat;
+        }) : origPremiumItems;
+
+        // 전체 건수 업데이트 (우리 DB + 필터된 아이템매니아 원본)
+        var totalCount = ourTotal + filteredOrig.length;
         if (countEl) countEl.textContent = fmt(totalCount) + '건';
 
         // 기존 원본 아이템매니아 리스팅 제거 (다시 정렬해서 붙일 것)
@@ -1984,12 +1996,6 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 
         // ── 우리 DB 상품 카드 생성 ────────────────────────────────
         var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
-
-        // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
-        var filteredOrig = itemCat ? origNormalItems.filter(function(el) {
-          var goodsEl = el.querySelector('[data-search=goods]');
-          return goodsEl && goodsEl.textContent.trim() === itemCat;
-        }) : origNormalItems;
 
         // ── 업로드 시간순 병합 (최신 순) ──────────────────────────
         // 아이템매니아 원본은 이미 최신순. 같은 분(HH:MM) 내 순서는 원본 순서 보존.
@@ -2016,8 +2022,8 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         }
 
         // 프리미엄 리스트: 원본 복원
-        if (premiumList && origPremiumItems.length > 0) {
-          origPremiumItems.forEach(function(el) { premiumList.appendChild(el); });
+        if (premiumList && filteredPremium.length > 0) {
+          filteredPremium.forEach(function(el) { premiumList.appendChild(el); });
         }
 
         // 페이지네이션 (우리 DB 기준)
