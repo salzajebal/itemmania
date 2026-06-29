@@ -267,15 +267,49 @@ tbody tr:hover{background:#fafbff}
           <div id="discoverResult" style="display:none;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;max-height:400px;overflow-y:auto;margin-bottom:16px;white-space:pre-wrap"></div>
 
           <div id="crawlStatus" style="display:none">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <div id="crawlSpinner" style="width:20px;height:20px;border:3px solid #e0e0e0;border-top-color:#159EFD;border-radius:50%;animation:spin 0.8s linear infinite"></div>
-              <span id="crawlStatusText" style="font-size:14px;color:#333">크롤링 중...</span>
+            <!-- 헤더: 스피너 + 상태텍스트 + 타이머 -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div id="crawlSpinner" style="width:18px;height:18px;border:3px solid #e0e0e0;border-top-color:#159EFD;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0"></div>
+              <span id="crawlStatusText" style="font-size:14px;color:#333;font-weight:600;flex:1">크롤링 중...</span>
+              <span id="crawlTimer" style="font-size:13px;color:#888;font-family:monospace;min-width:60px;text-align:right">00:00</span>
             </div>
-            <div id="crawlLiveLog" style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:12px 16px;font-family:monospace;font-size:12px;max-height:320px;overflow-y:auto;line-height:1.8;white-space:pre-wrap"></div>
+
+            <!-- 전체 진행률 바 -->
+            <div style="margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:5px">
+                <span id="crawlProgressLabel">준비 중...</span>
+                <span id="crawlProgressPct">0%</span>
+              </div>
+              <div style="background:#e9ecef;border-radius:6px;height:10px;overflow:hidden">
+                <div id="crawlProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#159EFD,#0d7edf);border-radius:6px;transition:width 0.4s ease"></div>
+              </div>
+            </div>
+
+            <!-- 실시간 통계 -->
+            <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+              <div style="flex:1;min-width:100px;background:#f0f9ff;border:1px solid #b3d8ff;border-radius:8px;padding:10px 14px;text-align:center">
+                <div id="crawlSavedCount" style="font-size:22px;font-weight:800;color:#159EFD;line-height:1.2">0</div>
+                <div style="font-size:11px;color:#666;margin-top:2px">저장된 상품</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:#fff8f0;border:1px solid #ffd599;border-radius:8px;padding:10px 14px;text-align:center">
+                <div id="crawlFailedCount" style="font-size:22px;font-weight:800;color:#e57c00;line-height:1.2">0</div>
+                <div style="font-size:11px;color:#666;margin-top:2px">실패</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:#f0fff4;border:1px solid #9be6b0;border-radius:8px;padding:10px 14px;text-align:center">
+                <div id="crawlStepCount" style="font-size:22px;font-weight:800;color:#28a745;line-height:1.2">0</div>
+                <div style="font-size:11px;color:#666;margin-top:2px">완료 페이지</div>
+              </div>
+            </div>
+
+            <!-- 게임별 상태 카드 -->
+            <div id="crawlGameCards" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+
+            <!-- 실시간 로그 -->
+            <div id="crawlLiveLog" style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;max-height:260px;overflow-y:auto;line-height:1.7;white-space:pre-wrap"></div>
           </div>
 
-          <div id="crawlResult" style="display:none;background:#f8f9fa;border-radius:8px;padding:16px;margin-top:12px">
-            <div id="crawlResultSummary" style="font-weight:700;margin-bottom:10px"></div>
+          <div id="crawlResult" style="display:none;background:#f0fff4;border:1px solid #9be6b0;border-radius:8px;padding:16px;margin-top:12px">
+            <div id="crawlResultSummary" style="font-weight:700;font-size:15px;margin-bottom:8px"></div>
             <div id="crawlResultLog" style="font-size:12px;color:#555;max-height:200px;overflow-y:auto;line-height:1.6;font-family:monospace;white-space:pre-wrap"></div>
           </div>
 

@@ -158,6 +158,67 @@ function updateCrawlCostEstimate(){
   }
 }
 
+var crawlTimerInterval=null;
+var crawlStartTime=0;
+var crawlGameNames=[];
+
+function updateCrawlTimer(){
+  var elapsed=Math.floor((Date.now()-crawlStartTime)/1000);
+  var mm=String(Math.floor(elapsed/60)).padStart(2,'0');
+  var ss=String(elapsed%60).padStart(2,'0');
+  var el=document.getElementById('crawlTimer');
+  if(el)el.textContent=mm+':'+ss;
+}
+
+function initGameCards(games){
+  crawlGameNames=games||[];
+  var container=document.getElementById('crawlGameCards');
+  if(!container)return;
+  container.innerHTML='';
+  crawlGameNames.forEach(function(name,i){
+    var card=document.createElement('div');
+    card.id='crawlGameCard-'+i;
+    card.style.cssText='padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#f0f0f0;color:#888;border:1.5px solid #ddd;display:flex;align-items:center;gap:6px;transition:all 0.3s';
+    card.innerHTML='<span>⏸</span><span>'+escHtml(name)+'</span><span class="card-saved" style="font-size:11px;font-weight:400;color:#aaa"></span>';
+    container.appendChild(card);
+  });
+}
+
+function setGameCardState(idx,state,saved){
+  var card=document.getElementById('crawlGameCard-'+idx);
+  if(!card)return;
+  var configs={
+    waiting:{bg:'#f0f0f0',color:'#888',border:'#ddd',icon:'⏸'},
+    running:{bg:'#e8f4ff',color:'#159EFD',border:'#159EFD',icon:'🔄'},
+    ok:{bg:'#f0fff4',color:'#28a745',border:'#9be6b0',icon:'✅'},
+    warn:{bg:'#fff8e1',color:'#e57c00',border:'#ffd599',icon:'⚠️'},
+    fail:{bg:'#fff0f0',color:'#dc3545',border:'#f5c6cb',icon:'❌'}
+  };
+  var cfg=configs[state]||configs.waiting;
+  card.style.background=cfg.bg;
+  card.style.color=cfg.color;
+  card.style.borderColor=cfg.border;
+  card.querySelector('span').textContent=cfg.icon;
+  var savedEl=card.querySelector('.card-saved');
+  if(savedEl&&saved!=null)savedEl.textContent=' '+saved+'개';
+}
+
+function updateProgress(completed,total,saved,failed){
+  var pct=total>0?Math.round(completed/total*100):0;
+  var bar=document.getElementById('crawlProgressBar');
+  var pctEl=document.getElementById('crawlProgressPct');
+  var labelEl=document.getElementById('crawlProgressLabel');
+  var savedEl=document.getElementById('crawlSavedCount');
+  var failedEl=document.getElementById('crawlFailedCount');
+  var stepEl=document.getElementById('crawlStepCount');
+  if(bar)bar.style.width=pct+'%';
+  if(pctEl)pctEl.textContent=pct+'%';
+  if(labelEl)labelEl.textContent=completed+' / '+total+' 페이지 완료';
+  if(savedEl)savedEl.textContent=saved;
+  if(failedEl)failedEl.textContent=failed;
+  if(stepEl)stepEl.textContent=completed;
+}
+
 async function startCrawl(){
   var selectedIds=Array.from(crawlSelectedGames);
   if(selectedIds.length===0){showToast('게임을 선택하세요.');return;}
@@ -168,9 +229,14 @@ async function startCrawl(){
   document.getElementById('crawlBtn').disabled=true;
   document.getElementById('crawlStatus').style.display='block';
   document.getElementById('crawlResult').style.display='none';
-  document.getElementById('crawlStatusText').textContent='크롤링 중... (게임 '+selectedIds.length+'개, '+pages+'페이지'+(withDetail?', 상세 포함':'')+')';
+  document.getElementById('crawlStatusText').textContent='연결 중...';
+  document.getElementById('crawlTimer').textContent='00:00';
+  updateProgress(0,1,0,0);
+
   var liveLog=document.getElementById('crawlLiveLog');
   liveLog.textContent='';
+
+  var gameSaved={};
 
   function appendLog(msg,color){
     var span=document.createElement('span');
@@ -179,6 +245,10 @@ async function startCrawl(){
     liveLog.appendChild(span);
     liveLog.scrollTop=liveLog.scrollHeight;
   }
+
+  crawlStartTime=Date.now();
+  if(crawlTimerInterval)clearInterval(crawlTimerInterval);
+  crawlTimerInterval=setInterval(updateCrawlTimer,1000);
 
   try{
     var body={gameIds:selectedIds,pages:pages,crawlDetail:withDetail};
@@ -208,30 +278,63 @@ async function startCrawl(){
         try{
           var ev=JSON.parse(line.slice(6));
           lastData=ev;
-          if(ev.message){
-            var color='#d4d4d4';
-            if(ev.type==='ok')color='#6fcf97';
-            else if(ev.type==='fail')color='#eb5757';
-            else if(ev.type==='warn')color='#f2c94c';
-            else if(ev.type==='game')color='#56b6c2';
-            else if(ev.type==='done')color='#6fcf97';
-            appendLog(ev.message,color);
+
+          /* ── 이벤트 타입별 UI 업데이트 ── */
+          if(ev.type==='init'){
+            initGameCards(ev.games||[]);
+            updateProgress(0,ev.totalSteps||1,0,0);
+            document.getElementById('crawlStatusText').textContent=
+              '크롤링 중 (게임 '+ev.totalGames+'개 × '+ev.totalPages+'페이지)';
+            appendLog(ev.message,'#56b6c2');
+          } else if(ev.type==='session_ok'){
+            appendLog(ev.message,'#6fcf97');
+          } else if(ev.type==='game'){
+            setGameCardState(ev.gameIndex,'running',null);
+            document.getElementById('crawlStatusText').textContent='['+ev.gameName+'] 크롤 중...';
+            appendLog(ev.message,'#56b6c2');
+          } else if(ev.type==='progress'){
+            updateProgress(ev.completedSteps||0,ev.totalSteps||1,ev.totalSaved||0,ev.totalFailed||0);
+            appendLog(ev.message,'#d4d4d4');
+          } else if(ev.type==='ok'){
+            gameSaved[ev.gameIndex]=(gameSaved[ev.gameIndex]||0)+(ev.pageSaved||0);
+            setGameCardState(ev.gameIndex,ev.page>=ev.totalPages?'ok':'running',gameSaved[ev.gameIndex]);
+            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+            appendLog(ev.message,'#6fcf97');
+          } else if(ev.type==='warn'){
+            setGameCardState(ev.gameIndex,'warn',gameSaved[ev.gameIndex]||0);
+            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+            appendLog(ev.message,'#f2c94c');
+          } else if(ev.type==='fail'){
+            setGameCardState(ev.gameIndex,'fail',gameSaved[ev.gameIndex]||0);
+            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+            appendLog(ev.message,'#eb5757');
+          } else if(ev.type==='debug'){
+            appendLog(ev.message,'#888');
+          } else if(ev.type==='done'){
+            updateProgress(ev.totalSteps||ev.completedSteps,ev.totalSteps||1,ev.upserted,ev.failed);
+            appendLog(ev.message,'#6fcf97');
           }
         }catch(e){}
       }
     }
 
+    clearInterval(crawlTimerInterval);
     document.getElementById('crawlSpinner').style.display='none';
+
     if(lastData&&lastData.type==='done'){
-      var summary='✅ 완료: '+lastData.upserted+'개 저장, '+lastData.failed+'개 실패';
+      var summary='✅ 완료: '+lastData.upserted+'개 저장';
+      if(lastData.failed>0)summary+=' / '+lastData.failed+'개 실패';
       if(withDetail)summary+=' / 상세 '+lastData.detailFetched+'개';
       document.getElementById('crawlStatusText').textContent=summary;
+      document.getElementById('crawlResult').style.display='block';
+      document.getElementById('crawlResultSummary').textContent=summary;
     }
     loadStats();
     loadProducts();
   }catch(e){
+    clearInterval(crawlTimerInterval);
     appendLog('\\n❌ 오류: '+e.message,'#eb5757');
-    document.getElementById('crawlStatusText').textContent='크롤링 오류';
+    document.getElementById('crawlStatusText').textContent='크롤링 오류: '+e.message;
   }finally{
     document.getElementById('crawlBtn').disabled=false;
     document.getElementById('crawlSpinner').style.display='';

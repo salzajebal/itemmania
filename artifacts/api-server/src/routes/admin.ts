@@ -708,23 +708,39 @@ router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
   const maxPages = Math.min(Math.max(1, pages), 5);
+  const totalGames = targetGames.length;
+  const totalSteps = totalGames * maxPages;
 
   let totalUpserted = 0;
   let totalFailed = 0;
   let detailFetched = 0;
   let detailFailed = 0;
+  let completedSteps = 0;
 
-  send({ type: "progress", message: `  🌐 세션 초기화 중... (session #${sessionNumber})` });
+  send({ type: "init", totalGames, totalPages: maxPages, totalSteps,
+    games: targetGames.map(g => g.name),
+    message: `🌐 세션 초기화 중... (session #${sessionNumber})` });
   await initSession(apiKey, sessionNumber);
-  send({ type: "progress", message: `  ✓ 세션 초기화 완료` });
+  send({ type: "session_ok", message: `✓ 세션 초기화 완료` });
 
-  for (const game of targetGames) {
-    send({ type: "game", message: `\n▶ [${game.name}] 시작` });
+  for (let gi = 0; gi < targetGames.length; gi++) {
+    const game = targetGames[gi];
+    send({ type: "game", gameIndex: gi, gameName: game.name,
+      message: `▶ [${game.name}] 시작` });
+
     for (let page = 1; page <= maxPages; page++) {
-      send({ type: "progress", message: `  ${page}/${maxPages}페이지 크롤 중...` });
+      send({ type: "progress", gameIndex: gi, gameName: game.name,
+        page, totalPages: maxPages, completedSteps, totalSteps,
+        totalSaved: totalUpserted, totalFailed,
+        message: `  ${page}/${maxPages}페이지 크롤 중...` });
+
       const {html, error} = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
       if (!html) {
-        send({ type: "fail", message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
+        completedSteps++;
+        send({ type: "fail", gameIndex: gi, gameName: game.name,
+          page, totalPages: maxPages, completedSteps, totalSteps,
+          totalSaved: totalUpserted, totalFailed,
+          message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
         totalFailed++;
         continue;
       }
@@ -735,12 +751,16 @@ router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
       const apiMatches = (html.match(/["'](\/api\/[^"']{3,60})["']/g) || []).slice(0, 5).join(" | ");
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
-        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount}, __NEXT_DATA__:${hasNextData})` });
-        if (apiMatches) send({ type: "progress", message: `  🔍 API URL 패턴: ${apiMatches}` });
+        completedSteps++;
+        send({ type: "warn", gameIndex: gi, gameName: game.name,
+          page, totalPages: maxPages, completedSteps, totalSteps,
+          totalSaved: totalUpserted, totalFailed,
+          message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount}, __NEXT_DATA__:${hasNextData})` });
+        if (apiMatches) send({ type: "debug", message: `  🔍 API URL 패턴: ${apiMatches}` });
         const dataTidIdx = html.indexOf("data-tid=");
         if (dataTidIdx >= 0) {
           const snippet = html.slice(Math.max(0, dataTidIdx - 20), dataTidIdx + 300).replace(/\s+/g, " ");
-          send({ type: "progress", message: `  🔍 data-tid 주변: ${snippet}` });
+          send({ type: "debug", message: `  🔍 data-tid 주변: ${snippet}` });
         }
         continue;
       }
@@ -784,13 +804,18 @@ router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
         }
       }
 
-      send({ type: "ok", message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
+      completedSteps++;
+      send({ type: "ok", gameIndex: gi, gameName: game.name,
+        page, totalPages: maxPages, pageSaved, completedSteps, totalSteps,
+        totalSaved: totalUpserted, totalFailed, detailFetched,
+        message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
       if (page < maxPages) await new Promise(r => setTimeout(r, 500));
     }
   }
 
   send({ type: "done", upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed,
-    message: `\n✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
+    completedSteps: totalSteps, totalSteps,
+    message: `✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
   res.end();
 });
 
