@@ -191,14 +191,14 @@ const buyMyroomIngHtml        = loadSellHtml("buy/buy_ing.html");
 const SELL_HTML_MAP: Record<string, string> = {
   "5913": "", // 리니지클래식 — 별도 변수로 처리
   "5233": "", // 메이플스토리월드 — 별도 변수로 처리
-  "138":  sellMaplestoryHtml,
-  "4696": sellOdinHtml,
-  "155":  sellMabinogiHtml,
-  "2696": sellLostarkHtml,
-  "3449": sellLineageMHtml,
-  "101":  sellGeosangHtml,
-  "5799": sellAion2Html,
-  "281":  sellDnfHtml,
+  "8458": sellMaplestoryHtml,  // 메이플스토리
+  "4696": sellOdinHtml,        // 오딘
+  "155":  sellMabinogiHtml,    // 마비노기
+  "2696": sellLostarkHtml,     // 로스트아크
+  "3449": sellLineageMHtml,    // 리니지M
+  "101":  sellGeosangHtml,     // 거상
+  "5799": sellAion2Html,       // 아이온2
+  "281":  sellDnfHtml,         // 던전앤파이터
 };
 
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
