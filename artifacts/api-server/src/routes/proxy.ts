@@ -1015,6 +1015,7 @@ function mapImPath(rawPath: string): string {
   if (base === '/sell' || base === '/sell/')                     return '/sell/register.html';
   if (base.startsWith('/sell/'))                                 return '/sell/list.html' + qs;
   if (base.startsWith('/buy/register'))                          return '/buy/register.html' + qs;
+  if (base.startsWith('/buy/index_view'))                        return '/buy/index_view.html' + qs;
   if (base.startsWith('/buy/application'))                       return '/buy/application.html' + qs;
   if (base.startsWith('/buy/list'))                              return '/buy/list.html' + qs;
   if (base === '/buy' || base === '/buy/')                       return '/buy/register.html';
@@ -1107,6 +1108,7 @@ var ROUTE_MAP=[
   ['/sell/','/sell/register.html'],
   ['/sell','/sell/register.html'],
   ['/buy/register.html','/buy/register.html'],
+  ['/buy/index_view.html','/buy/index_view.html'],
   ['/buy/application.html','/buy/application.html'],
   ['/buy/list.html','/buy/list.html'],
   ['/buy/','/buy/register.html'],
@@ -3185,8 +3187,13 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     if (regBtn && !regBtn._imBound) {
       regBtn._imBound = true;
       regBtn.addEventListener('click', function() {
-        var gc = data.gameCode || '';
-        location.href = '/buy/list.html' + (gc ? '?search_game=' + gc : '');
+        var pid = data.id || '';
+        var gc  = data.gameCode || '';
+        if (pid) {
+          location.href = '/buy/index_view.html?id=' + pid + (gc ? '&gid=' + gc : '');
+        } else {
+          location.href = '/buy/list.html' + (gc ? '?search_game=' + gc : '');
+        }
       });
     }
     // 취소 버튼
@@ -3281,13 +3288,16 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             })
             .then(function(r) {
               if (r.ok) {
-                fillAndShowBuyPopup({
-                  gameName: game2,
-                  serverName: server2,
-                  itemCategory: window._IM_sel_category || '',
-                  title: title2,
-                  price: parseInt(price.replace(/[^0-9]/g, ''), 10),
-                  gameCode: window._IM_sel_game ? (window._IM_sel_game.code || '') : ''
+                return r.json().then(function(rd) {
+                  fillAndShowBuyPopup({
+                    id: rd.id || '',
+                    gameName: game2,
+                    serverName: server2,
+                    itemCategory: window._IM_sel_category || '',
+                    title: title2,
+                    price: parseInt(price.replace(/[^0-9]/g, ''), 10),
+                    gameCode: window._IM_sel_game ? (window._IM_sel_game.code || '') : ''
+                  });
                 });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
@@ -7209,6 +7219,128 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
   const patched = sellIndexViewHtml
     .replace(/<meta[^>]+content-security-policy[^>]*>/gi, '')
     .replace('</main>', SELL_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
+  res.send(patched);
+});
+
+// 구매등록 완료 페이지 (/buy/index_view.html?id=...&gid=...)
+router.get("/buy/index_view.html", async (req, res): Promise<void> => {
+  if (!sellIndexViewHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+
+  const BUY_INDEX_VIEW_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  var params    = new URLSearchParams(location.search);
+  var productId = params.get('id');
+  var gid       = params.get('gid');
+
+  // "추가 구매등록" / "구매 목록 보기" 버튼 패치
+  function buildListUrl(gameId) {
+    var url = '/buy/list.html';
+    if (gameId) url += '?search_game=' + encodeURIComponent(gameId);
+    return url;
+  }
+
+  function patchButtons(listUrl) {
+    var btnList = document.getElementById('btn_list');
+    if (!btnList) return;
+    var links = btnList.querySelectorAll('a');
+    if (links[0]) {
+      links[0].textContent = '추가 구매등록하기';
+      links[0].removeAttribute('href');
+      links[0].style.cursor = 'pointer';
+      links[0].addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = '/buy/register.html';
+      });
+    }
+    if (links[1]) links[1].style.display = 'none';
+    if (links[2]) {
+      links[2].textContent = '구매 목록 보기';
+      links[2].className = 'btn_gray';
+      links[2].removeAttribute('href');
+      links[2].style.cursor = 'pointer';
+      links[2].addEventListener('click', function(e) {
+        e.preventDefault();
+        location.href = listUrl;
+      });
+    }
+  }
+
+  // 페이지 내 "판매" 텍스트를 "구매"로 교체
+  function replaceText(node) {
+    if (node.nodeType === 3) {
+      node.nodeValue = node.nodeValue
+        .replace(/판매금액/g, '구매금액')
+        .replace(/판매수량/g, '구매수량')
+        .replace(/일반판매/g, '일반구매')
+        .replace(/상품이 정상적으로 등록되었습니다/g, '구매 등록이 완료되었습니다')
+        .replace(/팝니다/g, '삽니다');
+    } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+      for (var i = 0; i < node.childNodes.length; i++) replaceText(node.childNodes[i]);
+    }
+  }
+  replaceText(document.body);
+  document.title = document.title.replace(/판매|상품등록/, '구매등록');
+
+  if (!productId) {
+    patchButtons(buildListUrl(gid));
+    return;
+  }
+
+  fetch('/api/products/' + productId, { credentials: 'include' })
+    .then(function(r) { return r.json(); })
+    .then(function(p) {
+      document.querySelectorAll('#table_wrapper table tbody tr').forEach(function(row) {
+        var th = row.querySelector('th');
+        var td = row.querySelector('td');
+        if (!th || !td) return;
+        var label = th.textContent.trim();
+        if (label === '거래번호') {
+          td.textContent = '#' + p.id;
+        } else if (label === '카테고리') {
+          var cat = p.gameName || '';
+          if (p.serverName)   cat += ' > ' + p.serverName;
+          if (p.itemCategory) cat += ' > ' + p.itemCategory;
+          td.textContent = cat;
+        } else if (label === '거래유형' || label === '일반판매') {
+          td.textContent = '일반구매';
+        } else if (label === '판매금액' || label === '구매금액') {
+          td.textContent = Number(p.price || 0).toLocaleString() + '원';
+        } else if (label === '제목') {
+          td.textContent = p.title || '';
+        } else if (label === '상품종류') {
+          td.textContent = p.itemCategory || '기타';
+        } else if (label === '판매수량' || label === '구매수량') {
+          td.textContent = '-';
+        } else if (label.includes('상품등록정보')) {
+          td.innerHTML = '구매 등록이 완료되었습니다.';
+        }
+      });
+      var resolvedGid = gid;
+      if (!resolvedGid && p.gameName) {
+        fetch('/api/games/search?q=' + encodeURIComponent(p.gameName), { credentials: 'include' })
+          .then(function(r2) { return r2.json(); })
+          .then(function(games) {
+            if (games && games.length > 0) resolvedGid = games[0].code;
+            patchButtons(buildListUrl(resolvedGid));
+          })
+          .catch(function() { patchButtons(buildListUrl(null)); });
+      } else {
+        patchButtons(buildListUrl(resolvedGid));
+      }
+    })
+    .catch(function() { patchButtons(buildListUrl(gid)); });
+})();
+</script>`;
+
+  const patched = sellIndexViewHtml
+    .replace(/<meta[^>]+content-security-policy[^>]*>/gi, '')
+    .replace('</main>', BUY_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
   res.send(patched);
 });
 
