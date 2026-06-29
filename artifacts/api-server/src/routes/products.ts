@@ -176,31 +176,35 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 router.get("/products/my/stats", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
 
+  // 판매등록: category='sell' 상품만 집계 (구매등록 글 제외)
   const [sellTotal] = await db
     .select({ cnt: count() })
     .from(productsTable)
-    .where(eq(productsTable.sellerId, userId));
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "sell")));
 
   const [sellActive] = await db
     .select({ cnt: count() })
     .from(productsTable)
-    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.status, "active")));
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "sell"), eq(productsTable.status, "active")));
 
   const [sellPending] = await db
     .select({ cnt: count() })
     .from(ordersTable)
     .where(and(eq(ordersTable.sellerId, userId), eq(ordersTable.status, "pending")));
 
+  // 구매등록: 내가 올린 구매 글(products category='buy') 수
   const [buyTotal] = await db
     .select({ cnt: count() })
-    .from(ordersTable)
-    .where(eq(ordersTable.buyerId, userId));
+    .from(productsTable)
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "buy")));
 
+  // 입금예정: 거래 성사 후 결제 대기 (orders buyerId=나, status=pending)
   const [buyPending] = await db
     .select({ cnt: count() })
     .from(ordersTable)
     .where(and(eq(ordersTable.buyerId, userId), eq(ordersTable.status, "pending")));
 
+  // 구매중: 판매자가 상품 인계 완료 또는 구매자 인수 확인 단계
   const [buyProcessing] = await db
     .select({ cnt: count() })
     .from(ordersTable)
@@ -216,12 +220,24 @@ router.get("/products/my/stats", requireAuth, async (req, res): Promise<void> =>
   });
 });
 
+// 내 판매 목록 (category='sell'만)
 router.get("/products/my/list", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const items = await db
     .select()
     .from(productsTable)
-    .where(eq(productsTable.sellerId, userId))
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "sell")))
+    .orderBy(desc(productsTable.createdAt));
+  res.json(items.map(formatProduct));
+});
+
+// 내 구매등록 목록 (category='buy'만)
+router.get("/products/my/buy-list", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const items = await db
+    .select()
+    .from(productsTable)
+    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "buy")))
     .orderBy(desc(productsTable.createdAt));
   res.json(items.map(formatProduct));
 });
