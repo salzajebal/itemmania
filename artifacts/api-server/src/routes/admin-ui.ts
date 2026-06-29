@@ -504,35 +504,31 @@ async function discoverApi(){
   var key=document.getElementById('crawlApiKeyInput').value.trim();
   var btn=document.getElementById('discoverBtn');
   var resultEl=document.getElementById('discoverResult');
-  btn.disabled=true;btn.textContent='🔍 탐지 중... (30~60초)';
-  resultEl.style.display='block';resultEl.textContent='itemmania.com JS 파일 분석 중...\n';
+  btn.disabled=true;btn.textContent='API 탐지 중...';
+  resultEl.style.display='block';resultEl.textContent='itemmania.com JS 분석 중...';
   try{
     var r=await fetch('/api/admin/crawl/discover?scraperApiKey='+encodeURIComponent(key)+'&gameId=138',{credentials:'include'});
     var d=await r.json();
-    if(!r.ok){resultEl.textContent='❌ 오류: '+(d.error||'실패');return;}
-    var out='=== HTML 분석 결과 ===\n';
-    out+='HTML 크기: '+d.htmlSize+'바이트\n';
-    out+='list_item 수: '+d.listItemCount+', data-tid 수: '+d.dataTidCount+', __NEXT_DATA__: '+d.hasNextData+'\n\n';
-    if(d.scriptSrcs&&d.scriptSrcs.length){
-      out+='=== 발견된 JS 파일 ===\n'+d.scriptSrcs.join('\n')+'\n\n';
-    }else{
-      out+='=== JS 파일 없음 ===\n\n';
-    }
-    if(d.ajaxInHtml&&d.ajaxInHtml.length){
-      out+='=== HTML 내 URL 패턴 ===\n'+d.ajaxInHtml.join('\n')+'\n\n';
-    }
+    if(!r.ok){resultEl.textContent='오류: '+(d.error||'실패');return;}
+    var lines=[];
+    lines.push('=== HTML 분석 결과 ===');
+    lines.push('HTML 크기: '+d.htmlSize+'바이트');
+    lines.push('list_item: '+d.listItemCount+', data-tid: '+d.dataTidCount+', __NEXT_DATA__: '+d.hasNextData);
+    lines.push('');
+    if(d.scriptSrcs&&d.scriptSrcs.length){lines.push('=== JS 파일 ===');d.scriptSrcs.forEach(function(s){lines.push(s);});lines.push('');}
+    else{lines.push('=== JS 파일 없음 ===');lines.push('');}
+    if(d.ajaxInHtml&&d.ajaxInHtml.length){lines.push('=== HTML URL 패턴 ===');d.ajaxInHtml.forEach(function(u){lines.push(u);});lines.push('');}
     if(d.jsFindings&&d.jsFindings.length){
       d.jsFindings.forEach(function(f){
-        out+='=== JS 파일: '+f.url+' ===\n'+f.patterns.join('\n')+'\n\n';
+        lines.push('=== JS: '+f.url+' ===');
+        f.patterns.forEach(function(p){lines.push(p);});
+        lines.push('');
       });
-    }else{
-      out+='=== JS 파일에서 API 패턴 없음 ===\n';
-    }
-    resultEl.textContent=out;
-  }catch(e){resultEl.textContent='❌ 서버 오류: '+e.message;}
-  finally{btn.disabled=false;btn.textContent='🔍 API 자동 탐지';}
+    }else{lines.push('=== JS API 패턴 없음 ===');}
+    resultEl.textContent=lines.join('\n');
+  }catch(e){resultEl.textContent='서버 오류: '+e.message;}
+  finally{btn.disabled=false;btn.textContent='API 자동 탐지';}
 }
-
 async function testApiKey(){
   var key=document.getElementById('crawlApiKeyInput').value.trim();
   if(!key){document.getElementById('crawlApiKeyStatus').textContent='키를 입력하세요.';return;}
