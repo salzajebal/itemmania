@@ -413,7 +413,7 @@ tbody tr:hover{background:#fafbff}
 </body>
 </html>`;
 
-router.get(["/admin", "/admin/"], (_req, res): void => {
+router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (_req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
