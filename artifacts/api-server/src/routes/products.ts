@@ -110,7 +110,7 @@ router.get("/products", async (req, res): Promise<void> => {
       status: productsTable.status,
       crawledAt: productsTable.crawledAt,
       createdAt: productsTable.createdAt,
-      sellerGrade: usersTable.grade,
+      sellerGrade: sql<string | null>`coalesce(${usersTable.grade}, ${productsTable.sellerGrade})`,
     })
     .from(productsTable)
     .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))

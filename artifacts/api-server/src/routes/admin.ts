@@ -476,10 +476,14 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
   category: string;
   itemCategory: string;
   detailUrl: string;
+  sellerGrade: string | null;
 }> {
   const $ = cheerio.load(html);
   const products: ReturnType<typeof parseProductsFromHtml> = [];
   const gameFallbackName = GAME_LIST.find(g => g.id === gameId)?.name || "";
+  const GRADE_CLASS_MAP: Record<string, string> = {
+    vip: "vip", platinum: "platinum", gold: "gold", silver: "silver", bronze: "bronze",
+  };
 
   // 전략 1: li[data-tid] — 실제 data-tid 속성이 있는 모든 요소
   $("[data-tid]").each((_i, el) => {
@@ -496,6 +500,15 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       || $(el).find(".price").first().text().replace(/[^0-9]/g, "");
     const price = parseInt(priceText, 10) || 0;
     if (!title) return;
+    // 판매자 등급 파싱: credit_mark_new 클래스에서 추출
+    let sellerGrade: string | null = null;
+    const markEl = $(el).find(".credit_mark_new, .credit_mark").first();
+    if (markEl.length) {
+      const cls = (markEl.attr("class") || "").split(/\s+/);
+      for (const c of cls) {
+        if (GRADE_CLASS_MAP[c]) { sellerGrade = GRADE_CLASS_MAP[c]; break; }
+      }
+    }
     products.push({
       itemmaniaid: tid,
       title,
@@ -505,6 +518,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       category: "sell",
       itemCategory: itemCategory || "",
       detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+      sellerGrade,
     });
   });
 
@@ -548,6 +562,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
           category: "sell",
           itemCategory: String(it["goods_kind"] || it["itemCategory"] || ""),
           detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+          sellerGrade: null,
         });
       }
     } catch { /* ignore */ }
@@ -605,6 +620,7 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
             itemCategory: p.itemCategory,
             gameName: p.gameName,
             serverName: p.serverName,
+            sellerGrade: p.sellerGrade ?? null,
             detailUrl: p.detailUrl,
             status: "active",
             crawledAt: new Date(),
@@ -616,6 +632,7 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
               gameName: p.gameName,
               serverName: p.serverName,
               itemCategory: p.itemCategory,
+              sellerGrade: p.sellerGrade ?? null,
               detailUrl: p.detailUrl,
               status: "active",
               crawledAt: new Date(),
@@ -735,12 +752,14 @@ router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
             itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
             category: p.category, itemCategory: p.itemCategory,
             gameName: p.gameName, serverName: p.serverName,
+            sellerGrade: p.sellerGrade ?? null,
             detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
           }).onConflictDoUpdate({
             target: productsTable.itemmaniaid,
             set: {
               title: p.title, price: p.price, gameName: p.gameName,
               serverName: p.serverName, itemCategory: p.itemCategory,
+              sellerGrade: p.sellerGrade ?? null,
               detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
             },
           });

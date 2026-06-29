@@ -14,6 +14,7 @@ export const productsTable = pgTable("products", {
   serverName: text("server_name"),
   sellerId: integer("seller_id"),
   sellerName: text("seller_name"),
+  sellerGrade: text("seller_grade"),
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),
   detailUrl: text("detail_url"),

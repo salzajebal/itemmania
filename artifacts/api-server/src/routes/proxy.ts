@@ -1913,18 +1913,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     });
   }
 
-  // 우리 DB 상품 카드에 뱃지 추가
+  // 우리 DB 상품 카드 (배지 없음 — 원본 카드와 동일 구조)
   function makeCardWithBadge(p, type) {
-    var li = makeCard(p, type);
-    // 제목 앞에 [이테매니아] 뱃지 삽입
-    var subjectDiv = li.querySelector('.col.subject_info');
-    if (subjectDiv) {
-      var badge = document.createElement('span');
-      badge.style.cssText = 'display:inline-block;margin-bottom:4px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;color:#fff;background:#159EFD;vertical-align:middle;margin-right:4px';
-      badge.textContent = '우리 사이트';
-      subjectDiv.insertBefore(badge, subjectDiv.firstChild);
-    }
-    return li;
+    return makeCard(p, type);
   }
 
   function loadList() {
