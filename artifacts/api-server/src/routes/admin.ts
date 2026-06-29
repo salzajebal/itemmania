@@ -102,6 +102,7 @@ async function runCrawlJob(
             gameName: p.gameName, serverName: p.serverName,
             sellerGrade: p.sellerGrade ?? null,
             detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+            ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
           }).onConflictDoUpdate({
             target: productsTable.itemmaniaid,
             set: { title: p.title, price: p.price, gameName: p.gameName,
@@ -610,6 +611,27 @@ function parseDetailFromHtml(html: string): {
   return { description, thumbnailUrl, sellerName };
 }
 
+function parseRegDate(txt: string): Date | null {
+  if (!txt) return null;
+  txt = txt.trim();
+  const now = Date.now();
+  let m: RegExpMatchArray | null;
+  if ((m = txt.match(/^(\d+)초\s*전$/))) return new Date(now - parseInt(m[1]) * 1000);
+  if ((m = txt.match(/^(\d+)분\s*전$/))) return new Date(now - parseInt(m[1]) * 60000);
+  if ((m = txt.match(/^(\d+)시간\s*전$/))) return new Date(now - parseInt(m[1]) * 3600000);
+  if ((m = txt.match(/^(\d{1,2}):(\d{2})$/))) {
+    const d = new Date(); d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
+    if (d.getTime() > now) d.setDate(d.getDate() - 1);
+    return d;
+  }
+  if ((m = txt.match(/^(\d{1,2})\/(\d{1,2})$/))) {
+    const d = new Date(); d.setMonth(parseInt(m[1]) - 1, parseInt(m[2])); d.setHours(0, 0, 0, 0);
+    if (d.getTime() > now) d.setFullYear(d.getFullYear() - 1);
+    return d;
+  }
+  return null;
+}
+
 function parseProductsFromHtml(html: string, gameId: number): Array<{
   itemmaniaid: string;
   title: string;
@@ -620,6 +642,8 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
   itemCategory: string;
   detailUrl: string;
   sellerGrade: string | null;
+  description: string | null;
+  originalCreatedAt: Date | null;
 }> {
   const $ = cheerio.load(html);
   const products: ReturnType<typeof parseProductsFromHtml> = [];
@@ -658,6 +682,9 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
     if (!sellerGrade) return;
     // 수량 범위 파싱: .col.quantity 또는 .quantity_box 등
     const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
+    // 원본 등록 시간 파싱
+    const regDateText = $(el).find(".col.reg_date, .reg_date").first().text().trim();
+    const originalCreatedAt = parseRegDate(regDateText);
     products.push({
       itemmaniaid: tid,
       title,
@@ -669,6 +696,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
       sellerGrade,
       description: quantityText,
+      originalCreatedAt,
     });
   });
 
@@ -713,6 +741,8 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
           itemCategory: String(it["goods_kind"] || it["itemCategory"] || ""),
           detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
           sellerGrade: null,
+          description: null,
+          originalCreatedAt: null,
         });
       }
     } catch { /* ignore */ }
@@ -774,6 +804,7 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
             detailUrl: p.detailUrl,
             status: "active",
             crawledAt: new Date(),
+            ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
           }).onConflictDoUpdate({
             target: productsTable.itemmaniaid,
             set: {
