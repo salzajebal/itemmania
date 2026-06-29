@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { logger } from "../lib/logger";
+import { fetchProxyPage } from "../lib/proxy";
 import { db, usersTable, productsTable, ordersTable } from "@workspace/db";
 import { eq, and, inArray, desc } from "drizzle-orm";
 
@@ -5981,6 +5982,44 @@ const BUY_INTERCEPT_SCRIPT = `
   })();
 
   function init() {
+    // ── buy list: 스냅샷의 sell 원본 상품 제거 (sell 스냅샷 재사용 시) ───
+    // SELL_LIST_INTERCEPT_SCRIPT가 origNormalItems를 수집하기 전에 비워야 함
+    // (BUY_INTERCEPT_SCRIPT가 먼저 주입·실행됨)
+    if (location.pathname.indexOf('/buy/list') >= 0) {
+      var _nl = document.querySelector('ul.search_list_normal');
+      var _pl = document.querySelector('ul.search_list_premium');
+      if (_nl) _nl.innerHTML = '';
+      if (_pl) _pl.innerHTML = '';
+      // 검색창에 남아있는 게임명 업데이트 (searchRegGameServer value)
+      var _gc = new URLSearchParams(location.search).get('search_game') || '5913';
+      if (_gc !== '5913') {
+        fetch('/api/games/bycode/' + encodeURIComponent(_gc), { credentials: 'include' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(g) {
+            if (!g || !g.name) return;
+            var gn = g.name;
+            // 검색창 input value 교체
+            var inp = document.getElementById('searchRegGameServer');
+            if (inp) inp.value = gn;
+            // 헤더 검색창
+            var mainInp = document.querySelector('input.search-input, input[placeholder*="게임명"]');
+            if (mainInp) mainInp.value = gn;
+            // 텍스트 노드 교체
+            function replaceText(node) {
+              if (node.nodeType === 3) {
+                if (node.nodeValue.indexOf('리니지클래식') >= 0)
+                  node.nodeValue = node.nodeValue.replace(/리니지클래식/g, gn);
+              } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+                for (var i = 0; i < node.childNodes.length; i++) replaceText(node.childNodes[i]);
+              }
+            }
+            replaceText(document.body);
+            document.title = document.title.replace(/리니지클래식/g, gn);
+          })
+          .catch(function() {});
+      }
+    }
+
     // ── 상품등록(구매등록) 버튼 → /buy/register.html ──────────────────
     // trade-btn-blue 클릭: buy list에서는 모달 없이 바로 구매등록으로
     document.querySelectorAll('a.trade-btn-blue, .trade-btn a').forEach(function(a) {
@@ -7577,15 +7616,29 @@ router.get("/buy/list.html", async (req, res): Promise<void> => {
     return;
   }
 
-  // 현재 buy HTML 스냅샷은 리니지클래식 하나만 있음 (game 무관 동일 HTML 사용)
-  const html = buyLineageClassicHtml;
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const user = await getSessionUser(req);
+
+  // 게임별 sell 스냅샷 재사용: 게임 이미지·서버 목록·UI가 올바른 게임으로 표시됨
+  // BUY_INTERCEPT_SCRIPT가 스냅샷의 sell 원본 상품을 제거하고
+  // SELL_LIST_INTERCEPT_SCRIPT가 category=buy 상품을 우리 DB에서 로드함
+  let html: string;
+  if (game === "5913") {
+    html = sellLineageClassicHtml;
+  } else if (game === "5233") {
+    html = sellMaplestoryWorldHtml;
+  } else if (SELL_HTML_MAP[game]) {
+    html = SELL_HTML_MAP[game];
+  } else {
+    // 알 수 없는 게임 코드: 리니지클래식 스냅샷 폴백
+    html = sellLineageClassicHtml;
+  }
+
   if (!html) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  const user = await getSessionUser(req);
   res.send(serveBuy(html, user));
 });
 
