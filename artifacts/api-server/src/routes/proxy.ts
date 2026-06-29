@@ -1808,23 +1808,24 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var currentServer = params.get('search_server') || '';
     var currentKeyword = params.get('keyword') || '';
 
-    // ── 카테고리 탭: 버튼을 <a> 링크로 교체해 원본 JS 이벤트 완전 우회 ─
+    // ── 카테고리 탭: 버튼 유지, 클릭 이벤트만 intercept ─
     document.querySelectorAll('button.tab_bx[data-value]').forEach(function(btn) {
       var val = btn.getAttribute('data-value');
       var mapped = ITEM_CAT_MAP[val] !== undefined ? ITEM_CAT_MAP[val] : '';
-      var q = new URLSearchParams(location.search);
-      q.delete('page');
-      if (mapped) q.set('itemCategory', mapped);
-      else q.delete('itemCategory');
-      var a = document.createElement('a');
-      a.className = btn.className;
-      a.innerHTML = btn.innerHTML;
-      a.setAttribute('data-value', val);
-      a.href = location.pathname + '?' + q.toString();
-      a.style.cssText = 'display:inline-block;cursor:pointer;text-decoration:none';
-      if (mapped === currentItemCat) a.classList.add('selected');
-      else a.classList.remove('selected');
-      if (btn.parentNode) btn.parentNode.replaceChild(a, btn);
+      // active 상태 표시
+      if (mapped === currentItemCat) btn.classList.add('selected');
+      else btn.classList.remove('selected');
+      var clone = btn.cloneNode(true);
+      if (btn.parentNode) btn.parentNode.replaceChild(clone, btn);
+      clone.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var q = new URLSearchParams(location.search);
+        q.delete('page');
+        if (mapped) q.set('itemCategory', mapped);
+        else q.delete('itemCategory');
+        location.href = location.pathname + '?' + q.toString();
+      });
     });
 
     // ── 정렬 버튼 (data-type=1/2/3만) — button 태그 유지, 클릭만 intercept ──
@@ -1984,15 +1985,21 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         // ── 우리 DB 상품 카드 생성 ────────────────────────────────
         var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
 
+        // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
+        var filteredOrig = itemCat ? origNormalItems.filter(function(el) {
+          var goodsEl = el.querySelector('[data-search=goods]');
+          return goodsEl && goodsEl.textContent.trim() === itemCat;
+        }) : origNormalItems;
+
         // ── 업로드 시간순 병합 (최신 순) ──────────────────────────
         // 아이템매니아 원본은 이미 최신순. 같은 분(HH:MM) 내 순서는 원본 순서 보존.
         // idx=0(첫 항목)이 가장 최신이므로 뒤에서부터 오프셋 부여.
-        origNormalItems.forEach(function(el, idx) {
+        filteredOrig.forEach(function(el, idx) {
           var baseTs = getItemTs(el);
-          el.setAttribute('data-ts', String(baseTs + (origNormalItems.length - 1 - idx)));
+          el.setAttribute('data-ts', String(baseTs + (filteredOrig.length - 1 - idx)));
         });
 
-        var all = ourEls.concat(origNormalItems);
+        var all = ourEls.concat(filteredOrig);
         all.sort(function(a, b) {
           return (parseInt(b.getAttribute('data-ts') || '0') || 0)
                - (parseInt(a.getAttribute('data-ts') || '0') || 0);
