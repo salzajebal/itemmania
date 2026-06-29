@@ -3167,7 +3167,8 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
     if (regBtn && !regBtn._imBound) {
       regBtn._imBound = true;
       regBtn.addEventListener('click', function() {
-        location.href = '/buy/list.html';
+        var gc = data.gameCode || '';
+        location.href = '/buy/list.html' + (gc ? '?search_game=' + gc : '');
       });
     }
     // 취소 버튼
@@ -3267,7 +3268,8 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
                   serverName: server2,
                   itemCategory: window._IM_sel_category || '',
                   title: title2,
-                  price: parseInt(price.replace(/[^0-9]/g, ''), 10)
+                  price: parseInt(price.replace(/[^0-9]/g, ''), 10),
+                  gameCode: window._IM_sel_game ? (window._IM_sel_game.id || '') : ''
                 });
               } else {
                 return r.json().then(function(e) { showToast('등록 실패: ' + (e.error || '오류'), false); });
@@ -7355,21 +7357,24 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
 
 // 삽니다 목록 페이지 (/buy/list.html?search_game=...)
 router.get("/buy/list.html", async (req, res): Promise<void> => {
-  if (!buyLineageClassicHtml) {
+  const game = String(req.query["search_game"] ?? "");
+
+  // search_game 없으면 마이룸 구매등록물품으로 리다이렉트
+  if (!game) {
+    res.redirect(302, "/myroom/buy/buy_regist.html");
+    return;
+  }
+
+  // 현재 buy HTML 스냅샷은 리니지클래식 하나만 있음 (game 무관 동일 HTML 사용)
+  const html = buyLineageClassicHtml;
+  if (!html) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
-
-  res.send(serveBuy(buyLineageClassicHtml, user));
-});
-
-// 삽니다 목록 리다이렉트
-router.get("/buy/list.html", async (req, res): Promise<void> => {
-  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  res.redirect(302, `/buy/list.html${qs}`);
+  res.send(serveBuy(html, user));
 });
 
 // 구매등록 리다이렉트 (/buy/ 단독 → 구매등록 페이지)
