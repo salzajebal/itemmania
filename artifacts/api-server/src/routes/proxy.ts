@@ -1827,25 +1827,29 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       if (btn.parentNode) btn.parentNode.replaceChild(a, btn);
     });
 
-    // ── 정렬 버튼 (data-type=1/2/3만, sell/buy 탭 제외) ──
+    // ── 정렬 버튼 (data-type=1/2/3만) — button 태그 유지, 클릭만 intercept ──
     document.querySelectorAll('button[data-type]').forEach(function(btn) {
       var t = btn.getAttribute('data-type');
       if (!SORT_MAP[t]) return;
       var sortVal = SORT_MAP[t];
-      if (sortVal === currentSort || (sortVal === 'recent' && currentSort === 'recent')) {
+      if (sortVal === currentSort || (sortVal === 'recent' && !params.get('sort'))) {
         btn.classList.add('active');
         btn.style.fontWeight = '800';
         btn.style.color = '#159EFD';
+      } else {
+        btn.style.fontWeight = '';
+        btn.style.color = '';
       }
-      var q2 = new URLSearchParams(location.search);
-      q2.delete('page');
-      if (sortVal === 'recent') q2.delete('sort'); else q2.set('sort', sortVal);
-      var a2 = document.createElement('a');
-      a2.className = btn.className;
-      a2.innerHTML = btn.innerHTML;
-      a2.href = location.pathname + '?' + q2.toString();
-      a2.style.cssText = 'display:inline-block;cursor:pointer;text-decoration:none';
-      if (btn.parentNode) btn.parentNode.replaceChild(a2, btn);
+      var clone = btn.cloneNode(true);
+      if (btn.parentNode) btn.parentNode.replaceChild(clone, btn);
+      clone.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var q2 = new URLSearchParams(location.search);
+        q2.delete('page');
+        if (sortVal === 'recent') q2.delete('sort'); else q2.set('sort', sortVal);
+        location.href = location.pathname + '?' + q2.toString();
+      });
     });
 
     // ── 필터 전체보기 토글 ────────────────────────────────
