@@ -3993,19 +3993,57 @@ const MYROOM_INTERCEPT_SCRIPT = `
       });
     });
 
-    // ── 판매등록 링크 ─────────────────────────────────────────────────
-    document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
+    // ── 마이룸 판매관련 카테고리 링크 ────────────────────────────────────
+    var SELL_PAGE_MAP = {
+      'sell_regist':   '/myroom/sell/sell_regist.html',
+      'sell_check':    '/myroom/sell/sell_check.html',
+      'sell_pay_wait': '/myroom/sell/sell_pay_wait.html',
+      'sell_ing':      '/myroom/sell/sell_ing.html',
+    };
+    document.querySelectorAll('a[href*="/myroom/sell/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
-      if (h.includes('/sell/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
+      var matched = null;
+      Object.keys(SELL_PAGE_MAP).forEach(function(k) {
+        if (h.indexOf(k) !== -1) matched = SELL_PAGE_MAP[k];
+      });
+      if (matched) {
+        var dest = matched;
+        a.href = dest;
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = dest; });
+      }
+    });
+
+    // ── 마이룸 구매관련 카테고리 링크 ────────────────────────────────────
+    var BUY_PAGE_MAP = {
+      'buy_regist':   '/myroom/buy/buy_regist.html',
+      'buy_check':    '/myroom/buy/buy_check.html',
+      'buy_pay_wait': '/myroom/buy/buy_pay_wait.html',
+      'buy_ing':      '/myroom/buy/buy_ing.html',
+    };
+    document.querySelectorAll('a[href*="/myroom/buy/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      var matched = null;
+      Object.keys(BUY_PAGE_MAP).forEach(function(k) {
+        if (h.indexOf(k) !== -1) matched = BUY_PAGE_MAP[k];
+      });
+      if (matched) {
+        var dest = matched;
+        a.href = dest;
+        a.addEventListener('click', function(e) { e.preventDefault(); location.href = dest; });
+      }
+    });
+
+    // ── 상단 GNB의 판매등록/구매등록 링크 (/sell/, /buy/ 최상위 경로) ─────
+    document.querySelectorAll('a[href*="itemmania.com/sell/"],a[href^="/sell/"]').forEach(function(a) {
+      var h = a.getAttribute('href') || '';
+      if (!h.includes('/myroom/') && !h.includes('/sell/list') && !h.includes('/sell/application')) {
         a.href = '/sell/register.html';
         a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/sell/register.html'; });
       }
     });
-
-    // ── 구매등록 링크 ─────────────────────────────────────────────────
-    document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
+    document.querySelectorAll('a[href*="itemmania.com/buy/"],a[href^="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
-      if (h.includes('/buy/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
+      if (!h.includes('/myroom/') && !h.includes('/buy/list') && !h.includes('/buy/application')) {
         a.href = '/buy/register.html';
         a.addEventListener('click', function(e) { e.preventDefault(); location.href = '/buy/register.html'; });
       }
