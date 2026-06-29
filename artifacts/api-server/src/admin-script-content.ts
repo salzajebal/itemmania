@@ -117,7 +117,7 @@ async function discoverApi(){
         lines.push('');
       });
     }else{lines.push('=== JS API 패턴 없음 ===');}
-    resultEl.textContent=lines.join('\n');
+    resultEl.textContent=lines.join('\\n');
   }catch(e){resultEl.textContent='서버 오류: '+e.message;}
   finally{btn.disabled=false;btn.textContent='API 자동 탐지';}
 }
@@ -248,7 +248,7 @@ async function startCrawl(){
   function appendLog(msg,color){
     var span=document.createElement('span');
     span.style.color=color||'#d4d4d4';
-    span.textContent=msg+'\n';
+    span.textContent=msg+'\\n';
     liveLog.appendChild(span);
     liveLog.scrollTop=liveLog.scrollHeight;
   }
@@ -349,7 +349,7 @@ async function startCrawl(){
   }catch(e){
     if(pollInterval)clearInterval(pollInterval);
     clearInterval(crawlTimerInterval);
-    appendLog('\n❌ 오류: '+e.message,'#eb5757');
+    appendLog('\\n❌ 오류: '+e.message,'#eb5757');
     document.getElementById('crawlStatusText').textContent='크롤링 오류: '+e.message;
   }finally{
     document.getElementById('crawlBtn').disabled=false;
@@ -481,6 +481,18 @@ async function deleteProduct(id){
     if(!r.ok){var d=await r.json();showToast('오류: '+(d.error||'삭제 실패'));return;}
     showToast('🗑 상품이 삭제되었습니다');
     loadProducts();
+  }catch(e){showToast('서버 오류');}
+}
+
+async function deleteNoGradeProducts(){
+  if(!confirm('등급 없는 상품을 전부 삭제하시겠습니까?\\n이 작업은 되돌릴 수 없습니다.'))return;
+  try{
+    var r=await fetch('/api/admin/products/no-grade',{method:'DELETE',credentials:'include'});
+    var d=await r.json();
+    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
+    showToast('🗑 등급없는 상품 '+d.deleted+'개 삭제 완료');
+    loadProducts();
+    loadStats();
   }catch(e){showToast('서버 오류');}
 }
 

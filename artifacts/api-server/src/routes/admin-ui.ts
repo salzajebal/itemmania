@@ -148,6 +148,7 @@ tbody tr:hover{background:#fafbff}
           </select>
           <div class="spacer"></div>
           <button class="refresh-btn" onclick="loadProducts()">↻ 새로고침</button>
+          <button class="danger-btn" onclick="deleteNoGradeProducts()" style="background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗑 등급없는 상품 삭제</button>
           <button class="primary-btn" onclick="openProductModal()">+ 상품 등록</button>
         </div>
         <table>

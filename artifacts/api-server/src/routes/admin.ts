@@ -477,6 +477,13 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
 });
 
 // 상품 삭제
+router.delete("/admin/products/no-grade", async (_req, res): Promise<void> => {
+  const deleted = await db.delete(productsTable)
+    .where(sql`seller_grade IS NULL`)
+    .returning({ id: productsTable.id });
+  res.json({ ok: true, deleted: deleted.length });
+});
+
 router.delete("/admin/products/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
@@ -647,6 +654,8 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
         if (GRADE_CLASS_MAP[c]) { sellerGrade = GRADE_CLASS_MAP[c]; break; }
       }
     }
+    // 등급 없는 상품 제외
+    if (!sellerGrade) return;
     // 수량 범위 파싱: .col.quantity 또는 .quantity_box 등
     const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
     products.push({

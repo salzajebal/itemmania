@@ -484,6 +484,18 @@ async function deleteProduct(id){
   }catch(e){showToast('서버 오류');}
 }
 
+async function deleteNoGradeProducts(){
+  if(!confirm('등급 없는 상품을 전부 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.'))return;
+  try{
+    var r=await fetch('/api/admin/products/no-grade',{method:'DELETE',credentials:'include'});
+    var d=await r.json();
+    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
+    showToast('🗑 등급없는 상품 '+d.deleted+'개 삭제 완료');
+    loadProducts();
+    loadStats();
+  }catch(e){showToast('서버 오류');}
+}
+
 // ── 회원 ─────────────────────────────────────────────────
 async function loadUsers(){
   var tbody=document.getElementById('usersBody');
