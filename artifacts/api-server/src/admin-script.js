@@ -236,104 +236,120 @@ async function startCrawl(){
   var liveLog=document.getElementById('crawlLiveLog');
   liveLog.textContent='';
 
-  var gameSaved={};
-
-  function appendLog(msg,color){
-    var span=document.createElement('span');
-    span.style.color=color||'#d4d4d4';
-    span.textContent=msg+'\\n';
-    liveLog.appendChild(span);
-    liveLog.scrollTop=liveLog.scrollHeight;
-  }
-
   crawlStartTime=Date.now();
   if(crawlTimerInterval)clearInterval(crawlTimerInterval);
   crawlTimerInterval=setInterval(updateCrawlTimer,1000);
 
+  var pollInterval=null;
+  var lastLogTs=0;
+  var gameSaved={};
+  var cardsInited=false;
+
+  function appendLog(msg,color){
+    var span=document.createElement('span');
+    span.style.color=color||'#d4d4d4';
+    span.textContent=msg+'\n';
+    liveLog.appendChild(span);
+    liveLog.scrollTop=liveLog.scrollHeight;
+  }
+
+  function handleLog(ev){
+    if(ev.type==='progress'||ev.type==='session_ok'){
+      updateProgress(ev.completedSteps||0,ev.totalSteps||1,ev.totalSaved||0,ev.totalFailed||0);
+      appendLog(ev.message,'#d4d4d4');
+    } else if(ev.type==='game'){
+      setGameCardState(ev.gameIndex,'running',null);
+      document.getElementById('crawlStatusText').textContent='['+ev.gameName+'] 크롤 중...';
+      appendLog(ev.message,'#56b6c2');
+    } else if(ev.type==='ok'){
+      gameSaved[ev.gameIndex]=(gameSaved[ev.gameIndex]||0)+(ev.pageSaved||0);
+      setGameCardState(ev.gameIndex,ev.page>=ev.totalPages?'ok':'running',gameSaved[ev.gameIndex]);
+      updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+      appendLog(ev.message,'#6fcf97');
+    } else if(ev.type==='warn'){
+      setGameCardState(ev.gameIndex,'warn',gameSaved[ev.gameIndex]||0);
+      updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+      appendLog(ev.message,'#f2c94c');
+    } else if(ev.type==='fail'){
+      setGameCardState(ev.gameIndex,'fail',gameSaved[ev.gameIndex]||0);
+      updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
+      appendLog(ev.message,'#eb5757');
+    } else if(ev.type==='debug'){
+      appendLog(ev.message,'#888');
+    } else if(ev.type==='done'){
+      updateProgress(ev.completedSteps||ev.totalSteps,ev.totalSteps||1,ev.totalSaved,ev.totalFailed);
+      appendLog(ev.message,'#6fcf97');
+    }
+  }
+
   try{
     var body={gameIds:selectedIds,pages:pages,crawlDetail:withDetail};
     if(apiKey)body.scraperApiKey=apiKey;
-    var resp=await fetch('/api/admin/crawl/stream',{
+
+    /* 1. 작업 시작 — 즉시 jobId 반환 */
+    var startResp=await fetch('/api/admin/crawl/start',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
       body:JSON.stringify(body)
     });
-    if(!resp.ok||!resp.body){throw new Error('스트림 연결 실패: '+resp.status);}
+    if(!startResp.ok){
+      var errData=await startResp.json().catch(function(){return{};});
+      throw new Error(errData.error||'시작 실패: '+startResp.status);
+    }
+    var startData=await startResp.json();
+    var jobId=startData.jobId;
+    document.getElementById('crawlStatusText').textContent='크롤링 시작됨 (서버 백그라운드 실행 중)...';
+    appendLog('🚀 작업 시작: '+jobId,'#56b6c2');
 
-    var reader=resp.body.getReader();
-    var decoder=new TextDecoder();
-    var buf='';
-    var lastData=null;
-
-    while(true){
-      var chunk=await reader.read();
-      if(chunk.done)break;
-      buf+=decoder.decode(chunk.value,{stream:true});
-      var parts=buf.split('\\n\\n');
-      buf=parts.pop()||'';
-      for(var i=0;i<parts.length;i++){
-        var line=parts[i].trim();
-        if(!line.startsWith('data: '))continue;
+    /* 2. 2초마다 polling */
+    await new Promise(function(resolve,reject){
+      pollInterval=setInterval(async function(){
         try{
-          var ev=JSON.parse(line.slice(6));
-          lastData=ev;
+          var r=await fetch('/api/admin/crawl/status/'+jobId+'?since='+lastLogTs,{credentials:'include'});
+          if(!r.ok){reject(new Error('polling 실패: '+r.status));return;}
+          var data=await r.json();
 
-          /* ── 이벤트 타입별 UI 업데이트 ── */
-          if(ev.type==='init'){
-            initGameCards(ev.games||[]);
-            updateProgress(0,ev.totalSteps||1,0,0);
+          /* 게임카드 초기화 (games 목록 받은 후 최초 1회) */
+          if(!cardsInited&&data.games&&data.games.length>0){
+            initGameCards(data.games);
+            updateProgress(0,data.totalSteps||1,0,0);
             document.getElementById('crawlStatusText').textContent=
-              '크롤링 중 (게임 '+ev.totalGames+'개 × '+ev.totalPages+'페이지)';
-            appendLog(ev.message,'#56b6c2');
-          } else if(ev.type==='session_ok'){
-            appendLog(ev.message,'#6fcf97');
-          } else if(ev.type==='game'){
-            setGameCardState(ev.gameIndex,'running',null);
-            document.getElementById('crawlStatusText').textContent='['+ev.gameName+'] 크롤 중...';
-            appendLog(ev.message,'#56b6c2');
-          } else if(ev.type==='progress'){
-            updateProgress(ev.completedSteps||0,ev.totalSteps||1,ev.totalSaved||0,ev.totalFailed||0);
-            appendLog(ev.message,'#d4d4d4');
-          } else if(ev.type==='ok'){
-            gameSaved[ev.gameIndex]=(gameSaved[ev.gameIndex]||0)+(ev.pageSaved||0);
-            setGameCardState(ev.gameIndex,ev.page>=ev.totalPages?'ok':'running',gameSaved[ev.gameIndex]);
-            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
-            appendLog(ev.message,'#6fcf97');
-          } else if(ev.type==='warn'){
-            setGameCardState(ev.gameIndex,'warn',gameSaved[ev.gameIndex]||0);
-            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
-            appendLog(ev.message,'#f2c94c');
-          } else if(ev.type==='fail'){
-            setGameCardState(ev.gameIndex,'fail',gameSaved[ev.gameIndex]||0);
-            updateProgress(ev.completedSteps,ev.totalSteps,ev.totalSaved,ev.totalFailed);
-            appendLog(ev.message,'#eb5757');
-          } else if(ev.type==='debug'){
-            appendLog(ev.message,'#888');
-          } else if(ev.type==='done'){
-            updateProgress(ev.totalSteps||ev.completedSteps,ev.totalSteps||1,ev.upserted,ev.failed);
-            appendLog(ev.message,'#6fcf97');
+              '크롤링 중 (게임 '+data.totalGames+'개 × '+data.totalPages+'페이지)';
+            cardsInited=true;
           }
-        }catch(e){}
-      }
-    }
+
+          /* 새 로그만 처리 */
+          if(data.logs&&data.logs.length>0){
+            for(var i=0;i<data.logs.length;i++){
+              handleLog(data.logs[i]);
+              if(data.logs[i].ts>lastLogTs)lastLogTs=data.logs[i].ts;
+            }
+          }
+
+          /* 완료 또는 실패 */
+          if(data.status==='done'||data.status==='failed'){
+            clearInterval(pollInterval);
+            document.getElementById('crawlSpinner').style.display='none';
+            var summary='✅ 완료: '+data.totalSaved+'개 저장';
+            if(data.totalFailed>0)summary+=' / '+data.totalFailed+'개 실패';
+            if(withDetail)summary+=' / 상세 '+data.detailFetched+'개';
+            document.getElementById('crawlStatusText').textContent=summary;
+            document.getElementById('crawlResult').style.display='block';
+            document.getElementById('crawlResultSummary').textContent=summary;
+            loadStats();
+            loadProducts();
+            resolve();
+          }
+        }catch(e2){reject(e2);}
+      },2000);
+    });
 
     clearInterval(crawlTimerInterval);
-    document.getElementById('crawlSpinner').style.display='none';
-
-    if(lastData&&lastData.type==='done'){
-      var summary='✅ 완료: '+lastData.upserted+'개 저장';
-      if(lastData.failed>0)summary+=' / '+lastData.failed+'개 실패';
-      if(withDetail)summary+=' / 상세 '+lastData.detailFetched+'개';
-      document.getElementById('crawlStatusText').textContent=summary;
-      document.getElementById('crawlResult').style.display='block';
-      document.getElementById('crawlResultSummary').textContent=summary;
-    }
-    loadStats();
-    loadProducts();
   }catch(e){
+    if(pollInterval)clearInterval(pollInterval);
     clearInterval(crawlTimerInterval);
-    appendLog('\\n❌ 오류: '+e.message,'#eb5757');
+    appendLog('\n❌ 오류: '+e.message,'#eb5757');
     document.getElementById('crawlStatusText').textContent='크롤링 오류: '+e.message;
   }finally{
     document.getElementById('crawlBtn').disabled=false;

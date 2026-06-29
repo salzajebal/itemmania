@@ -7,6 +7,142 @@ import * as cheerio from "cheerio";
 
 const router: IRouter = Router();
 
+// ── 백그라운드 크롤 작업 상태 저장소 ─────────────────────────────────────
+interface CrawlLog {
+  type: string; message: string;
+  gameIndex?: number; gameName?: string;
+  page?: number; totalPages?: number; pageSaved?: number;
+  completedSteps?: number; totalSteps?: number;
+  totalSaved?: number; totalFailed?: number; detailFetched?: number;
+  ts: number;
+}
+interface CrawlJob {
+  id: string;
+  status: "running" | "done" | "failed";
+  totalGames: number; totalPages: number; totalSteps: number;
+  games: string[];
+  completedSteps: number; totalSaved: number; totalFailed: number; detailFetched: number;
+  logs: CrawlLog[];
+  startedAt: number; finishedAt?: number;
+}
+const crawlJobs = new Map<string, CrawlJob>();
+
+function jobPush(job: CrawlJob, data: Omit<CrawlLog, "ts">) {
+  job.logs.push({ ...data, ts: Date.now() });
+  if (job.logs.length > 2000) job.logs.splice(0, job.logs.length - 2000);
+  if (data.completedSteps != null) job.completedSteps = data.completedSteps;
+  if (data.totalSaved != null) job.totalSaved = data.totalSaved;
+  if (data.totalFailed != null) job.totalFailed = data.totalFailed;
+  if (data.detailFetched != null) job.detailFetched = data.detailFetched;
+}
+
+async function runCrawlJob(
+  job: CrawlJob, gameIds: number[], pages: number,
+  apiKey: string, crawlDetail: boolean
+): Promise<void> {
+  const targetGames = gameIds.length > 0
+    ? GAME_LIST.filter(g => gameIds.includes(g.id))
+    : GAME_LIST.slice(0, 3);
+  const maxPages = Math.min(Math.max(1, pages), 5);
+  const totalSteps = targetGames.length * maxPages;
+
+  Object.assign(job, { totalGames: targetGames.length, totalPages: maxPages, totalSteps,
+    games: targetGames.map(g => g.name) });
+
+  let totalUpserted = 0, totalFailed = 0, detailFetched = 0, detailFailed = 0, completedSteps = 0;
+  const push = (data: Omit<CrawlLog, "ts">) => jobPush(job, data);
+
+  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
+  push({ type: "progress", message: `🌐 세션 초기화 중... (session #${sessionNumber})`, completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
+  try { await initSession(apiKey, sessionNumber); } catch { /* 세션 초기화 실패 시 계속 */ }
+  push({ type: "session_ok", message: `✓ 세션 초기화 완료`, completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
+
+  for (let gi = 0; gi < targetGames.length; gi++) {
+    const game = targetGames[gi];
+    push({ type: "game", gameIndex: gi, gameName: game.name, message: `▶ [${game.name}] 시작`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
+
+    for (let page = 1; page <= maxPages; page++) {
+      push({ type: "progress", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+        completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+        message: `  ${page}/${maxPages}페이지 크롤 중...` });
+
+      const { html, error } = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
+      if (!html) {
+        completedSteps++;
+        push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+          completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed: ++totalFailed,
+          message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
+        continue;
+      }
+
+      const listItemCount = (html.match(/list_item/g) || []).length;
+      const dataTidCount = (html.match(/data-tid=/g) || []).length;
+      const products = parseProductsFromHtml(html, game.id);
+
+      if (products.length === 0) {
+        completedSteps++;
+        push({ type: "warn", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+          completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+          message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount})` });
+        // data-tid 주변 스니펫
+        const idx = html.indexOf("data-tid=");
+        if (idx >= 0) {
+          const snip = html.slice(Math.max(0, idx - 20), idx + 300).replace(/\s+/g, " ");
+          push({ type: "debug", message: `  🔍 data-tid 주변: ${snip}`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
+        }
+        continue;
+      }
+
+      let pageSaved = 0;
+      for (const p of products) {
+        try {
+          await db.insert(productsTable).values({
+            itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
+            category: p.category, itemCategory: p.itemCategory,
+            gameName: p.gameName, serverName: p.serverName,
+            sellerGrade: p.sellerGrade ?? null,
+            detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+          }).onConflictDoUpdate({
+            target: productsTable.itemmaniaid,
+            set: { title: p.title, price: p.price, gameName: p.gameName,
+              serverName: p.serverName, itemCategory: p.itemCategory,
+              sellerGrade: p.sellerGrade ?? null,
+              detailUrl: p.detailUrl, status: "active", crawledAt: new Date() },
+          });
+          totalUpserted++; pageSaved++;
+        } catch { totalFailed++; }
+
+        if (crawlDetail) {
+          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
+          if (dhtml) {
+            const detail = parseDetailFromHtml(dhtml);
+            try {
+              await db.update(productsTable)
+                .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
+                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
+              detailFetched++;
+            } catch { detailFailed++; }
+          } else { detailFailed++; }
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      completedSteps++;
+      push({ type: "ok", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+        pageSaved, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed, detailFetched,
+        message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
+
+      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  job.status = "done";
+  job.finishedAt = Date.now();
+  push({ type: "done", completedSteps: totalSteps, totalSteps,
+    totalSaved: totalUpserted, totalFailed, detailFetched,
+    message: `✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
+}
+
 // 전체 회원 목록
 router.get("/admin/users", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
@@ -677,147 +813,48 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
 });
 
 // 크롤링 SSE 스트리밍 (실시간 진행상황)
-router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
-  const { gameIds, pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
-    gameIds?: number[];
-    pages?: number;
-    scraperApiKey?: string;
-    crawlDetail?: boolean;
+// 크롤링 백그라운드 작업 시작
+router.post("/admin/crawl/start", async (req, res): Promise<void> => {
+  const { gameIds = [], pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
+    gameIds?: number[]; pages?: number; scraperApiKey?: string; crawlDetail?: boolean;
   };
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  const send = (data: Record<string, unknown>) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-    (res as unknown as { flush?: () => void }).flush?.();
-  };
-
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
-
   if (!apiKey) {
-    send({ type: "fail", message: "❌ ScraperAPI 키가 없습니다. 키를 입력하고 다시 시도하세요." });
-    send({ type: "done", upserted: 0, failed: 0, detailFetched: 0, detailFailed: 0, message: "\n✅ 크롤 중단됨 (ScraperAPI 키 없음)" });
-    res.end();
+    res.status(400).json({ error: "ScraperAPI 키가 없습니다. 키를 입력하거나 환경변수 SCRAPER_API_KEY를 설정하세요." });
     return;
   }
+  const jobId = `crawl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const job: CrawlJob = {
+    id: jobId, status: "running",
+    totalGames: 0, totalPages: 0, totalSteps: 1,
+    games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0,
+    logs: [], startedAt: Date.now(),
+  };
+  crawlJobs.set(jobId, job);
+  // 백그라운드 실행 (await 없음 — 연결과 무관하게 계속 실행)
+  runCrawlJob(job, gameIds, pages, apiKey, crawlDetail).catch(err => {
+    job.status = "failed";
+    job.finishedAt = Date.now();
+    jobPush(job, { type: "fail", message: `❌ 치명적 오류: ${err?.message ?? err}`, completedSteps: job.completedSteps, totalSteps: job.totalSteps, totalSaved: job.totalSaved, totalFailed: job.totalFailed });
+  });
+  res.json({ jobId });
+});
 
-  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
-  const targetGames = gameIds && gameIds.length > 0
-    ? GAME_LIST.filter(g => gameIds.includes(g.id))
-    : GAME_LIST.slice(0, 3);
-  const maxPages = Math.min(Math.max(1, pages), 5);
-  const totalGames = targetGames.length;
-  const totalSteps = totalGames * maxPages;
-
-  let totalUpserted = 0;
-  let totalFailed = 0;
-  let detailFetched = 0;
-  let detailFailed = 0;
-  let completedSteps = 0;
-
-  send({ type: "init", totalGames, totalPages: maxPages, totalSteps,
-    games: targetGames.map(g => g.name),
-    message: `🌐 세션 초기화 중... (session #${sessionNumber})` });
-  await initSession(apiKey, sessionNumber);
-  send({ type: "session_ok", message: `✓ 세션 초기화 완료` });
-
-  for (let gi = 0; gi < targetGames.length; gi++) {
-    const game = targetGames[gi];
-    send({ type: "game", gameIndex: gi, gameName: game.name,
-      message: `▶ [${game.name}] 시작` });
-
-    for (let page = 1; page <= maxPages; page++) {
-      send({ type: "progress", gameIndex: gi, gameName: game.name,
-        page, totalPages: maxPages, completedSteps, totalSteps,
-        totalSaved: totalUpserted, totalFailed,
-        message: `  ${page}/${maxPages}페이지 크롤 중...` });
-
-      const {html, error} = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
-      if (!html) {
-        completedSteps++;
-        send({ type: "fail", gameIndex: gi, gameName: game.name,
-          page, totalPages: maxPages, completedSteps, totalSteps,
-          totalSaved: totalUpserted, totalFailed,
-          message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
-        totalFailed++;
-        continue;
-      }
-
-      const listItemCount = (html.match(/list_item/g) || []).length;
-      const hasNextData = html.includes("__NEXT_DATA__");
-      const dataTidCount = (html.match(/data-tid=/g) || []).length;
-      const apiMatches = (html.match(/["'](\/api\/[^"']{3,60})["']/g) || []).slice(0, 5).join(" | ");
-      const products = parseProductsFromHtml(html, game.id);
-      if (products.length === 0) {
-        completedSteps++;
-        send({ type: "warn", gameIndex: gi, gameName: game.name,
-          page, totalPages: maxPages, completedSteps, totalSteps,
-          totalSaved: totalUpserted, totalFailed,
-          message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount}, __NEXT_DATA__:${hasNextData})` });
-        if (apiMatches) send({ type: "debug", message: `  🔍 API URL 패턴: ${apiMatches}` });
-        const dataTidIdx = html.indexOf("data-tid=");
-        if (dataTidIdx >= 0) {
-          const snippet = html.slice(Math.max(0, dataTidIdx - 20), dataTidIdx + 300).replace(/\s+/g, " ");
-          send({ type: "debug", message: `  🔍 data-tid 주변: ${snippet}` });
-        }
-        continue;
-      }
-
-      let pageSaved = 0;
-      for (const p of products) {
-        try {
-          await db.insert(productsTable).values({
-            itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
-            category: p.category, itemCategory: p.itemCategory,
-            gameName: p.gameName, serverName: p.serverName,
-            sellerGrade: p.sellerGrade ?? null,
-            detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
-          }).onConflictDoUpdate({
-            target: productsTable.itemmaniaid,
-            set: {
-              title: p.title, price: p.price, gameName: p.gameName,
-              serverName: p.serverName, itemCategory: p.itemCategory,
-              sellerGrade: p.sellerGrade ?? null,
-              detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
-            },
-          });
-          totalUpserted++;
-          pageSaved++;
-        } catch {
-          totalFailed++;
-        }
-
-        if (crawlDetail) {
-          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
-          if (dhtml) {
-            const detail = parseDetailFromHtml(dhtml);
-            try {
-              await db.update(productsTable)
-                .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
-                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
-              detailFetched++;
-            } catch { detailFailed++; }
-          } else { detailFailed++; }
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
-
-      completedSteps++;
-      send({ type: "ok", gameIndex: gi, gameName: game.name,
-        page, totalPages: maxPages, pageSaved, completedSteps, totalSteps,
-        totalSaved: totalUpserted, totalFailed, detailFetched,
-        message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
-      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
-    }
-  }
-
-  send({ type: "done", upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed,
-    completedSteps: totalSteps, totalSteps,
-    message: `✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
-  res.end();
+// 크롤링 작업 상태 polling
+router.get("/admin/crawl/status/:jobId", (req, res): void => {
+  const job = crawlJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: "작업을 찾을 수 없습니다 (만료되었거나 존재하지 않음)" }); return; }
+  const since = parseInt(String(req.query.since ?? "0"), 10);
+  const newLogs = since > 0 ? job.logs.filter(l => l.ts > since) : job.logs;
+  res.json({
+    id: job.id, status: job.status,
+    totalGames: job.totalGames, totalPages: job.totalPages, totalSteps: job.totalSteps,
+    games: job.games,
+    completedSteps: job.completedSteps, totalSaved: job.totalSaved,
+    totalFailed: job.totalFailed, detailFetched: job.detailFetched,
+    startedAt: job.startedAt, finishedAt: job.finishedAt,
+    logs: newLogs,
+  });
 });
 
 
