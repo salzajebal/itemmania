@@ -255,9 +255,11 @@ tbody tr:hover{background:#fafbff}
               </span>
             </label>
           </div>
-          <div style="margin-bottom:20px">
+          <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap">
             <button id="crawlBtn" onclick="startCrawl()" style="padding:12px 24px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🕷️ 크롤링 시작</button>
+            <button id="discoverBtn" onclick="discoverApi()" style="padding:12px 20px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer" title="itemmania.com JS를 자동 분석해 AJAX API URL을 탐지합니다">🔍 API 자동 탐지</button>
           </div>
+          <div id="discoverResult" style="display:none;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;max-height:400px;overflow-y:auto;margin-bottom:16px;white-space:pre-wrap"></div>
 
           <div id="crawlStatus" style="display:none">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
@@ -496,6 +498,39 @@ async function initCrawlTab(){
     document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl/script';
     document.getElementById('crawlApiBaseUrl').textContent=origin;
   }catch(e){console.error(e);}
+}
+
+async function discoverApi(){
+  var key=document.getElementById('crawlApiKeyInput').value.trim();
+  var btn=document.getElementById('discoverBtn');
+  var resultEl=document.getElementById('discoverResult');
+  btn.disabled=true;btn.textContent='🔍 탐지 중... (30~60초)';
+  resultEl.style.display='block';resultEl.textContent='itemmania.com JS 파일 분석 중...\n';
+  try{
+    var r=await fetch('/api/admin/crawl/discover?scraperApiKey='+encodeURIComponent(key)+'&gameId=138',{credentials:'include'});
+    var d=await r.json();
+    if(!r.ok){resultEl.textContent='❌ 오류: '+(d.error||'실패');return;}
+    var out='=== HTML 분석 결과 ===\n';
+    out+='HTML 크기: '+d.htmlSize+'바이트\n';
+    out+='list_item 수: '+d.listItemCount+', data-tid 수: '+d.dataTidCount+', __NEXT_DATA__: '+d.hasNextData+'\n\n';
+    if(d.scriptSrcs&&d.scriptSrcs.length){
+      out+='=== 발견된 JS 파일 ===\n'+d.scriptSrcs.join('\n')+'\n\n';
+    }else{
+      out+='=== JS 파일 없음 ===\n\n';
+    }
+    if(d.ajaxInHtml&&d.ajaxInHtml.length){
+      out+='=== HTML 내 URL 패턴 ===\n'+d.ajaxInHtml.join('\n')+'\n\n';
+    }
+    if(d.jsFindings&&d.jsFindings.length){
+      d.jsFindings.forEach(function(f){
+        out+='=== JS 파일: '+f.url+' ===\n'+f.patterns.join('\n')+'\n\n';
+      });
+    }else{
+      out+='=== JS 파일에서 API 패턴 없음 ===\n';
+    }
+    resultEl.textContent=out;
+  }catch(e){resultEl.textContent='❌ 서버 오류: '+e.message;}
+  finally{btn.disabled=false;btn.textContent='🔍 API 자동 탐지';}
 }
 
 async function testApiKey(){

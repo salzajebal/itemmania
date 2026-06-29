@@ -777,6 +777,66 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
 });
 
 
+// itemmania.com AJAX API 자동 탐지
+router.get("/admin/crawl/discover", requireAdmin, async (req, res): Promise<void> => {
+  const scraperApiKey = String(req.query.scraperApiKey ?? "");
+  const gameId = parseInt(String(req.query.gameId ?? "138"), 10);
+  const apiKey = scraperApiKey || process.env.SCRAPER_API_KEY;
+
+  if (!apiKey) {
+    res.status(400).json({ error: "ScraperAPI 키가 없습니다" });
+    return;
+  }
+
+  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
+  const listUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=1`;
+  const { text: html, error } = await scraperFetch(listUrl, apiKey, sessionNumber);
+
+  if (!html) {
+    res.status(500).json({ error: `HTML 가져오기 실패: ${error}` });
+    return;
+  }
+
+  // script src URL 추출
+  const allSrcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  const externalSrcs = allSrcs.filter(s => s.includes("itemmania.com") || (s.startsWith("/") && !s.startsWith("//")));
+
+  // HTML 자체에서 URL 패턴 탐색
+  const ajaxInHtml = [...html.matchAll(/["'](\/?[a-zA-Z0-9_\-/]+(?:\.php|\.ajax|ajax|list|goods)[^"']{0,80})["']/g)]
+    .map(m => m[1])
+    .filter(u => u.length > 4 && !u.includes(" ") && (u.includes("list") || u.includes("ajax") || u.includes(".php")))
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, 20);
+
+  // JS 파일 가져와서 API 패턴 탐색
+  const jsFindings: Array<{ url: string; patterns: string[] }> = [];
+  for (const src of externalSrcs.slice(0, 4)) {
+    const jsUrl = src.startsWith("http") ? src : `https://www.itemmania.com${src}`;
+    const { text: jsText } = await scraperFetch(jsUrl, apiKey, sessionNumber, 20000);
+    if (!jsText || jsText.length < 100) continue;
+
+    const patterns = [
+      ...[...jsText.matchAll(/["'](\/?[a-zA-Z0-9_\-/]+(?:list|goods|sell|ajax|\.php)[a-zA-Z0-9_\-/?=&.]{0,80})["']/g)].map(m => m[1]),
+      ...[...jsText.matchAll(/url\s*[=:]\s*["']([^"']+)["']/gi)].map(m => m[1]).filter(u => u.includes("itemmania") || u.startsWith("/")),
+    ]
+      .filter(u => u.length > 5 && !u.includes(" "))
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .slice(0, 25);
+
+    if (patterns.length > 0) jsFindings.push({ url: src, patterns });
+  }
+
+  res.json({
+    htmlSize: html.length,
+    listItemCount: (html.match(/list_item/g) ?? []).length,
+    dataTidCount: (html.match(/data-tid=/g) ?? []).length,
+    hasNextData: html.includes("__NEXT_DATA__"),
+    scriptSrcs: externalSrcs,
+    ajaxInHtml,
+    jsFindings,
+  });
+});
+
 // 크롤링 대상 게임 목록
 router.get("/admin/crawl/games", requireAdmin, (_req, res): void => {
   const hasApiKey = !!process.env.SCRAPER_API_KEY;
