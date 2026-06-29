@@ -1217,40 +1217,7 @@ try{
   location.assign=function(u){_ass(rewrite(u));};
   location.replace=function(u){_rep(rewrite(u));};
 }catch(e){}
-/* 상품등록 버튼(.trade-btn-blue) 클릭 → 판매/구매 선택 모달 */
-document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a.trade-btn-blue');
-  if(!a) return;
-  var h=a.getAttribute('href')||'';
-  if(h.indexOf('/sell/')>=0||h.indexOf('/sell?')>=0){
-    e.preventDefault(); e.stopImmediatePropagation();
-    // 이미 모달이 있으면 제거
-    var old=document.getElementById('_im_reg_modal');
-    if(old) old.remove();
-    // 게임 ID 추출
-    var gm=h.match(/[?&]game=(\d+)/);
-    var gameId=gm?gm[1]:'';
-    var modal=document.createElement('div');
-    modal.id='_im_reg_modal';
-    modal.style.cssText='position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
-    modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:36px 40px;min-width:340px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.18)">'
-      +'<h3 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#1d1d1d">상품 등록</h3>'
-      +'<p style="margin:0 0 28px;color:#767676;font-size:14px">어떤 유형의 상품을 등록하시겠습니까?</p>'
-      +'<div style="display:flex;gap:12px;justify-content:center">'
-      +'<button id="_im_reg_sell" style="flex:1;padding:14px 0;border:2px solid #159EFD;border-radius:12px;background:#EDF8FF;font-size:16px;font-weight:700;color:#0070d2;cursor:pointer">📦 판매등록</button>'
-      +'<button id="_im_reg_buy"  style="flex:1;padding:14px 0;border:2px solid #39A742;border-radius:12px;background:#ECF8EC;font-size:16px;font-weight:700;color:#2a7a2e;cursor:pointer">🛒 구매등록</button>'
-      +'</div>'
-      +'<button id="_im_reg_close" style="margin-top:18px;background:none;border:none;color:#9f9f9f;font-size:13px;cursor:pointer">닫기</button>'
-      +'</div>';
-    document.body.appendChild(modal);
-    var sellUrl='/sell/register.html'+(gameId?'?game='+gameId:'');
-    document.getElementById('_im_reg_sell').onclick=function(){modal.remove();location.href=sellUrl;};
-    document.getElementById('_im_reg_buy').onclick=function(){modal.remove();location.href='/buy/register.html';};
-    document.getElementById('_im_reg_close').onclick=function(){modal.remove();};
-    modal.addEventListener('click',function(ev){if(ev.target===modal)modal.remove();});
-    return;
-  }
-},true);
+
 /* a[href] 전역 클릭 */
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href]');
