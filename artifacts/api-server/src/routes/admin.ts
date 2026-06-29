@@ -2,14 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq, sql, desc } from "drizzle-orm";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
-import { requireAdmin } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 import * as cheerio from "cheerio";
 
 const router: IRouter = Router();
 
 // 전체 회원 목록
-router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/users", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10)));
   const offset = (page - 1) * limit;
@@ -47,7 +46,7 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
 });
 
 // 전체 주문 목록
-router.get("/admin/orders", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/orders", async (req, res): Promise<void> => {
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = 50;
   const offset = (page - 1) * limit;
@@ -74,7 +73,7 @@ router.get("/admin/orders", requireAdmin, async (req, res): Promise<void> => {
 });
 
 // 출금 신청 목록
-router.get("/admin/withdrawals", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/withdrawals", async (req, res): Promise<void> => {
   const { status } = req.query;
   let query = db.select().from(withdrawalsTable).$dynamic();
   if (status && typeof status === "string") {
@@ -98,7 +97,7 @@ router.get("/admin/withdrawals", requireAdmin, async (req, res): Promise<void> =
 });
 
 // 출금 처리 (승인/거절)
-router.patch("/admin/withdrawals/:id", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/admin/withdrawals/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const { status, adminNote } = req.body;
@@ -151,7 +150,7 @@ router.patch("/admin/withdrawals/:id", requireAdmin, async (req, res): Promise<v
 });
 
 // 인증상태 조회
-router.get("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/users/:id/auth-states", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [user] = await db.select({ authStates: usersTable.authStates }).from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
@@ -159,7 +158,7 @@ router.get("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promi
 });
 
 // 인증상태 수정
-router.put("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promise<void> => {
+router.put("/admin/users/:id/auth-states", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const { excellent, phone, email, ipin, withdraw } = req.body as Record<string, boolean>;
   const authStates: AuthStates = {
@@ -179,7 +178,7 @@ router.put("/admin/users/:id/auth-states", requireAdmin, async (req, res): Promi
 });
 
 // 마일리지(잔액) 수정
-router.patch("/admin/users/:id/balance", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/admin/users/:id/balance", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
 
@@ -205,7 +204,7 @@ router.patch("/admin/users/:id/balance", requireAdmin, async (req, res): Promise
 });
 
 // 회원 정보 수정 (닉네임, 전화번호, 이메일, 역할)
-router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/admin/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
 
@@ -265,7 +264,7 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
 });
 
 // 회원 삭제
-router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+router.delete("/admin/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
@@ -278,7 +277,7 @@ router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> 
 // ── 상품 관리 ──────────────────────────────────────────────────────
 
 // 전체 상품 목록
-router.get("/admin/products", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/products", async (req, res): Promise<void> => {
   const products = await db.select().from(productsTable).orderBy(desc(productsTable.createdAt));
   res.json(products.map(p => ({
     id: p.id,
@@ -295,7 +294,7 @@ router.get("/admin/products", requireAdmin, async (req, res): Promise<void> => {
 });
 
 // 상품 등록 (어드민)
-router.post("/admin/products", requireAdmin, async (req, res): Promise<void> => {
+router.post("/admin/products", async (req, res): Promise<void> => {
   const { title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
   if (!title || !price) {
     res.status(400).json({ error: "title과 price는 필수입니다." });
@@ -321,7 +320,7 @@ router.post("/admin/products", requireAdmin, async (req, res): Promise<void> => 
 });
 
 // 상품 상태 변경 / 수정
-router.patch("/admin/products/:id", requireAdmin, async (req, res): Promise<void> => {
+router.patch("/admin/products/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const { status, title, price, gameName, category, description, sellerName } = req.body as Record<string, string>;
 
@@ -342,7 +341,7 @@ router.patch("/admin/products/:id", requireAdmin, async (req, res): Promise<void
 });
 
 // 상품 삭제
-router.delete("/admin/products/:id", requireAdmin, async (req, res): Promise<void> => {
+router.delete("/admin/products/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
   if (!existing) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
@@ -351,7 +350,7 @@ router.delete("/admin/products/:id", requireAdmin, async (req, res): Promise<voi
 });
 
 // 대시보드 통계
-router.get("/admin/stats", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/admin/stats", async (_req, res): Promise<void> => {
   const [[userCount], [productCount], [orderCount], [pendingOrderCount], [totalRevenue]] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(usersTable),
     db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(eq(productsTable.status, "active")),
@@ -558,7 +557,7 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
 }
 
 // 크롤링 API
-router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
+router.post("/admin/crawl", async (req, res): Promise<void> => {
   const { gameIds, pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
     gameIds?: number[];
     pages?: number;
@@ -661,7 +660,7 @@ router.post("/admin/crawl", requireAdmin, async (req, res): Promise<void> => {
 });
 
 // 크롤링 SSE 스트리밍 (실시간 진행상황)
-router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void> => {
+router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
   const { gameIds, pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
     gameIds?: number[];
     pages?: number;
@@ -778,7 +777,7 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
 
 
 // itemmania.com AJAX API 자동 탐지
-router.get("/admin/crawl/discover", requireAdmin, async (req, res): Promise<void> => {
+router.get("/admin/crawl/discover", async (req, res): Promise<void> => {
   const scraperApiKey = String(req.query.scraperApiKey ?? "");
   const gameId = parseInt(String(req.query.gameId ?? "138"), 10);
   const apiKey = scraperApiKey || process.env.SCRAPER_API_KEY;
@@ -838,13 +837,13 @@ router.get("/admin/crawl/discover", requireAdmin, async (req, res): Promise<void
 });
 
 // 크롤링 대상 게임 목록
-router.get("/admin/crawl/games", requireAdmin, (_req, res): void => {
+router.get("/admin/crawl/games", (_req, res): void => {
   const hasApiKey = !!process.env.SCRAPER_API_KEY;
   res.json({ games: GAME_LIST, hasApiKey });
 });
 
 // 로컬 크롤러 배치 upsert (itemmaniaid 기준 중복 방지)
-router.post("/admin/crawl/batch", requireAdmin, async (req, res): Promise<void> => {
+router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
   const { products } = req.body as {
     products?: Array<{
       itemmaniaid: string;
@@ -912,7 +911,7 @@ router.post("/admin/crawl/batch", requireAdmin, async (req, res): Promise<void> 
 });
 
 // 로컬 크롤러 스크립트 다운로드
-router.get("/admin/crawl/script", requireAdmin, (_req, res): void => {
+router.get("/admin/crawl/script", (_req, res): void => {
   const fs = require("node:fs");
   const path = require("node:path");
   const scriptPath = path.join(process.cwd(), "scripts/src/crawl-itemmania.mjs");
