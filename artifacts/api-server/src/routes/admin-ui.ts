@@ -26,7 +26,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f4f6fb;color:#222;min-height:100vh}
-#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
+#login-screen{display:none;align-items:center;justify-content:center;min-height:100vh}
 .login-box{background:#fff;border-radius:16px;padding:48px 40px;width:360px;box-shadow:0 4px 32px rgba(0,0,0,.10)}
 .login-box h1{font-size:22px;font-weight:700;color:#1a1a1a;margin-bottom:6px}
 .login-box p{font-size:13px;color:#888;margin-bottom:28px}
@@ -35,7 +35,7 @@ body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f4
 .login-box button{width:100%;padding:13px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer}
 .login-box button:hover{background:#0e8de0}
 .login-box .err{color:#e53e3e;font-size:13px;margin-top:8px;display:none}
-#admin-screen{display:none;min-height:100vh}
+#admin-screen{display:block;min-height:100vh}
 .topbar{background:#fff;border-bottom:1px solid #e8ecf0;padding:0 32px;display:flex;align-items:center;gap:16px;height:60px;position:sticky;top:0;z-index:100}
 .topbar .logo{font-size:18px;font-weight:800;color:#159EFD;letter-spacing:-.03em}
 .topbar .logo span{color:#222}
