@@ -632,6 +632,14 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
   };
 
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
+
+  if (!apiKey) {
+    send({ type: "fail", message: "❌ ScraperAPI 키가 없습니다. 키를 입력하고 다시 시도하세요." });
+    send({ type: "done", upserted: 0, failed: 0, detailFetched: 0, detailFailed: 0, message: "\n✅ 크롤 중단됨 (ScraperAPI 키 없음)" });
+    res.end();
+    return;
+  }
+
   const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
   const targetGames = gameIds && gameIds.length > 0
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
@@ -643,11 +651,9 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
   let detailFetched = 0;
   let detailFailed = 0;
 
-  if (apiKey) {
-    send({ type: "progress", message: `  🌐 세션 초기화 중... (session #${sessionNumber})` });
-    await initSession(apiKey, sessionNumber);
-    send({ type: "progress", message: `  ✓ 세션 초기화 완료` });
-  }
+  send({ type: "progress", message: `  🌐 세션 초기화 중... (session #${sessionNumber})` });
+  await initSession(apiKey, sessionNumber);
+  send({ type: "progress", message: `  ✓ 세션 초기화 완료` });
 
   for (const game of targetGames) {
     send({ type: "game", message: `\n▶ [${game.name}] 시작` });
@@ -661,9 +667,11 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
       }
 
       const listItemCount = (html.match(/list_item/g) || []).length;
+      const htmlPreview = html.replace(/\s+/g, " ").slice(0, 300);
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
-        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (HTML ${html.length}바이트, list_item ${listItemCount}개)` });
+        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item ${listItemCount}개)` });
+        send({ type: "progress", message: `  🔍 HTML앞300자: ${htmlPreview}` });
         continue;
       }
 
