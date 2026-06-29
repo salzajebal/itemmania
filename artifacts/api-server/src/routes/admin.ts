@@ -382,7 +382,7 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
 ];
 
 function scraperUrl(targetUrl: string, apiKey: string, sessionNumber: number): string {
-  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=true&country_code=kr&session_number=${sessionNumber}`;
+  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&session_number=${sessionNumber}`;
 }
 
 async function scraperFetch(url: string, apiKey: string | undefined, sessionNumber: number, timeoutMs = 55000): Promise<{text: string | null; status: number | null; error: string | null}> {
@@ -480,32 +480,79 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
 }> {
   const $ = cheerio.load(html);
   const products: ReturnType<typeof parseProductsFromHtml> = [];
+  const gameFallbackName = GAME_LIST.find(g => g.id === gameId)?.name || "";
 
-  $("li.list_item").each((_i, el) => {
+  // 전략 1: li[data-tid] — 실제 data-tid 속성이 있는 모든 요소
+  $("[data-tid]").each((_i, el) => {
     const tid = $(el).attr("data-tid");
-    if (!tid) return;
-
+    if (!tid || $(el).hasClass("skeleton-item")) return;
     const gameName = $(el).find("[data-search=game]").first().text().trim();
     const serverName = $(el).find("[data-search=server]").first().attr("data-title")
       || $(el).find("[data-search=server]").first().text().trim();
     const itemCategory = $(el).find("[data-search=goods]").first().text().trim();
-    const title = $(el).find(".kind_title").first().text().trim();
-    const priceText = $(el).find(".trade_money").first().text().replace(/[^0-9]/g, "");
+    const title = $(el).find(".kind_title").first().text().trim()
+      || $(el).find(".tit").first().text().trim()
+      || $(el).find("strong").first().text().trim();
+    const priceText = $(el).find(".trade_money").first().text().replace(/[^0-9]/g, "")
+      || $(el).find(".price").first().text().replace(/[^0-9]/g, "");
     const price = parseInt(priceText, 10) || 0;
-
     if (!title) return;
-
     products.push({
       itemmaniaid: tid,
       title,
       price,
-      gameName: gameName || GAME_LIST.find(g => g.id === gameId)?.name || "",
+      gameName: gameName || gameFallbackName,
       serverName: serverName || "",
       category: "sell",
       itemCategory: itemCategory || "",
       detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
     });
   });
+
+  if (products.length > 0) return products;
+
+  // 전략 2: __NEXT_DATA__ embedded JSON 파싱
+  const nextDataEl = $("script#__NEXT_DATA__").first().html();
+  if (nextDataEl) {
+    try {
+      const nextData = JSON.parse(nextDataEl);
+      // 상품 목록이 있을 수 있는 경로들 탐색
+      const lists: unknown[] = [];
+      const search = (obj: unknown) => {
+        if (!obj || typeof obj !== "object") return;
+        if (Array.isArray(obj)) {
+          if (obj.length > 0 && typeof obj[0] === "object" && obj[0] !== null) {
+            const first = obj[0] as Record<string, unknown>;
+            if ("tid" in first || "id" in first || "title" in first || "price" in first) {
+              lists.push(...obj);
+            }
+          }
+          obj.forEach(search);
+        } else {
+          Object.values(obj).forEach(search);
+        }
+      };
+      search(nextData);
+      for (const item of lists) {
+        if (!item || typeof item !== "object") continue;
+        const it = item as Record<string, unknown>;
+        const tid = String(it["tid"] || it["id"] || it["sell_id"] || "");
+        const title = String(it["title"] || it["name"] || it["goods_name"] || "");
+        if (!tid || !title) continue;
+        const price = parseInt(String(it["price"] || it["sell_price"] || 0), 10) || 0;
+        products.push({
+          itemmaniaid: tid,
+          title,
+          price,
+          gameName: String(it["game_name"] || it["gameName"] || gameFallbackName),
+          serverName: String(it["server_name"] || it["serverName"] || ""),
+          category: "sell",
+          itemCategory: String(it["goods_kind"] || it["itemCategory"] || ""),
+          detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+        });
+      }
+    } catch { /* ignore */ }
+  }
 
   return products;
 }
@@ -667,13 +714,17 @@ router.post("/admin/crawl/stream", requireAdmin, async (req, res): Promise<void>
       }
 
       const listItemCount = (html.match(/list_item/g) || []).length;
+      const hasNextData = html.includes("__NEXT_DATA__");
+      const dataTidCount = (html.match(/data-tid=/g) || []).length;
+      const apiMatches = (html.match(/["'](\/api\/[^"']{3,60})["']/g) || []).slice(0, 5).join(" | ");
       const products = parseProductsFromHtml(html, game.id);
       if (products.length === 0) {
-        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item ${listItemCount}개)` });
-        const listItemIdx = html.indexOf("list_item");
-        if (listItemIdx >= 0) {
-          const snippet = html.slice(Math.max(0, listItemIdx - 50), listItemIdx + 400).replace(/\s+/g, " ");
-          send({ type: "progress", message: `  🔍 list_item 주변: ${snippet}` });
+        send({ type: "warn", message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount}, __NEXT_DATA__:${hasNextData})` });
+        if (apiMatches) send({ type: "progress", message: `  🔍 API URL 패턴: ${apiMatches}` });
+        const dataTidIdx = html.indexOf("data-tid=");
+        if (dataTidIdx >= 0) {
+          const snippet = html.slice(Math.max(0, dataTidIdx - 20), dataTidIdx + 300).replace(/\s+/g, " ");
+          send({ type: "progress", message: `  🔍 data-tid 주변: ${snippet}` });
         }
         continue;
       }
