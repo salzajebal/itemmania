@@ -381,10 +381,10 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
 ];
 
 function scraperUrl(targetUrl: string, apiKey: string, sessionNumber: number): string {
-  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=false&country_code=kr&session_number=${sessionNumber}`;
+  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=true&country_code=kr&session_number=${sessionNumber}`;
 }
 
-async function scraperFetch(url: string, apiKey: string | undefined, sessionNumber: number, timeoutMs = 55000): Promise<{text: string | null; status: number | null; error: string | null}> {
+async function scraperFetch(url: string, apiKey: string | undefined, sessionNumber: number, timeoutMs = 90000): Promise<{text: string | null; status: number | null; error: string | null}> {
   const fetchUrl = apiKey ? scraperUrl(url, apiKey, sessionNumber) : url;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -692,6 +692,7 @@ router.post("/admin/crawl/stream", async (req, res): Promise<void> => {
 
   const send = (data: Record<string, unknown>) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
+    (res as unknown as { flush?: () => void }).flush?.();
   };
 
   const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
