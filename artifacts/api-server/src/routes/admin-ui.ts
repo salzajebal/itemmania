@@ -485,15 +485,16 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
 });
 
 router.get("/admin.js", (_req, res): void => {
-  // dev: __dirname = src/routes/, prod(esbuild): __dirname = dist/
+  // process.cwd() = workspace root in both dev and prod
+  const cwd = process.cwd(); // = artifacts/api-server in both dev and prod
   const candidates = [
-    path.join(__dirname, "admin-script.js"),    // prod: dist/admin-script.js
-    path.join(__dirname, "../admin-script.js"), // dev: src/admin-script.js
+    path.join(cwd, "dist/admin-script.js"), // prod (after build)
+    path.join(cwd, "src/admin-script.js"),  // dev
   ];
   const found = candidates.find(existsSync);
   if (!found) { res.status(404).send("// admin-script.js not found"); return; }
   res.set("Content-Type", "application/javascript; charset=utf-8");
-  res.sendFile(found);
+  res.sendFile(path.resolve(found));
 });
 
 export default router;
