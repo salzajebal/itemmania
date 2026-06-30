@@ -515,10 +515,12 @@ router.get("/admin/stats", async (_req, res): Promise<void> => {
 // ─── 크롤러 설정 ───────────────────────────────────────────────────────────────
 const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 2696, name: "로스트아크",         slug: "lostark" },
-  { id: 138,  name: "메이플스토리",       slug: "maplestory" },
+  { id: 8458, name: "메이플스토리",       slug: "maplestory" },
   { id: 5233, name: "메이플스토리월드",   slug: "maplestory-world" },
   { id: 281,  name: "던전앤파이터",       slug: "dnf" },
-  { id: 5913, name: "리니지 클래식",     slug: "lineage-classic" },
+  { id: 5913, name: "리니지클래식",       slug: "lineage-classic" },
+  { id: 3449, name: "리니지M",            slug: "lineage-m" },
+  { id: 4696, name: "오딘",               slug: "odin" },
   { id: 5799, name: "아이온2",            slug: "aion2" },
   { id: 155,  name: "마비노기",           slug: "mabinogi" },
   { id: 101,  name: "거상",               slug: "geosang" },

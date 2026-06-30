@@ -33,3 +33,8 @@ externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+SCRAPER_API_KEY = "d81a0802942de8fe338f9d8e1e2916d1"
