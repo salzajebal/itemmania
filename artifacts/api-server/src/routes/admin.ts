@@ -44,7 +44,8 @@ async function runCrawlJob(
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
   const maxPages = Math.min(Math.max(1, pages), 5);
-  const totalSteps = targetGames.length * maxPages;
+  const categories: Array<"sell" | "buy"> = ["sell", "buy"];
+  const totalSteps = targetGames.length * maxPages * categories.length;
 
   Object.assign(job, { totalGames: targetGames.length, totalPages: maxPages, totalSteps,
     games: targetGames.map(g => g.name) });
@@ -57,83 +58,87 @@ async function runCrawlJob(
   try { await initSession(apiKey, sessionNumber); } catch { /* 세션 초기화 실패 시 계속 */ }
   push({ type: "session_ok", message: `✓ 세션 초기화 완료`, completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
 
-  for (let gi = 0; gi < targetGames.length; gi++) {
-    const game = targetGames[gi];
-    push({ type: "game", gameIndex: gi, gameName: game.name, message: `▶ [${game.name}] 시작`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
+  for (const cat of categories) {
+    const catLabel = cat === "sell" ? "팝니다" : "삽니다";
+    push({ type: "progress", message: `── [${catLabel}] 크롤 시작 ──`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
 
-    for (let page = 1; page <= maxPages; page++) {
-      push({ type: "progress", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
-        completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
-        message: `  ${page}/${maxPages}페이지 크롤 중...` });
+    for (let gi = 0; gi < targetGames.length; gi++) {
+      const game = targetGames[gi];
+      push({ type: "game", gameIndex: gi, gameName: game.name, message: `▶ [${catLabel}][${game.name}] 시작`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
 
-      const { html, error } = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
-      if (!html) {
-        completedSteps++;
-        push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
-          completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed: ++totalFailed,
-          message: `  ✗ ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
-        continue;
-      }
-
-      const listItemCount = (html.match(/list_item/g) || []).length;
-      const dataTidCount = (html.match(/data-tid=/g) || []).length;
-      const products = parseProductsFromHtml(html, game.id);
-
-      if (products.length === 0) {
-        completedSteps++;
-        push({ type: "warn", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+      for (let page = 1; page <= maxPages; page++) {
+        push({ type: "progress", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
           completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
-          message: `  ⚠ ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount})` });
-        // data-tid 주변 스니펫
-        const idx = html.indexOf("data-tid=");
-        if (idx >= 0) {
-          const snip = html.slice(Math.max(0, idx - 20), idx + 300).replace(/\s+/g, " ");
-          push({ type: "debug", message: `  🔍 data-tid 주변: ${snip}`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
-        }
-        continue;
-      }
+          message: `  ${page}/${maxPages}페이지 크롤 중... (${catLabel})` });
 
-      let pageSaved = 0;
-      for (const p of products) {
-        try {
-          await db.insert(productsTable).values({
-            itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
-            category: p.category, itemCategory: p.itemCategory,
-            gameName: p.gameName, serverName: p.serverName,
-            sellerGrade: p.sellerGrade ?? null,
-            detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
-            ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
-          }).onConflictDoUpdate({
-            target: productsTable.itemmaniaid,
-            set: { title: p.title, price: p.price, gameName: p.gameName,
-              serverName: p.serverName, itemCategory: p.itemCategory,
+        const { html, error } = await fetchPageHtml(game.id, page, apiKey, sessionNumber, cat);
+        if (!html) {
+          completedSteps++;
+          push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed: ++totalFailed,
+            message: `  ✗ [${catLabel}] ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
+          continue;
+        }
+
+        const listItemCount = (html.match(/list_item/g) || []).length;
+        const dataTidCount = (html.match(/data-tid=/g) || []).length;
+        const products = parseProductsFromHtml(html, game.id, cat);
+
+        if (products.length === 0) {
+          completedSteps++;
+          push({ type: "warn", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+            message: `  ⚠ [${catLabel}] ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount})` });
+          const idx = html.indexOf("data-tid=");
+          if (idx >= 0) {
+            const snip = html.slice(Math.max(0, idx - 20), idx + 300).replace(/\s+/g, " ");
+            push({ type: "debug", message: `  🔍 data-tid 주변: ${snip}`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
+          }
+          continue;
+        }
+
+        let pageSaved = 0;
+        for (const p of products) {
+          try {
+            await db.insert(productsTable).values({
+              itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
+              category: p.category, itemCategory: p.itemCategory,
+              gameName: p.gameName, serverName: p.serverName,
               sellerGrade: p.sellerGrade ?? null,
-              detailUrl: p.detailUrl, status: "active", crawledAt: new Date() },
-          });
-          totalUpserted++; pageSaved++;
-        } catch { totalFailed++; }
+              detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+              ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
+            }).onConflictDoUpdate({
+              target: productsTable.itemmaniaid,
+              set: { title: p.title, price: p.price, gameName: p.gameName,
+                serverName: p.serverName, itemCategory: p.itemCategory,
+                sellerGrade: p.sellerGrade ?? null,
+                detailUrl: p.detailUrl, status: "active", crawledAt: new Date() },
+            });
+            totalUpserted++; pageSaved++;
+          } catch { totalFailed++; }
 
-        if (crawlDetail) {
-          const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
-          if (dhtml) {
-            const detail = parseDetailFromHtml(dhtml);
-            try {
-              await db.update(productsTable)
-                .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
-                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
-              detailFetched++;
-            } catch { detailFailed++; }
-          } else { detailFailed++; }
-          await new Promise(r => setTimeout(r, 300));
+          if (crawlDetail) {
+            const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
+            if (dhtml) {
+              const detail = parseDetailFromHtml(dhtml);
+              try {
+                await db.update(productsTable)
+                  .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
+                  .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
+                detailFetched++;
+              } catch { detailFailed++; }
+            } else { detailFailed++; }
+            await new Promise(r => setTimeout(r, 300));
+          }
         }
+
+        completedSteps++;
+        push({ type: "ok", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+          pageSaved, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed, detailFetched,
+          message: `  ✓ [${catLabel}] ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
+
+        if (page < maxPages) await new Promise(r => setTimeout(r, 500));
       }
-
-      completedSteps++;
-      push({ type: "ok", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
-        pageSaved, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed, detailFetched,
-        message: `  ✓ ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
-
-      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
     }
   }
 
@@ -561,8 +566,8 @@ async function initSession(apiKey: string, sessionNumber: number): Promise<void>
   await scraperFetch("https://www.itemmania.com/", apiKey, sessionNumber, 30000);
 }
 
-async function fetchPageHtml(gameId: number, page: number, apiKey: string | undefined, sessionNumber: number): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
-  const url = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
+async function fetchPageHtml(gameId: number, page: number, apiKey: string | undefined, sessionNumber: number, category: "sell" | "buy" = "sell"): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
+  const url = `https://www.itemmania.com/${category}/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
   const {text, status, error} = await scraperFetch(url, apiKey, sessionNumber);
   return {html: text, statusCode: status, error};
 }
@@ -634,7 +639,7 @@ function parseRegDate(txt: string): Date | null {
   return null;
 }
 
-function parseProductsFromHtml(html: string, gameId: number): Array<{
+function parseProductsFromHtml(html: string, gameId: number, category: "sell" | "buy" = "sell"): Array<{
   itemmaniaid: string;
   title: string;
   price: number;
@@ -693,9 +698,9 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
       price,
       gameName: gameName || gameFallbackName,
       serverName: serverName || "",
-      category: "sell",
+      category: category,
       itemCategory: itemCategory || "",
-      detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+      detailUrl: `https://www.itemmania.com/${category}/application.html?id=${tid}`,
       sellerGrade,
       description: quantityText,
       originalCreatedAt,
@@ -739,9 +744,9 @@ function parseProductsFromHtml(html: string, gameId: number): Array<{
           price,
           gameName: String(it["game_name"] || it["gameName"] || gameFallbackName),
           serverName: String(it["server_name"] || it["serverName"] || ""),
-          category: "sell",
+          category: category,
           itemCategory: String(it["goods_kind"] || it["itemCategory"] || ""),
-          detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+          detailUrl: `https://www.itemmania.com/${category}/application.html?id=${tid}`,
           sellerGrade: null,
           description: null,
           originalCreatedAt: null,

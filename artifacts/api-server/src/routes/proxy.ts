@@ -1982,8 +1982,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         // normalList 비우기
         normalList.innerHTML = '';
 
-        // ── 우리 DB 상품 카드 생성 ────────────────────────────────
-        var ourEls = items.map(function(p) { return makeCardWithBadge(p, type); });
+        // ── 우리 DB 상품 카드 생성 (VIP/플래티넘 → 프리미엄, 나머지 → 일반) ──
+        var ourPremEls = items.filter(function(p){return p.sellerGrade==='vip'||p.sellerGrade==='platinum';}).map(function(p){return makeCardWithBadge(p,type);});
+        var ourEls = items.filter(function(p){return p.sellerGrade!=='vip'&&p.sellerGrade!=='platinum';}).map(function(p){return makeCardWithBadge(p,type);});
 
         // ── 업로드 시간순 병합 (최신 순) ──────────────────────────
         // 아이템매니아 원본은 이미 최신순. 같은 분(HH:MM) 내 순서는 원본 순서 보존.
@@ -2009,9 +2010,14 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
             '</li>';
         }
 
-        // 프리미엄 리스트: 원본 복원
-        if (premiumList && filteredPremium.length > 0) {
+        // 프리미엄 리스트: 원본 + 우리 DB VIP/플래티넘 상품
+        if (premiumList) {
           filteredPremium.forEach(function(el) { premiumList.appendChild(el); });
+          ourPremEls.forEach(function(el) { premiumList.appendChild(el); });
+          var premParent = premiumList.closest('div, section') || premiumList.parentElement;
+          if (premParent) {
+            premParent.style.display = (filteredPremium.length === 0 && ourPremEls.length === 0) ? 'none' : '';
+          }
         }
 
         // 페이지네이션 (우리 DB 기준)
