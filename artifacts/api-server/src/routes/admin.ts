@@ -1169,4 +1169,19 @@ router.get("/admin/crawl/script", (_req, res): void => {
   }
 });
 
+// 자동 수집기 스크립트 다운로드
+router.get("/admin/crawl/auto-script", (_req, res): void => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const scriptPath = path.join(process.cwd(), "scripts/src/auto-crawl.mjs");
+  try {
+    const content = fs.readFileSync(scriptPath, "utf-8");
+    res.set("Content-Type", "application/javascript; charset=utf-8");
+    res.set("Content-Disposition", 'attachment; filename="auto-crawl.mjs"');
+    res.send(content);
+  } catch {
+    res.status(404).json({ error: "스크립트 파일을 찾을 수 없습니다." });
+  }
+});
+
 export default router;
