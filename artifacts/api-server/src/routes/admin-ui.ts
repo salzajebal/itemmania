@@ -236,15 +236,6 @@ tbody tr:hover{background:#fafbff}
             <div id="snapshotStatus" style="margin-top:12px;font-size:13px;display:none"></div>
           </div>
 
-          <!-- 브라우저 직접 수집 -->
-          <div style="background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:12px;padding:20px;margin-bottom:16px">
-            <div style="font-size:15px;font-weight:700;color:#1a56db;margin-bottom:6px">🌐 브라우저 직접 수집 (실시간)</div>
-            <div style="font-size:13px;color:#555;margin-bottom:14px">
-              itemmania에서 실시간으로 상품을 가져옵니다.<br>
-              <span style="color:#e57c00;font-size:12px">* 외부 CORS 프록시가 차단된 경우 실패할 수 있습니다.</span>
-            </div>
-            <button id="browserCrawlBtn" onclick="browserCrawl()" style="padding:12px 28px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">▶ 실시간 수집 시작</button>
-          </div>
 
           <div style="margin-bottom:20px">
             <b style="display:block;margin-bottom:10px">수집 대상 게임</b>
