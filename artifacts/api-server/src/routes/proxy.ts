@@ -2006,9 +2006,10 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           return goodsEl && goodsEl.textContent.trim() === itemCat;
         }) : origPremiumItems;
 
-        // 전체 건수: 아이템매니아 원본 총 건수 + 우리 DB 일반 상품 수
+        // 전체 건수: 카테고리 필터 없으면 스냅샷 총 건수, 있으면 필터된 스냅샷 건수
         var ourNormalCount = items.filter(function(p){return p.sellerGrade!=='vip'&&p.sellerGrade!=='platinum';}).length;
-        var totalCount = origImCount + ourNormalCount;
+        var snapshotCount = itemCat ? filteredOrig.length : origImCount;
+        var totalCount = snapshotCount + ourNormalCount;
         if (countEl) countEl.textContent = fmt(totalCount) + '건';
 
         // 기존 원본 아이템매니아 리스팅 제거 (다시 정렬해서 붙일 것)
@@ -2106,9 +2107,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           });
           normalList.innerHTML = '';
           all2.forEach(function(e2) { normalList.appendChild(e2); });
-          // 건수 갱신: 실시간 아이템마니아 총 건수 + 우리 DB 일반 건수
+          // 건수 갱신: 카테고리 필터 없을 때만 실시간 총 건수 사용 (있으면 표시된 항목 수)
           var liveTotal = liveData.total || 0;
-          var newTotal = liveTotal + ourNormalCount;
+          var newTotal = itemCat ? (liveItems.length + ourNormalCount) : (liveTotal + ourNormalCount);
           if (countEl && newTotal > 0) countEl.textContent = fmt(newTotal) + '건';
           // 프리미엄 섹션 갱신
           if (premiumList && livePremium.length > 0) {
