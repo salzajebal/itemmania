@@ -225,14 +225,25 @@ tbody tr:hover{background:#fafbff}
           <span class="title">itemmania.com 상품 크롤링</span>
         </div>
         <div style="padding:24px">
-          <!-- 메인 수집 버튼 -->
-          <div style="background:linear-gradient(135deg,#e8f5e9,#f0fdf4);border:2px solid #4caf50;border-radius:12px;padding:20px;margin-bottom:24px">
-            <div style="font-size:16px;font-weight:800;color:#2e7d32;margin-bottom:6px">🚀 브라우저 직접 수집</div>
+          <!-- 즉시 가져오기 (스냅샷) -->
+          <div style="background:linear-gradient(135deg,#e8f5e9,#f0fdf4);border:2px solid #4caf50;border-radius:12px;padding:20px;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:800;color:#2e7d32;margin-bottom:6px">⚡ 즉시 상품 가져오기</div>
             <div style="font-size:13px;color:#555;margin-bottom:16px">
-              버튼 하나로 아이템마니아 상품을 바로 수집합니다.<br>
-              <span style="color:#888;font-size:12px">* 브라우저에서 직접 fetch하므로 서버 IP 차단 우회 — 별도 설치 불필요</span>
+              서버에 저장된 게임별 상품 데이터를 DB에 바로 넣습니다. <b>가장 빠르고 확실합니다.</b><br>
+              <span style="color:#888;font-size:12px">* 10개 게임 × 약 20~60개 = 최대 600여 개 상품 즉시 저장</span>
             </div>
-            <button id="browserCrawlBtn" onclick="browserCrawl()" style="padding:14px 32px;background:#43a047;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(67,160,71,0.35)">▶ 지금 바로 수집</button>
+            <button id="snapshotBtn" onclick="snapshotImport()" style="padding:14px 32px;background:#43a047;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(67,160,71,0.35)">⚡ 지금 바로 가져오기</button>
+            <div id="snapshotStatus" style="margin-top:12px;font-size:13px;display:none"></div>
+          </div>
+
+          <!-- 브라우저 직접 수집 -->
+          <div style="background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:12px;padding:20px;margin-bottom:16px">
+            <div style="font-size:15px;font-weight:700;color:#1a56db;margin-bottom:6px">🌐 브라우저 직접 수집 (실시간)</div>
+            <div style="font-size:13px;color:#555;margin-bottom:14px">
+              itemmania에서 실시간으로 상품을 가져옵니다.<br>
+              <span style="color:#e57c00;font-size:12px">* 외부 CORS 프록시가 차단된 경우 실패할 수 있습니다.</span>
+            </div>
+            <button id="browserCrawlBtn" onclick="browserCrawl()" style="padding:12px 28px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">▶ 실시간 수집 시작</button>
           </div>
 
           <div style="margin-bottom:20px">

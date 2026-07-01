@@ -357,6 +357,36 @@ async function startCrawl(){
   }
 }
 
+async function snapshotImport(){
+  var btn=document.getElementById('snapshotBtn');
+  var statusEl=document.getElementById('snapshotStatus');
+  btn.disabled=true;
+  btn.textContent='\u23f3 \uac00\uc838\uc624\ub294 \uc911...';
+  statusEl.style.display='block';
+  statusEl.style.color='#555';
+  statusEl.textContent='\uc11c\ubc84 \uc2a4\ub0c5\uc0f7 \ud30c\uc77c \ud30c\uc2f1 \uc911...';
+  try{
+    var r=await fetch('/api/admin/crawl/from-snapshots',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'}});
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||'\uc2e4\ud328');
+    var lines=d.results.map(function(x){
+      if(x.error)return '\u274c '+x.gameName+': '+x.error;
+      return '\u2705 '+x.gameName+': \ud30c\uc2f1 '+x.parsed+'\uac1c \u2192 \uc800\uc7a5 '+x.saved+'\uac1c';
+    });
+    statusEl.style.color='#155724';
+    statusEl.innerHTML='<b>\u2705 \uc644\ub8cc! \uc804\uccb4 '+d.totalSaved+'\uac1c \uc800\uc7a5</b><br><span style="font-size:12px;font-family:monospace;color:#444">'+lines.join('<br>')+'</span>';
+    btn.textContent='\u26a1 \uc9c0\uae08 \ubc14\ub85c \uac00\uc838\uc624\uae30';
+    loadStats();
+    loadProducts();
+  }catch(e){
+    statusEl.style.color='#721c24';
+    statusEl.textContent='\u274c \uc624\ub958: '+e.message;
+    btn.textContent='\u26a1 \uc9c0\uae08 \ubc14\ub85c \uac00\uc838\uc624\uae30';
+  }finally{
+    btn.disabled=false;
+  }
+}
+
 async function browserCrawl(){
   if(crawlGamesData.length===0)await initCrawlTab();
   if(crawlSelectedGames.size===0)crawlGamesData.forEach(function(g){crawlSelectedGames.add(g.id);});

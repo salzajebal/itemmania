@@ -5,6 +5,29 @@ import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
 import * as cheerio from "cheerio";
 import { fetchProxyPage } from "../lib/proxy";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
+
+const ADMIN_STATIC_DIR = (() => {
+  const candidates = [
+    join(process.cwd(), "src", "static"),
+    join(process.cwd(), "artifacts", "api-server", "src", "static"),
+  ];
+  return candidates.find(existsSync) ?? candidates[0];
+})();
+
+const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string }> = [
+  { file: "sell-lineage-classic.html", gameId: 5913, gameName: "리니지클래식" },
+  { file: "sell-maplestory-world.html", gameId: 5233, gameName: "메이플스토리월드" },
+  { file: "sell-maplestory.html", gameId: 8458, gameName: "메이플스토리" },
+  { file: "sell-odin.html", gameId: 4696, gameName: "오딘" },
+  { file: "sell-mabinogi.html", gameId: 155, gameName: "마비노기" },
+  { file: "sell-lostark.html", gameId: 2696, gameName: "로스트아크" },
+  { file: "sell-lineage-m.html", gameId: 3449, gameName: "리니지M" },
+  { file: "sell-geosang.html", gameId: 101, gameName: "거상" },
+  { file: "sell-aion2.html", gameId: 5799, gameName: "아이온2" },
+  { file: "sell-dnf.html", gameId: 281, gameName: "던전앤파이터" },
+];
 
 const router: IRouter = Router();
 
@@ -1182,6 +1205,88 @@ router.get("/admin/crawl/auto-script", (_req, res): void => {
   } catch {
     res.status(404).json({ error: "스크립트 파일을 찾을 수 없습니다." });
   }
+});
+
+// ── 스냅샷 파일로부터 즉시 상품 가져오기 ──────────────────────────────────
+router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
+  const results: Array<{ gameName: string; parsed: number; saved: number; error?: string }> = [];
+  let totalSaved = 0;
+
+  for (const entry of SNAPSHOT_GAME_MAP) {
+    const filePath = join(ADMIN_STATIC_DIR, entry.file);
+    if (!existsSync(filePath)) {
+      results.push({ gameName: entry.gameName, parsed: 0, saved: 0, error: "파일 없음" });
+      continue;
+    }
+    try {
+      const html = readFileSync(filePath, "utf-8");
+      const $ = cheerio.load(html);
+      const items: Array<{ itemmaniaid: string; title: string; price: number; gameName: string; serverName: string; itemCategory: string; detailUrl: string }> = [];
+
+      $("[data-tid]").each((_i, el) => {
+        const tid = $(el).attr("data-tid");
+        if (!tid || $(el).hasClass("skeleton-item")) return;
+        const gName = $(el).find("[data-search=game]").first().text().trim() || entry.gameName;
+        const sName = $(el).find("[data-search=server]").first().attr("data-title")
+          || $(el).find("[data-search=server]").first().text().trim() || "";
+        const iCat = $(el).find("[data-search=goods]").first().text().trim() || "";
+        const title = $(el).find(".kind_title").first().text().trim()
+          || $(el).find(".tit").first().text().trim()
+          || $(el).find("strong").first().text().trim();
+        if (!title) return;
+        const priceRaw = $(el).find(".trade_money").first().text().trim()
+          || $(el).find(".price").first().text().trim();
+        const priceMatch = priceRaw.match(/^([0-9,]+)/);
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
+        items.push({
+          itemmaniaid: tid,
+          title,
+          price,
+          gameName: gName,
+          serverName: sName,
+          itemCategory: iCat,
+          detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+        });
+      });
+
+      let saved = 0;
+      for (const p of items) {
+        try {
+          await db.insert(productsTable).values({
+            itemmaniaid: p.itemmaniaid,
+            title: p.title,
+            price: p.price,
+            gameName: p.gameName,
+            serverName: p.serverName,
+            itemCategory: p.itemCategory,
+            category: "sell",
+            detailUrl: p.detailUrl,
+            status: "active",
+            crawledAt: new Date(),
+          }).onConflictDoUpdate({
+            target: productsTable.itemmaniaid,
+            set: {
+              title: p.title,
+              price: p.price,
+              gameName: p.gameName,
+              serverName: p.serverName,
+              itemCategory: p.itemCategory,
+              detailUrl: p.detailUrl,
+              status: "active",
+              crawledAt: new Date(),
+            },
+          });
+          saved++;
+        } catch { /* skip */ }
+      }
+      totalSaved += saved;
+      results.push({ gameName: entry.gameName, parsed: items.length, saved });
+    } catch (e) {
+      results.push({ gameName: entry.gameName, parsed: 0, saved: 0, error: String(e) });
+    }
+  }
+
+  res.json({ totalSaved, results });
 });
 
 export default router;
