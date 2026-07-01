@@ -1044,6 +1044,120 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
   res.json({ ok: true, upserted, failed });
 });
 
+// ── 실시간 아이템매니아 상품 목록 (5분 인메모리 캐시) ────────────────────────
+interface LiveListItem {
+  tid: string;
+  title: string;
+  price: number;
+  gameName: string;
+  serverName: string;
+  itemCategory: string;
+  sellerGrade: string | null;
+  description: string | null;
+  timestamp: number;
+}
+interface LiveListCacheEntry {
+  items: LiveListItem[];
+  premiumItems: LiveListItem[];
+  total: number;
+  expireAt: number;
+}
+const liveListCache = new Map<string, LiveListCacheEntry>();
+
+function parseLiveItemsFromHtml(html: string, gameId: number): LiveListItem[] {
+  const $ = cheerio.load(html);
+  const results: LiveListItem[] = [];
+  const gameFallbackName = GAME_LIST.find(g => g.id === gameId)?.name ?? "";
+  const GRADE_CLASS_MAP: Record<string, string> = {
+    vip: "vip", platinum: "platinum", gold: "gold", silver: "silver", bronze: "bronze",
+  };
+
+  $("[data-tid]").each((_i, el) => {
+    const tid = $(el).attr("data-tid");
+    if (!tid || $(el).hasClass("skeleton-item")) return;
+    const gameName = $(el).find("[data-search=game]").first().text().trim() || gameFallbackName;
+    const serverName = $(el).find("[data-search=server]").first().attr("data-title")
+      || $(el).find("[data-search=server]").first().text().trim()
+      || "";
+    const itemCategory = $(el).find("[data-search=goods]").first().text().trim() || "";
+    const title = $(el).find(".kind_title").first().text().trim()
+      || $(el).find(".tit").first().text().trim()
+      || $(el).find("strong").first().text().trim();
+    if (!title) return;
+    const priceRaw = $(el).find(".trade_money").first().text().trim()
+      || $(el).find(".price").first().text().trim();
+    const priceMatch = priceRaw.match(/^([0-9,]+)/);
+    const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
+    let sellerGrade: string | null = null;
+    const markEl = $(el).find(".credit_mark_new, .credit_mark").first();
+    if (markEl.length) {
+      const cls = (markEl.attr("class") || "").split(/\s+/);
+      for (const c of cls) {
+        if (GRADE_CLASS_MAP[c]) { sellerGrade = GRADE_CLASS_MAP[c]; break; }
+      }
+    }
+    const regDateText = $(el).find(".col.reg_date, .reg_date").first().text().trim();
+    const originalCreatedAt = parseRegDate(regDateText);
+    const timestamp = originalCreatedAt ? originalCreatedAt.getTime() : 0;
+    const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
+    results.push({ tid, title, price, gameName, serverName, itemCategory, sellerGrade, description: quantityText, timestamp });
+  });
+
+  return results;
+}
+
+router.get("/admin/live-list", async (req, res): Promise<void> => {
+  const gameCode = String(req.query.gameCode ?? "");
+  const type = req.query.type === "buy" ? "buy" : "sell";
+  const page = Math.max(1, Math.min(5, parseInt(String(req.query.page ?? "1"), 10)));
+
+  if (!gameCode) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "gameCode 필요" });
+    return;
+  }
+
+  const cacheKey = `${gameCode}-${type}-${page}`;
+  const cached = liveListCache.get(cacheKey);
+  if (cached && cached.expireAt > Date.now()) {
+    res.json({ items: cached.items, premiumItems: cached.premiumItems, total: cached.total });
+    return;
+  }
+
+  const apiKey = process.env.SCRAPER_API_KEY;
+  if (!apiKey) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "SCRAPER_API_KEY 없음" });
+    return;
+  }
+
+  const gameId = parseInt(gameCode, 10);
+  if (isNaN(gameId)) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "잘못된 gameCode" });
+    return;
+  }
+
+  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
+  const { html, error } = await fetchPageHtml(gameId, page, apiKey, sessionNumber, type);
+
+  if (!html) {
+    res.json({ items: [], premiumItems: [], total: 0, error: error ?? "HTML 없음" });
+    return;
+  }
+
+  const $c = cheerio.load(html);
+  const countText = $c("#premium_count").text().trim();
+  const total = parseInt(countText.replace(/[^0-9]/g, ""), 10) || 0;
+
+  const parsed = parseLiveItemsFromHtml(html, gameId);
+  const PREMIUM_GRADES = new Set(["vip", "platinum"]);
+  const premiumItems = parsed.filter(p => p.sellerGrade !== null && PREMIUM_GRADES.has(p.sellerGrade));
+  const normalItems  = parsed.filter(p => p.sellerGrade === null || !PREMIUM_GRADES.has(p.sellerGrade));
+
+  const entry: LiveListCacheEntry = { items: normalItems, premiumItems, total, expireAt: Date.now() + 5 * 60 * 1000 };
+  liveListCache.set(cacheKey, entry);
+
+  res.json({ items: normalItems, premiumItems, total });
+});
+
 // 로컬 크롤러 스크립트 다운로드
 router.get("/admin/crawl/script", (_req, res): void => {
   const fs = require("node:fs");

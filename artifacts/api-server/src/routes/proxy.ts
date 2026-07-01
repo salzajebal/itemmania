@@ -1747,6 +1747,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     li.className = 'list_item';
     li.setAttribute('data-tid', String(p.id));
     li.setAttribute('data-ts', String(p.createdAt ? new Date(p.createdAt).getTime() : 0));
+    li.setAttribute('data-our', '1');
     var href = '/' + type + '/application.html?id=' + p.id;
     var GRADE_LETTERS = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
     var gradeKey = p.sellerGrade && GRADE_LETTERS[p.sellerGrade] ? p.sellerGrade : null;
@@ -1770,6 +1771,37 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       '<div class="col quantity">' + (p.description || '') + '</div>' +
       '<div class="col price"><span class=trade_money>' + fmt(p.price) + '원</span></div>' +
       '<div class="col reg_date">' + timeLabel(p.createdAt) + '</div>';
+    return li;
+  }
+
+  // 실시간 아이템마니아 상품 카드 (live-list API에서 받은 데이터)
+  function makeLiveCard(p, type) {
+    var li = document.createElement('li');
+    li.className = 'list_item';
+    li.setAttribute('data-tid', String(p.tid));
+    li.setAttribute('data-ts', String(p.timestamp || 0));
+    var href = '/' + type + '/application.html?id=' + encodeURIComponent(p.tid);
+    var GRADE_LETTERS = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+    var gradeKey = p.sellerGrade && GRADE_LETTERS[p.sellerGrade] ? p.sellerGrade : null;
+    var gradeHtml = gradeKey
+      ? '<span class="credit_mark_new ' + gradeKey + '">' + GRADE_LETTERS[gradeKey] + '</span>'
+      : '<span class="credit_mark_new regular"></span>';
+    li.innerHTML =
+      '<div class="col info">' + gradeHtml + '</div>' +
+      '<div class="col subject_info">' +
+        '<ul class=server>' +
+          '<li><a href="javascript:void(0)" data-search=game>' + (p.gameName||'') + '</a></li>' +
+          (p.serverName ? '<li><a href="javascript:void(0)" data-search=server data-title="' + p.serverName + '">' + p.serverName + '</a></li>' : '') +
+          '<li><a href="javascript:void(0)" data-search=goods>' + (p.itemCategory||'게임머니') + '</a></li>' +
+        '</ul>' +
+        '<a href="' + href + '" class="subject active">' +
+          '<div><span class="text_ellipsis kind_title">' + (p.title||'') + '</span></div>' +
+        '</a>' +
+      '</div>' +
+      '<div class="col quickicon"></div>' +
+      '<div class="col quantity">' + (p.description||'') + '</div>' +
+      '<div class="col price"><span class=trade_money>' + fmt(p.price||0) + '원</span></div>' +
+      '<div class="col reg_date">' + timeLabel(p.timestamp) + '</div>';
     return li;
   }
 
@@ -1948,6 +1980,14 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var origImCountText = countEl ? countEl.textContent.trim() : '';
     var origImCount = parseInt(origImCountText.replace(/[^0-9]/g, ''), 10) || origNormalCount;
 
+    // 실시간 아이템마니아 상품 fetch (ScraperAPI 5분 캐시) — 병렬 시작
+    var liveQ = 'gameCode=' + encodeURIComponent(gameCode) + '&type=' + type;
+    var livePromise = gameCode
+      ? fetch('/api/admin/live-list?' + liveQ, { credentials: 'include' })
+          .then(function(rl) { return rl.json(); })
+          .catch(function() { return { items: [], premiumItems: [], total: 0 }; })
+      : Promise.resolve({ items: [], premiumItems: [], total: 0 });
+
     fetch('/api/products?' + apiQ.join('&'), { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -2043,6 +2083,41 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
             if (dvPaging) dvPaging.style.display = 'none';
           }
         }
+
+        // ── Phase 2: 실시간 아이템마니아 상품으로 스냅샷 교체 ────────────────
+        livePromise.then(function(liveData) {
+          if (!liveData || !liveData.items) return;
+          var liveItems = liveData.items.filter(function(p2) {
+            return !itemCat || p2.itemCategory === itemCat;
+          });
+          var livePremium = (liveData.premiumItems || []).filter(function(p2) {
+            return !itemCat || p2.itemCategory === itemCat;
+          });
+          if (liveItems.length === 0 && livePremium.length === 0) return;
+          // 스냅샷 항목 제거, 우리 DB 항목(data-our)만 남김
+          Array.from(normalList.querySelectorAll('li:not([data-our])')).forEach(function(se) { se.remove(); });
+          // 실시간 카드 생성 후 우리 DB 카드와 합산·정렬
+          var liveEls = liveItems.map(function(p2) { return makeLiveCard(p2, type); });
+          var ourInDom = Array.from(normalList.querySelectorAll('li[data-our]'));
+          var all2 = ourInDom.concat(liveEls);
+          all2.sort(function(a2, b2) {
+            return (parseInt(b2.getAttribute('data-ts') || '0') || 0)
+                 - (parseInt(a2.getAttribute('data-ts') || '0') || 0);
+          });
+          normalList.innerHTML = '';
+          all2.forEach(function(e2) { normalList.appendChild(e2); });
+          // 건수 갱신: 실시간 아이템마니아 총 건수 + 우리 DB 일반 건수
+          var liveTotal = liveData.total || 0;
+          var newTotal = liveTotal + ourNormalCount;
+          if (countEl && newTotal > 0) countEl.textContent = fmt(newTotal) + '건';
+          // 프리미엄 섹션 갱신
+          if (premiumList && livePremium.length > 0) {
+            premiumList.innerHTML = '';
+            livePremium.forEach(function(lp) { premiumList.appendChild(makeLiveCard(lp, type)); });
+            var premParent2 = premiumList.closest('div, section') || premiumList.parentElement;
+            if (premParent2) premParent2.style.display = '';
+          }
+        });
       })
       .catch(function() {
         var loadEl2 = document.getElementById('_im_loading');
