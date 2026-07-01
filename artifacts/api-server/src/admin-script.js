@@ -358,8 +358,10 @@ async function startCrawl(){
 }
 
 async function browserCrawl(){
+  if(crawlGamesData.length===0)await initCrawlTab();
+  if(crawlSelectedGames.size===0)crawlGamesData.forEach(function(g){crawlSelectedGames.add(g.id);});
   var selectedIds=Array.from(crawlSelectedGames);
-  if(selectedIds.length===0){showToast('게임을 선택하세요.');return;}
+  if(selectedIds.length===0){showToast('게임 목록을 불러올 수 없습니다. 잠시 후 다시 시도하세요.');return;}
   var pages=parseInt(document.getElementById('crawlPages').value)||1;
 
   var btn=document.getElementById('browserCrawlBtn');
