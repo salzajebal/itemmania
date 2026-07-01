@@ -1944,22 +1944,15 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var origPremiumItems = premiumList ? Array.from(premiumList.querySelectorAll('li.list_item, li[data-tid]')) : [];
     var origNormalCount = origNormalItems.length;
 
-    // 로딩 표시 (원본 유지하면서 맨 위에 삽입)
-    var loadingEl = document.createElement('li');
-    loadingEl.id = '_im_loading';
-    loadingEl.style.cssText = 'padding:20px 0;text-align:center;color:#999;font-size:14px;list-style:none';
-    loadingEl.textContent = '우리 사이트 상품을 불러오는 중...';
-    normalList.insertBefore(loadingEl, normalList.firstChild);
+    // ── 아이템매니아 원본 총 건수 저장 (덮어쓰기 전에) ──────────
+    var origImCountText = countEl ? countEl.textContent.trim() : '';
+    var origImCount = parseInt(origImCountText.replace(/[^0-9]/g, ''), 10) || origNormalCount;
 
     fetch('/api/products?' + apiQ.join('&'), { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         var items = data.items || [];
         var ourTotal = data.total || 0;
-
-        // 로딩 표시 제거
-        var loadEl = document.getElementById('_im_loading');
-        if (loadEl) loadEl.remove();
 
         // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
         var filteredOrig = itemCat ? origNormalItems.filter(function(el) {
@@ -1973,8 +1966,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           return goodsEl && goodsEl.textContent.trim() === itemCat;
         }) : origPremiumItems;
 
-        // 전체 건수 업데이트 (우리 DB + 필터된 아이템매니아 원본)
-        var totalCount = ourTotal + filteredOrig.length;
+        // 전체 건수: 아이템매니아 원본 총 건수 + 우리 DB 일반 상품 수
+        var ourNormalCount = items.filter(function(p){return p.sellerGrade!=='vip'&&p.sellerGrade!=='platinum';}).length;
+        var totalCount = origImCount + ourNormalCount;
         if (countEl) countEl.textContent = fmt(totalCount) + '건';
 
         // 기존 원본 아이템매니아 리스팅 제거 (다시 정렬해서 붙일 것)
