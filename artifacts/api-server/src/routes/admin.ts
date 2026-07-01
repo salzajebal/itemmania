@@ -43,7 +43,7 @@ async function runCrawlJob(
   const targetGames = gameIds.length > 0
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
-  const maxPages = Math.min(Math.max(1, pages), 5);
+  const maxPages = Math.min(Math.max(1, pages), 20);
   const categories: Array<"sell" | "buy"> = ["sell", "buy"];
   const totalSteps = targetGames.length * maxPages * categories.length;
 
@@ -773,7 +773,7 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
     : GAME_LIST.slice(0, 3);
 
-  const maxPages = Math.min(Math.max(1, pages), 5);
+  const maxPages = Math.min(Math.max(1, pages), 20);
   let totalUpserted = 0;
   let totalFailed = 0;
   let detailFetched = 0;
