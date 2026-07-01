@@ -1702,10 +1702,12 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
   function fmt(n) { return Number(n||0).toLocaleString('ko-KR'); }
   function timeLabel(d) {
     if (!d) return '';
-    var dt = new Date(d), now = new Date(), diff = Math.floor((now - dt) / 1000);
-    if (diff < 60) return diff + '초 전';
-    if (diff < 3600) return Math.floor(diff/60) + '분 전';
-    if (diff < 86400) return Math.floor(diff/3600) + '시간 전';
+    var dt = new Date(d), now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (dt >= today) {
+      var h = dt.getHours(), mn = dt.getMinutes();
+      return (h < 10 ? '0'+h : h) + ':' + (mn < 10 ? '0'+mn : mn);
+    }
     return (dt.getMonth()+1) + '/' + dt.getDate();
   }
   // 아이템매니아 시간 텍스트 → timestamp(ms) 파싱
