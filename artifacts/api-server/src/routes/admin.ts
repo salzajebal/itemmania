@@ -4,6 +4,7 @@ import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTa
 import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
 import * as cheerio from "cheerio";
+import { fetchProxyPage } from "../lib/proxy";
 
 const router: IRouter = Router();
 
@@ -1116,6 +1117,12 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
     return;
   }
 
+  const gameId = parseInt(gameCode, 10);
+  if (isNaN(gameId)) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "잘못된 gameCode" });
+    return;
+  }
+
   const cacheKey = `${gameCode}-${type}-${page}`;
   const cached = liveListCache.get(cacheKey);
   if (cached && cached.expireAt > Date.now()) {
@@ -1123,26 +1130,15 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
     return;
   }
 
-  const apiKey = process.env.SCRAPER_API_KEY;
-  if (!apiKey) {
-    res.json({ items: [], premiumItems: [], total: 0, error: "SCRAPER_API_KEY 없음" });
+  const path = `/${type}/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
+  const result = await fetchProxyPage(path, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+  if (!result) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "itemmania fetch 실패" });
     return;
   }
 
-  const gameId = parseInt(gameCode, 10);
-  if (isNaN(gameId)) {
-    res.json({ items: [], premiumItems: [], total: 0, error: "잘못된 gameCode" });
-    return;
-  }
-
-  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
-  const { html, error } = await fetchPageHtml(gameId, page, apiKey, sessionNumber, type);
-
-  if (!html) {
-    res.json({ items: [], premiumItems: [], total: 0, error: error ?? "HTML 없음" });
-    return;
-  }
-
+  const html = result.html;
   const $c = cheerio.load(html);
   const countText = $c("#premium_count").text().trim();
   const total = parseInt(countText.replace(/[^0-9]/g, ""), 10) || 0;
