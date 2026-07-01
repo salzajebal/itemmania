@@ -314,24 +314,70 @@ tbody tr:hover{background:#fafbff}
             <div id="crawlResultLog" style="font-size:12px;color:#555;max-height:200px;overflow-y:auto;line-height:1.6;font-family:monospace;white-space:pre-wrap"></div>
           </div>
 
+          <!-- 자동 수집기 -->
           <div style="margin-top:32px;padding-top:20px;border-top:1px solid #eee">
-            <b style="display:block;margin-bottom:8px">💻 로컬 크롤러 (ScraperAPI 없이 무료 사용)</b>
-            <p style="font-size:13px;color:#555;margin-bottom:12px">
-              자신의 PC에서 아래 스크립트를 실행하면 itemmania.com에서 직접 크롤링하여 이 서버 DB에 저장합니다.
+            <b style="display:block;margin-bottom:4px;font-size:16px">🤖 자동 상품 수집기</b>
+            <p style="font-size:13px;color:#555;margin-bottom:16px">
+              PC에서 실행하면 <b>1시간마다 자동으로</b> 아이템마니아 상품을 가져와 DB에 쌓습니다.<br>
+              창을 닫지 않고 켜두는 동안 계속 작동합니다.
             </p>
-            <div style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:13px;overflow-x:auto">
-              <div style="color:#6a9955"># 1. 스크립트 다운로드 (Node.js 18+ 필요)</div>
+
+            <div style="background:#f0f7ff;border:1px solid #bee3f8;border-radius:10px;padding:20px;margin-bottom:16px">
+              <div style="font-weight:700;margin-bottom:14px;font-size:14px;color:#1a56db">📋 사용 방법 (3단계)</div>
+
+              <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">
+                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">1</div>
+                <div>
+                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">스크립트 다운로드</div>
+                  <a id="autoScriptDownloadBtn" href="/api/admin/crawl/auto-script" download="auto-crawl.mjs"
+                    style="display:inline-block;padding:8px 18px;background:#1a56db;color:#fff;border-radius:7px;font-size:13px;font-weight:600;text-decoration:none">
+                    ⬇️ auto-crawl.mjs 다운로드
+                  </a>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">
+                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">2</div>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">파일 열어서 3줄 수정</div>
+                  <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;padding:12px;font-family:monospace;font-size:12px;line-height:1.8">
+                    <span style="color:#6a9955">// ★ 여기만 수정하세요 ★</span><br>
+                    <span style="color:#9cdcfe">const</span> API_URL &nbsp;&nbsp;&nbsp;&nbsp; = <span style="color:#ce9178" id="autoScriptApiUrl">'https://itenmania.com'</span>;<br>
+                    <span style="color:#9cdcfe">const</span> ADMIN_EMAIL = <span style="color:#ce9178">'<b style="color:#ff9999">내 이메일</b>'</span>;<br>
+                    <span style="color:#9cdcfe">const</span> ADMIN_PW &nbsp;&nbsp; = <span style="color:#ce9178">'<b style="color:#ff9999">내 비밀번호</b>'</span>;
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">3</div>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">터미널에서 실행 후 창 유지</div>
+                  <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;padding:12px;font-family:monospace;font-size:13px">
+                    node auto-crawl.mjs
+                  </div>
+                  <div style="font-size:12px;color:#555;margin-top:6px">
+                    ⚠️ Node.js 없으면 → <a href="https://nodejs.org" target="_blank" style="color:#1a56db">nodejs.org</a> 에서 LTS 버전 설치
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#f6fff8;border:1px solid #9be6b0;border-radius:8px;padding:14px;font-size:13px;color:#276749">
+              ✅ 실행하면 1시간마다 자동으로 10개 게임 × 3페이지 = <b>약 1,500개</b>씩 수집됩니다.<br>
+              이미 있는 상품은 건너뛰고 새 상품만 추가되어 계속 쌓입니다.
+            </div>
+          </div>
+
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid #eee">
+            <b style="display:block;margin-bottom:8px;color:#888;font-size:13px">💻 고급: 수동 크롤러 스크립트</b>
+            <div style="background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;overflow-x:auto">
+              <div style="color:#6a9955"># 1. 스크립트 다운로드</div>
               <div>curl -O <span id="crawlScriptUrl" style="color:#ce9178">/api/admin/crawl/script</span></div>
-              <div style="margin-top:8px;color:#6a9955"># 2. 기본 실행 (목록만)</div>
-              <div>node crawl-itemmania.mjs \</div>
-              <div>&nbsp;&nbsp;--api-url <span id="crawlApiBaseUrl" style="color:#ce9178">https://your-app.replit.app</span> \</div>
-              <div>&nbsp;&nbsp;--admin-email <span style="color:#9cdcfe">admin@example.com</span> \</div>
-              <div>&nbsp;&nbsp;--admin-pw <span style="color:#9cdcfe">yourpassword</span> \</div>
-              <div>&nbsp;&nbsp;--games lostark,maplestory,dnf --pages 3</div>
-              <div style="margin-top:8px;color:#6a9955"># 3. 상세 포함 (판매자명·설명·이미지까지)</div>
-              <div>node crawl-itemmania.mjs --api-url <span class="crawlApiBaseUrlRef" style="color:#ce9178">https://your-app.replit.app</span> \</div>
+              <div style="margin-top:8px;color:#6a9955"># 2. 실행</div>
+              <div>node crawl-itemmania.mjs --api-url <span id="crawlApiBaseUrl" style="color:#ce9178">https://your-app.replit.app</span> \</div>
               <div>&nbsp;&nbsp;--admin-email <span style="color:#9cdcfe">admin@example.com</span> --admin-pw <span style="color:#9cdcfe">yourpassword</span> \</div>
-              <div>&nbsp;&nbsp;--games all --pages 3 --with-detail</div>
+              <div>&nbsp;&nbsp;--games lostark,maplestory,dnf --pages 3</div>
             </div>
           </div>
         </div>
