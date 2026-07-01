@@ -357,6 +357,155 @@ async function startCrawl(){
   }
 }
 
+async function browserCrawl(){
+  var selectedIds=Array.from(crawlSelectedGames);
+  if(selectedIds.length===0){showToast('게임을 선택하세요.');return;}
+  var pages=parseInt(document.getElementById('crawlPages').value)||1;
+
+  var btn=document.getElementById('browserCrawlBtn');
+  btn.disabled=true;
+  document.getElementById('crawlStatus').style.display='block';
+  document.getElementById('crawlResult').style.display='none';
+  document.getElementById('crawlStatusText').textContent='브라우저 직접 수집 시작...';
+  document.getElementById('crawlTimer').textContent='00:00';
+  updateProgress(0,1,0,0);
+
+  var liveLog=document.getElementById('crawlLiveLog');
+  liveLog.textContent='';
+
+  crawlStartTime=Date.now();
+  if(crawlTimerInterval)clearInterval(crawlTimerInterval);
+  crawlTimerInterval=setInterval(updateCrawlTimer,1000);
+
+  function appendLog(msg,color){
+    var span=document.createElement('span');
+    span.style.color=color||'#d4d4d4';
+    span.textContent=msg+'\n';
+    liveLog.appendChild(span);
+    liveLog.scrollTop=liveLog.scrollHeight;
+  }
+
+  var selectedGames=crawlGamesData.filter(function(g){return crawlSelectedGames.has(g.id);});
+  var totalSteps=selectedGames.length*pages;
+  var completedSteps=0;
+  var totalSaved=0;
+  var totalFailed=0;
+
+  initGameCards(selectedGames.map(function(g){return g.name;}));
+  updateProgress(0,totalSteps,0,0);
+
+  var gameSaved={};
+
+  async function fetchItemmaniaPage(gameId,page){
+    var url='https://www.itemmania.com/sell/list.html?search_game='+gameId+'&page='+page;
+    var proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(url);
+    var r=await fetch(proxyUrl,{signal:AbortSignal.timeout(30000)});
+    if(!r.ok)throw new Error('allorigins HTTP '+r.status);
+    var d=await r.json();
+    if(!d.contents)throw new Error('응답 비어있음');
+    return d.contents;
+  }
+
+  function parseItemsFromHtml(html,gameFallback){
+    var parser=new DOMParser();
+    var doc=parser.parseFromString(html,'text/html');
+    var items=[];
+    doc.querySelectorAll('[data-tid]').forEach(function(el){
+      var tid=el.getAttribute('data-tid');
+      if(!tid||el.classList.contains('skeleton-item'))return;
+      var gEl=el.querySelector('[data-search=game]');
+      var sEl=el.querySelector('[data-search=server]');
+      var catEl=el.querySelector('[data-search=goods]');
+      var titleEl=el.querySelector('.kind_title')||el.querySelector('.tit')||el.querySelector('strong');
+      var priceEl=el.querySelector('.price,.list_price,.cost')||el.querySelector('[class*=price]')||el.querySelector('[class*=cost]');
+      var thumbEl=el.querySelector('img');
+      var sellerEl=el.querySelector('.seller,.nick,[class*=seller],[class*=nick]');
+      var aEl=el.querySelector('a[href*="view"]')||el.querySelector('a');
+      var title=(titleEl&&titleEl.textContent.trim())||'';
+      if(!title)return;
+      var priceText=(priceEl&&priceEl.textContent.trim())||'';
+      var price=parseInt(priceText.replace(/[^0-9]/g,''),10)||0;
+      var detailHref=aEl?aEl.getAttribute('href'):'';
+      var detailUrl=detailHref?(detailHref.startsWith('http')?detailHref:'https://www.itemmania.com'+detailHref):'';
+      items.push({
+        itemmaniaid:tid,
+        title:title,
+        price:price,
+        gameName:(gEl&&gEl.textContent.trim())||gameFallback||'',
+        serverName:(sEl&&(sEl.getAttribute('data-title')||sEl.textContent.trim()))||'',
+        itemCategory:(catEl&&catEl.textContent.trim())||'',
+        category:'sell',
+        detailUrl:detailUrl,
+        thumbnailUrl:(thumbEl&&(thumbEl.getAttribute('src')||thumbEl.getAttribute('data-src')))||'',
+        sellerName:(sellerEl&&sellerEl.textContent.trim())||'',
+      });
+    });
+    return items;
+  }
+
+  try{
+    for(var gi=0;gi<selectedGames.length;gi++){
+      var game=selectedGames[gi];
+      setGameCardState(gi,'running',null);
+      document.getElementById('crawlStatusText').textContent='['+game.name+'] 수집 중...';
+      appendLog('['+game.name+'] 수집 시작...','#56b6c2');
+
+      for(var page=1;page<=pages;page++){
+        try{
+          appendLog('  '+game.name+' '+page+'페이지 가져오는 중...','#888');
+          var html=await fetchItemmaniaPage(game.id,page);
+          var items=parseItemsFromHtml(html,game.name);
+          appendLog('  파싱: '+items.length+'개 상품 발견','#888');
+
+          if(items.length>0){
+            var batchR=await fetch('/api/admin/crawl/batch',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              credentials:'include',
+              body:JSON.stringify({products:items})
+            });
+            var batchD=await batchR.json();
+            var saved=batchD.upserted||0;
+            gameSaved[gi]=(gameSaved[gi]||0)+saved;
+            totalSaved+=saved;
+            setGameCardState(gi,page>=pages?'ok':'running',gameSaved[gi]);
+            appendLog('  \u2705 '+game.name+' '+page+'\ud398\uc774\uc9c0: '+saved+'\uac1c \uc800\uc7a5','#6fcf97');
+          }else{
+            appendLog('  \u26a0 '+game.name+' '+page+'\ud398\uc774\uc9c0: \uc0c1\ud488 \uc5c6\uc74c (HTML '+html.length+'\ubc14\uc774\ud2b8)','#f2c94c');
+            setGameCardState(gi,page>=pages?(gameSaved[gi]>0?'ok':'warn'):'running',gameSaved[gi]||0);
+          }
+        }catch(pageErr){
+          totalFailed++;
+          appendLog('  \u274c '+game.name+' '+page+'\ud398\uc774\uc9c0 \uc624\ub958: '+pageErr.message,'#eb5757');
+          setGameCardState(gi,'fail',gameSaved[gi]||0);
+        }
+        completedSteps++;
+        updateProgress(completedSteps,totalSteps,totalSaved,totalFailed);
+        if(page<pages)await new Promise(function(rr){setTimeout(rr,1000);});
+      }
+      if(gi<selectedGames.length-1)await new Promise(function(rr){setTimeout(rr,500);});
+    }
+
+    clearInterval(crawlTimerInterval);
+    document.getElementById('crawlSpinner').style.display='none';
+    var summary='\u2705 \uc644\ub8cc: '+totalSaved+'\uac1c \uc800\uc7a5';
+    if(totalFailed>0)summary+=' / '+totalFailed+'\uac1c \uc2e4\ud328';
+    document.getElementById('crawlStatusText').textContent=summary;
+    document.getElementById('crawlResult').style.display='block';
+    document.getElementById('crawlResultSummary').textContent=summary;
+    appendLog('\n'+summary,'#6fcf97');
+    loadStats();
+    loadProducts();
+  }catch(e){
+    clearInterval(crawlTimerInterval);
+    appendLog('\n\u274c \uc624\ub958: '+e.message,'#eb5757');
+    document.getElementById('crawlStatusText').textContent='\uc624\ub958: '+e.message;
+  }finally{
+    btn.disabled=false;
+    document.getElementById('crawlSpinner').style.display='';
+  }
+}
+
 function fmtDate(d){if(!d)return'-';return new Date(d).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function fmtMoney(n){if(n==null)return'-';return Number(n).toLocaleString('ko-KR')+'원';}
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

@@ -225,23 +225,22 @@ tbody tr:hover{background:#fafbff}
           <span class="title">itemmania.com 상품 크롤링</span>
         </div>
         <div style="padding:24px">
-          <div id="crawlApiKeySection" style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin-bottom:20px">
-            <b>⚠️ ScraperAPI 키 필요</b>
-            <p style="font-size:13px;color:#555;margin:8px 0">itemmania.com이 Replit 서버 IP를 차단하고 있어 ScraperAPI 경유가 필요합니다.<br>
-            <a href="https://www.scraperapi.com/" target="_blank" style="color:#159EFD">scraperapi.com</a>에서 무료 계정 생성 → API 키 발급 (무료 5,000회/월)</p>
-            <div style="display:flex;gap:8px;margin-top:12px">
-              <input type="password" id="crawlApiKeyInput" placeholder="ScraperAPI 키 입력 (또는 환경변수 SCRAPER_API_KEY 설정)" style="flex:1;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;outline:none">
-              <button onclick="testApiKey()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">테스트</button>
+          <!-- 메인 수집 버튼 -->
+          <div style="background:linear-gradient(135deg,#e8f5e9,#f0fdf4);border:2px solid #4caf50;border-radius:12px;padding:20px;margin-bottom:24px">
+            <div style="font-size:16px;font-weight:800;color:#2e7d32;margin-bottom:6px">🚀 브라우저 직접 수집</div>
+            <div style="font-size:13px;color:#555;margin-bottom:16px">
+              버튼 하나로 아이템마니아 상품을 바로 수집합니다.<br>
+              <span style="color:#888;font-size:12px">* 브라우저에서 직접 fetch하므로 서버 IP 차단 우회 — 별도 설치 불필요</span>
             </div>
-            <div id="crawlApiKeyStatus" style="font-size:12px;margin-top:6px;color:#888"></div>
+            <button id="browserCrawlBtn" onclick="browserCrawl()" style="padding:14px 32px;background:#43a047;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(67,160,71,0.35)">▶ 지금 바로 수집</button>
           </div>
 
           <div style="margin-bottom:20px">
-            <b style="display:block;margin-bottom:10px">크롤링 대상 게임</b>
+            <b style="display:block;margin-bottom:10px">수집 대상 게임</b>
             <div id="crawlGameList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
           </div>
 
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
             <label style="font-size:14px;font-weight:600">페이지 수:
               <select id="crawlPages" style="margin-left:8px;padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none">
                 <option value="1">1페이지 (약 20개/게임)</option>
@@ -251,20 +250,33 @@ tbody tr:hover{background:#fafbff}
               </select>
             </label>
           </div>
-          <div style="margin-bottom:16px;padding:12px 16px;background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:8px">
-            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
-              <input type="checkbox" id="crawlDetailCheck" style="width:16px;height:16px;margin-top:2px;accent-color:#159EFD;flex-shrink:0">
-              <span style="font-size:13px;color:#333">
-                <b style="color:#159EFD">상세 페이지 크롤 포함</b>
-                <span style="display:block;color:#666;margin-top:3px">판매자명·상세설명을 함께 수집합니다. ScraperAPI 크레딧이 상품 1개당 1회 추가 소모됩니다.</span>
-                <span id="crawlDetailCost" style="display:block;color:#e57c00;margin-top:3px;font-size:12px"></span>
-              </span>
-            </label>
-          </div>
-          <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap">
-            <button id="crawlBtn" onclick="startCrawl()" style="padding:12px 24px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🕷️ 크롤링 시작</button>
-            <button id="discoverBtn" onclick="discoverApi()" style="padding:12px 20px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer" title="itemmania.com JS를 자동 분석해 AJAX API URL을 탐지합니다">🔍 API 자동 탐지</button>
-          </div>
+
+          <!-- ScraperAPI 방식 (접기) -->
+          <details style="margin-bottom:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
+            <summary style="padding:12px 16px;background:#f8f9fa;cursor:pointer;font-size:13px;font-weight:600;color:#666">⚙️ ScraperAPI 방식 (고급 — 상세 수집용)</summary>
+            <div style="padding:16px">
+              <p style="font-size:13px;color:#555;margin:0 0 12px">상세 설명·판매자명까지 수집하려면 ScraperAPI 키가 필요합니다.<br>
+              <a href="https://www.scraperapi.com/" target="_blank" style="color:#159EFD">scraperapi.com</a> 무료 계정 → 5,000회/월 무료</p>
+              <div style="display:flex;gap:8px;margin-bottom:8px">
+                <input type="password" id="crawlApiKeyInput" placeholder="ScraperAPI 키 입력" style="flex:1;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;outline:none">
+                <button onclick="testApiKey()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">테스트</button>
+              </div>
+              <div id="crawlApiKeyStatus" style="font-size:12px;color:#888"></div>
+              <div style="margin-top:12px;padding:10px 14px;background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:8px">
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+                  <input type="checkbox" id="crawlDetailCheck" style="width:16px;height:16px;margin-top:2px;accent-color:#159EFD;flex-shrink:0">
+                  <span style="font-size:13px;color:#333">
+                    <b style="color:#159EFD">상세 페이지 크롤 포함</b>
+                    <span id="crawlDetailCost" style="display:block;color:#e57c00;margin-top:3px;font-size:12px"></span>
+                  </span>
+                </label>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+                <button id="crawlBtn" onclick="startCrawl()" style="padding:10px 20px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🕷️ ScraperAPI로 수집</button>
+                <button id="discoverBtn" onclick="discoverApi()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔍 API 자동 탐지</button>
+              </div>
+            </div>
+          </details>
           <div id="discoverResult" style="display:none;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;max-height:400px;overflow-y:auto;margin-bottom:16px;white-space:pre-wrap"></div>
 
           <div id="crawlStatus" style="display:none">
