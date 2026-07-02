@@ -6359,7 +6359,23 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // 1. <title> 태그
   r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
 
-  // 2. .trade_subject 내 제목 텍스트 (signboard span 이후 텍스트 노드 교체)
+  // 2. 숨겨진 h1.g_hidden 제목 교체
+  r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
+
+  // og:title / twitter:title 메타태그 교체
+  r = r.replace(
+    /(<meta[^>]*property=og:title[^>]*content=")OOOO+[^"]*OOOO+([^"]*")/,
+    `$1${title}$2`
+  );
+  r = r.replace(
+    /(<meta[^>]*name=twitter:title[^>]*content=")OOOO+[^"]*OOOO+([^"]*")/,
+    `$1${title}$2`
+  );
+
+  // JSON-LD "name" 필드 교체
+  r = r.replace(/"name":"OOOO+[^"]*OOOO+"/, `"name":${JSON.stringify(title)}`);
+
+  // 3. .trade_subject 내 제목 텍스트 (signboard span 이후 텍스트 노드 교체)
   // sell 스냅샷은 OOOOO(5개), buy 스냅샷은 OOOO(4개) 사용 → OOOO+ 로 통합
   r = r.replace(
     /(<div class=trade_subject>[\s\S]*?<span class=signboard>[^<]*<\/span>[^<]*)OOOO+[^\n]*OOOO+\s*/,
