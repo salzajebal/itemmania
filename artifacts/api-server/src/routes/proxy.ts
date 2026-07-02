@@ -6322,6 +6322,8 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
 function serveBuyApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
   if (product) {
+    // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체 (serveApplication과 동일)
+    result = applyProductToHtml(result, product);
     const ps = buildProductScript(product);
     result = result.includes("<head>")
       ? result.replace("<head>", "<head>" + ps)
@@ -6358,8 +6360,9 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
 
   // 2. .trade_subject 내 제목 텍스트 (signboard span 이후 텍스트 노드 교체)
+  // sell 스냅샷은 OOOOO(5개), buy 스냅샷은 OOOO(4개) 사용 → OOOO+ 로 통합
   r = r.replace(
-    /(<div class=trade_subject>[\s\S]*?<span class=signboard>[^<]*<\/span>[^<]*)OOOOO[^\n]*OOOOO\s*/,
+    /(<div class=trade_subject>[\s\S]*?<span class=signboard>[^<]*<\/span>[^<]*)OOOO+[^\n]*OOOO+\s*/,
     `$1${title} `
   );
 
