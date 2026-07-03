@@ -1254,13 +1254,19 @@ try{
 document.addEventListener('submit',function(e){
   var form=e.target;
   if(!form||form.tagName!=='FORM') return;
+  /* g_searchbar_form/frmSell/frmBuy 는 자체 submit 핸들러(preventDefault 포함)가 따로 처리하므로
+     여기서 가로채면 그 전용 로직이 아예 실행되지 못한다 (stopImmediatePropagation 때문) → 제외 */
+  if(form.id==='g_searchbar_form'||form.id==='frmSell'||form.id==='frmBuy') return;
   var action=form.action||location.href;
   var rw=rewrite(action);
-  if(rw!==action){
+  var isPost=(form.method||'get').toLowerCase()==='post';
+  /* 경로 재작성이 필요 없어도, POST 폼은 서버가 GET만 지원하는 정적 스냅샷 페이지일 수 있으므로
+     항상 GET 쿼리스트링 이동으로 변환한다 (Cannot POST 오류 방지) */
+  if(rw!==action||isPost){
     e.preventDefault();
     e.stopImmediatePropagation();
-    /* GET 폼: action 바꿔서 재제출 */
-    if((form.method||'get').toLowerCase()==='get'){
+    if(!isPost){
+      /* GET 폼: action 바꿔서 재제출 */
       form.action=rw;
       form.submit();
     } else {
