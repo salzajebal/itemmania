@@ -26,6 +26,7 @@ export const ordersTable = pgTable("orders", {
   productId: integer("product_id").references(() => productsTable.id),
   productTitle: text("product_title").notNull(),
   amount: bigint("amount", { mode: "number" }).notNull(),
+  feeAmount: bigint("fee_amount", { mode: "number" }).notNull().default(0),
   status: orderStatusEnum("status").notNull().default("pending"),
   cancelReason: text("cancel_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

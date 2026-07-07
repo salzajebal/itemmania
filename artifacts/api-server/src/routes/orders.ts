@@ -5,14 +5,25 @@ import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+/** 플랫폼 안전거래 수수료율 (3.3%, VAT 포함) */
+const PLATFORM_FEE_RATE = 0.033;
+
+function calcPlatformFee(amount: number): number {
+  return Math.floor(amount * PLATFORM_FEE_RATE);
+}
+
 function formatOrder(order: typeof ordersTable.$inferSelect) {
+  const amount = Number(order.amount);
+  const feeAmount = Number(order.feeAmount ?? 0);
   return {
     id: order.id,
     buyerId: order.buyerId,
     sellerId: order.sellerId,
     productId: order.productId,
     productTitle: order.productTitle,
-    amount: Number(order.amount),
+    amount,
+    feeAmount,
+    netAmount: amount - feeAmount,
     status: order.status,
     cancelReason: order.cancelReason,
     createdAt: order.createdAt,
@@ -64,12 +75,15 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         throw new Error("잔액이 부족합니다.");
       }
 
+      const feeAmount = calcPlatformFee(amountNum);
+
       const [newOrder] = await tx.insert(ordersTable).values({
         buyerId,
         sellerId: sellerId ?? null,
         productId: productId ?? null,
         productTitle,
         amount: amountNum,
+        feeAmount,
         status: "pending",
       }).returning();
 
@@ -180,16 +194,17 @@ router.patch("/orders/:id/confirm", requireAuth, async (req, res): Promise<void>
       .where(eq(ordersTable.id, id))
       .returning();
 
-    // 판매자 지갑 지급
+    // 판매자 지갑 지급 (거래금액 - 플랫폼 수수료)
+    const netToSeller = Number(order.amount) - Number(order.feeAmount ?? 0);
     await tx
       .update(walletsTable)
-      .set({ balance: sql`${walletsTable.balance} + ${Number(order.amount)}` })
+      .set({ balance: sql`${walletsTable.balance} + ${netToSeller}` })
       .where(eq(walletsTable.userId, order.sellerId!));
 
     await tx.insert(escrowLedgerTable).values({
       orderId: id,
       type: "release",
-      amount: Number(order.amount),
+      amount: netToSeller,
     });
 
     return o;
