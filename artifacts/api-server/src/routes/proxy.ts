@@ -6733,6 +6733,7 @@ const MYROOM_SELL_SCRIPT = `<script>
     /* 행 클릭 → 상세 페이지 이동 (캡처 단계로 스냅샷 JS 우선 처리) */
     document.addEventListener('click',function(e){
       if(e.target.closest&&e.target.closest('.list_icon')) return;
+      if(e.target.closest&&e.target.closest('.btn-shipped')) return;
       var tr=e.target.closest&&e.target.closest('tr[data-href]');
       if(!tr) return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -6748,6 +6749,21 @@ const MYROOM_SELL_SCRIPT = `<script>
       fetch('/api/products/'+pid,{method:'DELETE',credentials:'include'})
         .then(function(r){if(r.ok)location.reload();else alert('삭제 실패');})
         .catch(function(){alert('삭제 실패');});
+    });
+    /* 인계완료 버튼 */
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest&&e.target.closest('.btn-shipped[data-order-id]');
+      if(!btn)return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      var oid=btn.getAttribute('data-order-id');
+      if(!oid||!confirm('인계완료 처리하시겠습니까?\\n\\n구매자에게 물품을 전달한 후 클릭하세요.'))return;
+      btn.disabled=true; btn.textContent='처리중...';
+      fetch('/api/orders/'+oid+'/shipped',{method:'PATCH',credentials:'include'})
+        .then(function(r){
+          if(r.ok){alert('인계완료 처리되었습니다.');location.reload();}
+          else r.json().then(function(d){alert(d.error||'인계완료 실패');btn.disabled=false;btn.textContent='인계완료';});
+        })
+        .catch(function(){alert('인계완료 처리 실패');btn.disabled=false;btn.textContent='인계완료';});
     });
   });
 })();
@@ -6849,7 +6865,7 @@ function serveSellMying(
   html: string,
   user: Record<string, unknown> | null,
   orders: Array<{
-    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    id: number; productId: number | null; productTitle: string; amount: number; status: string; createdAt: Date;
     gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
   }>
 ): string {
@@ -6857,7 +6873,7 @@ function serveSellMying(
 
   let rowsHtml: string;
   if (orders.length === 0) {
-    rowsHtml = "<tr><td colspan=6 class=empty_item>판매중인 물품이 없습니다.</td></tr>";
+    rowsHtml = "<tr><td colspan=7 class=empty_item>판매중인 물품이 없습니다.</td></tr>";
   } else {
     rowsHtml = orders.map((o) => {
       const game = o.gameName || "";
@@ -6869,13 +6885,16 @@ function serveSellMying(
         ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
         : `<div class=trade_title>${o.productTitle}</div>`;
       const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=sell`;
+      const shippedBtn = o.status === "pending"
+        ? `<button class="btn-shipped" data-order-id="${o.id}" style="padding:5px 10px;border:none;border-radius:6px;background:#159efd;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">인계완료</button>`
+        : `<span style="color:#159efd;font-size:12px;font-weight:600;white-space:nowrap">인계완료✓</span>`;
       return (
         "<tr>" +
         `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
-        `<td>구매자</td>` +
+        `<td>${shippedBtn}</td>` +
         `<td class=flex_box><p class=f_gray>${date}</p>` +
         `<div class=icon_box><a href="${chatHref}" class="list_icon chat" data-desc=채팅>` +
         `<span class=list_icon_img></span></a></div></td>` +
@@ -6914,6 +6933,7 @@ const MYROOM_BUY_SCRIPT = `<script>
     /* 행 클릭 → 상세 페이지 이동 (캡처 단계로 스냅샷 JS 우선 처리) */
     document.addEventListener('click',function(e){
       if(e.target.closest&&e.target.closest('.list_icon')) return;
+      if(e.target.closest&&e.target.closest('.btn-confirm')) return;
       var tr=e.target.closest&&e.target.closest('tr[data-href]');
       if(!tr) return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -6926,9 +6946,24 @@ const MYROOM_BUY_SCRIPT = `<script>
       e.preventDefault(); e.stopImmediatePropagation();
       var oid=btn.getAttribute('data-id');
       if(!oid||!confirm('이 구매 신청을 취소하시겠습니까?'))return;
-      fetch('/api/orders/'+oid+'/cancel',{method:'POST',credentials:'include'})
+      fetch('/api/orders/'+oid+'/cancel',{method:'PATCH',credentials:'include'})
         .then(function(r){if(r.ok)location.reload();else alert('취소 실패');})
         .catch(function(){alert('취소 실패');});
+    });
+    /* 인수완료 버튼 */
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest&&e.target.closest('.btn-confirm[data-order-id]');
+      if(!btn)return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      var oid=btn.getAttribute('data-order-id');
+      if(!oid||!confirm('인수완료 처리하시겠습니까?\\n\\n판매자로부터 물품을 정상 수령한 경우에만 클릭하세요.\\n거래금액이 판매자에게 지급됩니다.'))return;
+      btn.disabled=true; btn.textContent='처리중...';
+      fetch('/api/orders/'+oid+'/confirm',{method:'PATCH',credentials:'include'})
+        .then(function(r){
+          if(r.ok){alert('인수완료 처리되었습니다.\\n거래가 완료되었습니다.');location.reload();}
+          else r.json().then(function(d){alert(d.error||'인수완료 실패');btn.disabled=false;btn.textContent='인수완료';});
+        })
+        .catch(function(){alert('인수완료 처리 실패');btn.disabled=false;btn.textContent='인수완료';});
     });
   });
 })();
@@ -7034,7 +7069,7 @@ function serveBuyMying(
   html: string,
   user: Record<string, unknown> | null,
   orders: Array<{
-    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+    id: number; productId: number | null; productTitle: string; amount: number; status: string; createdAt: Date;
     gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
   }>
 ): string {
@@ -7042,7 +7077,7 @@ function serveBuyMying(
 
   let rowsHtml: string;
   if (orders.length === 0) {
-    rowsHtml = "<tr><td colspan=6 class=empty_item>구매중인 물품이 없습니다.</td></tr>";
+    rowsHtml = "<tr><td colspan=7 class=empty_item>구매중인 물품이 없습니다.</td></tr>";
   } else {
     rowsHtml = orders.map((o) => {
       const game = o.gameName || "";
@@ -7054,13 +7089,16 @@ function serveBuyMying(
         ? `<a href="/sell/application.html?id=${o.productId}"><div class=trade_title>${o.productTitle}</div></a>`
         : `<div class=trade_title>${o.productTitle}</div>`;
       const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=buy`;
+      const statusLabel = o.status === "shipped" ? "인계완료(대기중)" : "구매중";
+      const confirmBtn = `<button class="btn-confirm" data-order-id="${o.id}" style="padding:5px 10px;border:none;border-radius:6px;background:#00b34f;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">인수완료</button>`;
       return (
         "<tr>" +
         `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
-        `<td>구매중</td>` +
+        `<td style="font-size:12px;color:#767676">${statusLabel}</td>` +
+        `<td>${confirmBtn}</td>` +
         `<td class=flex_box><p class=f_gray>${date}</p>` +
         `<div class=icon_box><a href="${chatHref}" class="list_icon chat" data-desc=채팅>` +
         `<span class=list_icon_img></span></a></div></td>` +
@@ -8025,7 +8063,7 @@ router.get("/myroom/sell/sell_ing.html", async (req, res): Promise<void> => {
     .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
     .where(and(
       eq(ordersTable.sellerId, user.id as number),
-      inArray(ordersTable.status, ["shipped", "confirmed"])
+      inArray(ordersTable.status, ["pending", "shipped"])
     ))
     .orderBy(desc(ordersTable.createdAt));
 
@@ -8034,6 +8072,7 @@ router.get("/myroom/sell/sell_ing.html", async (req, res): Promise<void> => {
     productId: r.o.productId,
     productTitle: r.o.productTitle,
     amount: Number(r.o.amount),
+    status: r.o.status,
     createdAt: r.o.createdAt,
     gameName: r.p?.gameName ?? null,
     serverName: r.p?.serverName ?? null,
@@ -8136,7 +8175,7 @@ router.get("/myroom/buy/buy_ing.html", async (req, res): Promise<void> => {
     .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
     .where(and(
       eq(ordersTable.buyerId, user.id as number),
-      inArray(ordersTable.status, ["shipped", "confirmed"])
+      inArray(ordersTable.status, ["pending", "shipped"])
     ))
     .orderBy(desc(ordersTable.createdAt));
 
@@ -8145,6 +8184,7 @@ router.get("/myroom/buy/buy_ing.html", async (req, res): Promise<void> => {
     productId: r.o.productId,
     productTitle: r.o.productTitle,
     amount: Number(r.o.amount),
+    status: r.o.status,
     createdAt: r.o.createdAt,
     gameName: r.p?.gameName ?? null,
     serverName: r.p?.serverName ?? null,
