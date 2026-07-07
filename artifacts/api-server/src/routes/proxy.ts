@@ -1,9 +1,10 @@
 import { Router, type IRouter, type Request } from "express";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
+import bcrypt from "bcryptjs";
 import { logger } from "../lib/logger";
 import { fetchProxyPage } from "../lib/proxy";
-import { db, usersTable, productsTable, ordersTable } from "@workspace/db";
+import { db, usersTable, productsTable, ordersTable, walletsTable } from "@workspace/db";
 import { eq, and, inArray, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -1256,7 +1257,7 @@ document.addEventListener('submit',function(e){
   if(!form||form.tagName!=='FORM') return;
   /* g_searchbar_form/frmSell/frmBuy 는 자체 submit 핸들러(preventDefault 포함)가 따로 처리하므로
      여기서 가로채면 그 전용 로직이 아예 실행되지 못한다 (stopImmediatePropagation 때문) → 제외 */
-  if(form.id==='g_searchbar_form'||form.id==='frmSell'||form.id==='frmBuy') return;
+  if(form.id==='g_searchbar_form'||form.id==='frmSell'||form.id==='frmBuy'||form.name==='g_LOGIN_FORM') return;
   var action=form.action||location.href;
   var rw=rewrite(action);
   var isPost=(form.method||'get').toLowerCase()==='post';
@@ -7140,6 +7141,48 @@ router.get(["/portal/giftcard", "/portal/giftcard/"], async (req, res): Promise<
 });
 router.get("/portal/user/p_login_form.html", async (req, res): Promise<void> => {
   res.redirect(301, "/login");
+});
+// 원본 itemmania 로그인 처리 URL 폴백 (JS 인터셉트 실패 시 form이 이 URL로 제출됨)
+async function handleLegacyLogin(req: Parameters<typeof router.get>[1] extends (req: infer R, ...args: unknown[]) => unknown ? R : never, res: Parameters<typeof router.get>[1] extends (req: unknown, res: infer R, ...args: unknown[]) => unknown ? R : never, userId: string, userPw: string): Promise<void> {
+  if (!userId || !userPw) {
+    res.redirect(302, "/login?error=missing");
+    return;
+  }
+  try {
+    let [user] = await db.select().from(usersTable).where(eq(usersTable.email, userId));
+    if (!user) {
+      const passwordHash = await bcrypt.hash(userPw, 12);
+      const nickname = userId.includes("@") ? userId.split("@")[0] : userId;
+      const [created] = await db.insert(usersTable).values({
+        email: userId, nickname, phone: null, passwordHash, role: "user",
+      }).returning();
+      await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
+      user = created;
+    } else {
+      const valid = await bcrypt.compare(userPw, user.passwordHash);
+      if (!valid) {
+        res.redirect(302, "/login?error=wrong_password");
+        return;
+      }
+    }
+    (req as unknown as Record<string, unknown> & { session: { userId: number; userRole: string } }).session.userId = user.id;
+    (req as unknown as Record<string, unknown> & { session: { userId: number; userRole: string } }).session.userRole = user.role;
+    const returnUrl = String((req as unknown as { query: Record<string, string> }).query.returnUrl || "/");
+    res.redirect(302, returnUrl.startsWith("/") ? returnUrl : "/");
+  } catch (err) {
+    req.log.error({ err }, "legacy login error");
+    res.redirect(302, "/login?error=server");
+  }
+}
+router.get("/portal/user/login_form_ok.php", async (req, res): Promise<void> => {
+  const userId = String((req.query as Record<string, string>).user_id || "");
+  const userPw = String((req.query as Record<string, string>).user_password || "");
+  await handleLegacyLogin(req as never, res as never, userId, userPw);
+});
+router.post("/portal/user/login_form_ok.php", async (req, res): Promise<void> => {
+  const userId = String((req.body as Record<string, string>).user_id || "");
+  const userPw = String((req.body as Record<string, string>).user_password || "");
+  await handleLegacyLogin(req as never, res as never, userId, userPw);
 });
 // 원본 itemmania 로그아웃 완료 페이지 → 세션 제거 후 홈으로
 router.get([
