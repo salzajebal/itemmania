@@ -1628,7 +1628,15 @@ const SELL_INTERCEPT_SCRIPT = `
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function() {
+  function _sellListSetup() {
+    // 팝니다 탭 active 표시 (sell 페이지는 팝니다가 선택됨)
+    document.querySelectorAll('button[data-type="sell"]').forEach(function(btn) {
+      btn.classList.add('selected'); btn.textContent = '팝니다';
+    });
+    document.querySelectorAll('button[data-type="buy"]').forEach(function(btn) {
+      btn.classList.remove('selected'); btn.textContent = '삽니다';
+    });
+
     // 삽니다 탭 → 삽니다 목록으로 이동 (search_game 유지)
     document.querySelectorAll('button[data-type="buy"]').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
@@ -1663,7 +1671,6 @@ const SELL_INTERCEPT_SCRIPT = `
         var tid = li.getAttribute('data-tid');
         if (tid) {
           e.preventDefault(); e.stopPropagation();
-          // 상세 페이지에서 사용할 데이터를 sessionStorage에 저장
           try {
             var titleEl = li.querySelector('.kind_title');
             var priceEl = li.querySelector('.trade_money');
@@ -1688,7 +1695,9 @@ const SELL_INTERCEPT_SCRIPT = `
         }
       }
     }, true);
-  });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _sellListSetup);
+  else _sellListSetup();
 })();
 </script>
 `;
@@ -1762,6 +1771,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var gradeHtml = gradeKey
       ? '<span class="credit_mark_new ' + gradeKey + '" data-seller-id="' + sellerId + '">' + GRADE_LETTERS[gradeKey] + '</span>'
       : '<span class="credit_mark_new regular" data-seller-id="' + sellerId + '"></span>';
+    var typeLabel = type === 'buy' ? '삽니다' : '팝니다';
+    var typeBadgeColor = type === 'buy' ? '#39A742' : '#159EFD';
+    var typeBadge = '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:700;color:#fff;background:' + typeBadgeColor + ';margin-right:4px;vertical-align:middle">' + typeLabel + '</span>';
     li.innerHTML =
       '<div class="col info">' + gradeHtml + '</div>' +
       '<div class="col subject_info">' +
@@ -1771,7 +1783,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           '<li><a href="javascript:void(0)" data-search=goods>' + (p.itemCategory||'게임머니') + '</a></li>' +
         '</ul>' +
         '<a href="' + href + '" class="subject active">' +
-          '<div><span class="text_ellipsis kind_title">' + p.title + '</span></div>' +
+          '<div>' + typeBadge + '<span class="text_ellipsis kind_title">' + p.title + '</span></div>' +
         '</a>' +
       '</div>' +
       '<div class="col quickicon"></div>' +
@@ -6111,6 +6123,14 @@ const BUY_INTERCEPT_SCRIPT = `
         e.preventDefault(); e.stopImmediatePropagation();
         location.href = '/buy/register.html';
       }, true);
+    });
+
+    // 삽니다 탭 active 표시 (buy list에서는 삽니다가 선택됨)
+    document.querySelectorAll('button[data-type="sell"]').forEach(function(btn) {
+      btn.classList.remove('selected'); btn.textContent = '팝니다';
+    });
+    document.querySelectorAll('button[data-type="buy"]').forEach(function(btn) {
+      btn.classList.add('selected'); btn.textContent = '삽니다';
     });
 
     // 팝니다 탭 → 판매 목록으로 이동 (search_game 유지)
