@@ -1771,9 +1771,6 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var gradeHtml = gradeKey
       ? '<span class="credit_mark_new ' + gradeKey + '" data-seller-id="' + sellerId + '">' + GRADE_LETTERS[gradeKey] + '</span>'
       : '<span class="credit_mark_new regular" data-seller-id="' + sellerId + '"></span>';
-    var typeLabel = type === 'buy' ? '삽니다' : '팝니다';
-    var typeBadgeColor = type === 'buy' ? '#39A742' : '#159EFD';
-    var typeBadge = '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:700;color:#fff;background:' + typeBadgeColor + ';margin-right:4px;vertical-align:middle">' + typeLabel + '</span>';
     li.innerHTML =
       '<div class="col info">' + gradeHtml + '</div>' +
       '<div class="col subject_info">' +
@@ -1783,7 +1780,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           '<li><a href="javascript:void(0)" data-search=goods>' + (p.itemCategory||'게임머니') + '</a></li>' +
         '</ul>' +
         '<a href="' + href + '" class="subject active">' +
-          '<div>' + typeBadge + '<span class="text_ellipsis kind_title">' + p.title + '</span></div>' +
+          '<div><span class="text_ellipsis kind_title">' + p.title + '</span></div>' +
         '</a>' +
       '</div>' +
       '<div class="col quickicon"></div>' +
