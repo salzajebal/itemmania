@@ -6705,10 +6705,12 @@ function fmtKRW(n: number): string {
 }
 
 function fmtKRDate(d: Date): string {
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
+  // 서버는 UTC로 동작 → KST(UTC+9)로 변환해서 표시
+  const kst = new Date(d.getTime() + 9 * 3600000);
+  const mm = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(kst.getUTCDate()).padStart(2, "0");
+  const hh = String(kst.getUTCHours()).padStart(2, "0");
+  const mi = String(kst.getUTCMinutes()).padStart(2, "0");
   return `${mm}-${dd} ${hh}:${mi}`;
 }
 

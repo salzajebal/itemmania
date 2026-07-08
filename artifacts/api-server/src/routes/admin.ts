@@ -642,6 +642,8 @@ function parseDetailFromHtml(html: string): {
   return { description, thumbnailUrl, sellerName };
 }
 
+const KST_OFFSET_MS = 9 * 3600000; // KST = UTC + 9h
+
 function parseRegDate(txt: string): Date | null {
   if (!txt) return null;
   txt = txt.trim();
@@ -651,14 +653,22 @@ function parseRegDate(txt: string): Date | null {
   if ((m = txt.match(/^(\d+)분\s*전$/))) return new Date(now - parseInt(m[1]) * 60000);
   if ((m = txt.match(/^(\d+)시간\s*전$/))) return new Date(now - parseInt(m[1]) * 3600000);
   if ((m = txt.match(/^(\d{1,2}):(\d{2})$/))) {
-    const d = new Date(); d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
-    if (d.getTime() > now) d.setDate(d.getDate() - 1);
-    return d;
+    // itemmania 시간은 KST → UTC로 변환해서 저장
+    const kstNow = new Date(now + KST_OFFSET_MS);
+    // KST 기준 오늘 날짜에 해당 시각(HH:MM KST)의 UTC 타임스탬프
+    const utcMs = Date.UTC(
+      kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate(),
+      parseInt(m[1]), parseInt(m[2]), 0, 0
+    ) - KST_OFFSET_MS;
+    if (utcMs > now) return new Date(utcMs - 86400000); // 아직 안 온 시각이면 어제
+    return new Date(utcMs);
   }
   if ((m = txt.match(/^(\d{1,2})\/(\d{1,2})$/))) {
-    const d = new Date(); d.setMonth(parseInt(m[1]) - 1, parseInt(m[2])); d.setHours(0, 0, 0, 0);
-    if (d.getTime() > now) d.setFullYear(d.getFullYear() - 1);
-    return d;
+    // MM/DD는 KST 날짜 기준, 시각은 KST 자정(00:00)으로 처리
+    const kstNow = new Date(now + KST_OFFSET_MS);
+    const utcMs = Date.UTC(kstNow.getUTCFullYear(), parseInt(m[1]) - 1, parseInt(m[2]), 0, 0, 0, 0) - KST_OFFSET_MS;
+    if (utcMs > now) return new Date(Date.UTC(kstNow.getUTCFullYear() - 1, parseInt(m[1]) - 1, parseInt(m[2]), 0, 0, 0, 0) - KST_OFFSET_MS);
+    return new Date(utcMs);
   }
   return null;
 }
