@@ -5899,9 +5899,18 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     if (tradeMoneySp) tradeMoneySp.textContent = fmt(p.price);
     // 총 구매금액·결제 해야할 금액 — 스냅샷 JS 덮어쓰기 방지용 전체 교체
     var pf = fmt(p.price);
+    // ID 직접 교체 (#pay_mileage는 class가 아닌 id)
+    var payMilEl = document.getElementById('pay_mileage');
+    if (payMilEl) payMilEl.textContent = pf;
     document.querySelectorAll('.pay_mileage').forEach(function(el) { el.textContent = pf; });
     document.querySelectorAll('.add_pay.price_font, .add_pay').forEach(function(el) { el.textContent = pf; });
     document.querySelectorAll('.settle_amount, .final_amount').forEach(function(el) { el.textContent = pf; });
+
+    // ── buy 페이지: 판매수량 컨트롤 숨기기 ──────────────
+    if (type === 'buy') {
+      var buyInfoDl = document.querySelector('.buy_info dl');
+      if (buyInfoDl) buyInfoDl.style.setProperty('display', 'none', 'important');
+    }
 
     // ── 게임/서버/카테고리 breadcrumb (.kind) ────────────
     var kindEl = document.querySelector('.kind');
@@ -6349,8 +6358,29 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     }
   }
 
+  function fixBuyPagePriceAndQty() {
+    var p = window.__PRODUCT__;
+    if (!p) return;
+    var price = Number(p.price || 0).toLocaleString('ko-KR');
+
+    // 판매수량 컨트롤 숨기기 (.buy_info dl)
+    var dl = document.querySelector('.buy_info dl');
+    if (dl) dl.style.setProperty('display', 'none', 'important');
+
+    // 판매금액·총판매금액 고정
+    var tm = document.getElementById('trade_money');
+    if (tm && tm.textContent !== price) tm.textContent = price;
+    var pm = document.getElementById('pay_mileage');
+    if (pm && pm.textContent !== price) pm.textContent = price;
+  }
+
   function init() {
     updateBuyerInfo();
+
+    // buy 페이지 전용: 가격·수량 컨트롤 고정 (스냅샷 JS 덮어쓰기 방지)
+    fixBuyPagePriceAndQty();
+    var _fixInterval = setInterval(fixBuyPagePriceAndQty, 300);
+    setTimeout(function() { clearInterval(_fixInterval); }, 10000);
 
     // 판매신청 버튼 (btn_green)
     document.querySelectorAll('button.btn_green').forEach(function(btn) {
