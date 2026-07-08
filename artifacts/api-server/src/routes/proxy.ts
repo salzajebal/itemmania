@@ -6268,7 +6268,90 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     return window._IM_auth().then(function(d){ _loggedIn = !!(d && d.id); return _loggedIn; });
   }
 
+  function updateBuyerInfo() {
+    var p = window.__PRODUCT__;
+    if (!p) return;
+    var GRADE_LTR = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+    var GRADE_NM  = { vip:'VIP', platinum:'PLATINUM', gold:'GOLD', silver:'SILVER', bronze:'BRONZE' };
+    var ALL_G = ['vip','platinum','gold','silver','bronze'];
+
+    // 구매자 등급 배지 교체
+    var creditMark = document.querySelector('.user_info .credit_mark');
+    if (creditMark) {
+      ALL_G.forEach(function(g) { creditMark.classList.remove(g); });
+      var gk = p.sellerGrade && GRADE_LTR[p.sellerGrade] ? p.sellerGrade : null;
+      if (gk) {
+        creditMark.classList.add(gk);
+        creditMark.textContent = GRADE_LTR[gk];
+      } else {
+        creditMark.classList.add('regular');
+        creditMark.textContent = '';
+      }
+    }
+
+    // vip_txt (등급명) + 그 뒤 텍스트 노드(신용점수)
+    var vipTxt = document.querySelector('.user_info .vip_txt');
+    if (vipTxt) {
+      var gk2 = p.sellerGrade && GRADE_NM[p.sellerGrade] ? p.sellerGrade : null;
+      vipTxt.textContent = gk2 ? GRADE_NM[gk2] : '';
+      // 신용점수 텍스트 노드 교체 (vip_txt 다음 텍스트 노드)
+      var scoreText = vipTxt.nextSibling;
+      var score = (p.sellerCreditScore !== null && p.sellerCreditScore !== undefined)
+        ? Number(p.sellerCreditScore).toLocaleString('ko-KR') + '점'
+        : '0점';
+      if (scoreText && scoreText.nodeType === 3) {
+        scoreText.nodeValue = ' ' + score + ' ';
+      } else {
+        var tn = document.createTextNode(' ' + score + ' ');
+        if (vipTxt.nextSibling) vipTxt.parentNode.insertBefore(tn, vipTxt.nextSibling);
+        else vipTxt.parentNode.appendChild(tn);
+      }
+    }
+
+    // 구매자 닉네임 표시 (user_nick 또는 user_info strong:not(.vip_txt))
+    if (p.sellerName) {
+      var nameEl = document.querySelector('.user_nick, .user_info strong:not(.vip_txt)');
+      if (nameEl) nameEl.textContent = p.sellerName;
+      else {
+        // user_info 상단에 닉네임 추가
+        var uiDiv = document.querySelector('.user_info');
+        if (uiDiv) {
+          var sp = document.createElement('strong');
+          sp.className = 'user_nick';
+          sp.style.cssText = 'font-size:15px;font-weight:700;margin-right:6px';
+          sp.textContent = p.sellerName;
+          uiDiv.insertBefore(sp, uiDiv.firstChild);
+        }
+      }
+    }
+
+    // 인증 상태 배지 (우수인증·휴대폰·이메일·출금계좌)
+    var as = p.sellerAuthStates || {};
+    var certItems = document.querySelectorAll('ul.add_info .cert_state');
+    var authMap = [
+      { key: 'excellent', label: '우수인증' },
+      { key: 'phone', label: '휴대폰' },
+      { key: 'email', label: '이메일' },
+      { key: 'withdraw', label: '출금계좌' },
+    ];
+    certItems.forEach(function(el, i) {
+      var am = authMap[i];
+      if (!am) return;
+      el.textContent = am.label;
+      if (as[am.key]) el.classList.add('on'); else el.classList.remove('on');
+    });
+
+    // 거래성사율 progress bar (우리 DB에는 없으므로 0%로 표시)
+    var prog = document.querySelector('progress.g_progress');
+    if (prog) {
+      prog.setAttribute('value', '0');
+      prog.setAttribute('data-value', '0');
+    }
+  }
+
   function init() {
+    updateBuyerInfo();
+
     // 판매신청 버튼 (btn_green)
     document.querySelectorAll('button.btn_green').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
@@ -7754,6 +7837,52 @@ router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => 
 });
 
 // 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
+/**
+ * 상품 ID로 DB 조회 후 판매자/구매자 실제 nickname·grade를 포함한 product 객체 반환.
+ * sellerId가 없을 경우 sellerName(이메일/닉네임)으로 users 테이블 fallback 조회.
+ */
+async function resolveProductWithUser(productId: number): Promise<Record<string, unknown> | null> {
+  const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  if (!p) return null;
+
+  let resolvedName = p.sellerName;
+  let resolvedGrade = p.sellerGrade;
+  let resolvedSellerId = p.sellerId;
+  let resolvedCreditScore: number | null = null;
+  let resolvedAuthStates: Record<string, boolean> | null = null;
+
+  async function applyUser(u: typeof usersTable.$inferSelect) {
+    resolvedSellerId = u.id;
+    resolvedName = u.nickname || u.email || p.sellerName;
+    resolvedGrade = u.grade || p.sellerGrade;
+    resolvedCreditScore = u.creditScore ?? null;
+    resolvedAuthStates = (u.authStates as Record<string, boolean>) ?? null;
+  }
+
+  if (p.sellerId) {
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.id, p.sellerId));
+    if (u) await applyUser(u);
+  } else if (p.sellerName) {
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.email, p.sellerName));
+    if (u) {
+      await applyUser(u);
+    } else {
+      const [u2] = await db.select().from(usersTable).where(eq(usersTable.nickname, p.sellerName));
+      if (u2) await applyUser(u2);
+    }
+  }
+
+  return {
+    id: p.id, title: p.title, price: Number(p.price),
+    gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
+    sellerName: resolvedName, description: p.description,
+    sellerId: resolvedSellerId, sellerGrade: resolvedGrade,
+    sellerCreditScore: resolvedCreditScore,
+    sellerAuthStates: resolvedAuthStates,
+    status: p.status,
+  };
+}
+
 router.get("/sell/application.html", async (req, res): Promise<void> => {
   if (!sellApplicationHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
@@ -7763,19 +7892,11 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
-  // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
   let product: Record<string, unknown> | null = null;
   const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
   const productId = parseInt(String(rawId ?? ""), 10);
   if (!isNaN(productId) && productId > 0) {
-    const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
-    if (p) {
-      product = {
-        id: p.id, title: p.title, price: Number(p.price),
-        gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
-        sellerName: p.sellerName, description: p.description, sellerId: p.sellerId, status: p.status,
-      };
-    }
+    product = await resolveProductWithUser(productId);
   }
 
   res.send(serveApplication(sellApplicationHtml, user, product));
@@ -7791,19 +7912,11 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
-  // ?id= 파라미터로 DB 상품 조회 → window.__PRODUCT__ 주입
   let product: Record<string, unknown> | null = null;
   const rawIdB = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
   const productIdB = parseInt(String(rawIdB ?? ""), 10);
   if (!isNaN(productIdB) && productIdB > 0) {
-    const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productIdB));
-    if (p) {
-      product = {
-        id: p.id, title: p.title, price: Number(p.price),
-        gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
-        sellerName: p.sellerName, description: p.description, sellerId: p.sellerId, status: p.status,
-      };
-    }
+    product = await resolveProductWithUser(productIdB);
   }
 
   res.send(serveBuyApplication(buyApplicationHtml, user, product));
