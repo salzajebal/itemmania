@@ -6396,13 +6396,40 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
       form.addEventListener('submit', function(e){ e.preventDefault(); e.stopImmediatePropagation(); }, true);
     }
 
-    // 채팅 버튼 (.go_chat)
+    // 채팅 버튼 (.go_chat) → 이 구매글을 올린 사람(구매자)과 채팅방 생성 후 이동
     document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        checkLogin().then(function(ok) {
-          if (!ok) { showLoginModal(); return; }
-          window.open('/myroom/chat/list.html', '_blank', 'width=900,height=700,resizable=yes,scrollbars=yes');
+        window._IM_auth().then(function(user) {
+          if (!user || !user.id) { showLoginModal(); return; }
+          var p = window.__PRODUCT__;
+          function openList() {
+            var nOpen0 = window._nativeOpen || window.open.bind(window);
+            var w0 = nOpen0('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
+            if (!w0 || w0.closed) { location.href = '/myroom/chat/list.html'; }
+          }
+          if (!p || !p.sellerId) { openList(); return; }
+          if (Number(p.sellerId) === Number(user.id)) {
+            alert('자신의 글에는 채팅할 수 없습니다.'); return;
+          }
+          fetch('/api/chat/rooms', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              buyerId: Number(p.sellerId),
+              productId: p.id ? Number(p.id) : undefined
+            })
+          }).then(function(r) { return r.json(); })
+          .then(function(room) {
+            var nOpen = window._nativeOpen || window.open.bind(window);
+            if (room && room.id) {
+              var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
+              var w = nOpen(chatUrl, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+              if (!w || w.closed) { location.href = chatUrl; }
+            } else {
+              openList();
+            }
+          }).catch(function() { openList(); });
         });
       }, true);
     });

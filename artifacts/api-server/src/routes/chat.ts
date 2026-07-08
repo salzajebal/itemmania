@@ -71,20 +71,30 @@ router.get("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
 // 채팅방 생성 또는 기존 방 반환
 router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
-  const { sellerId, productId, characterName, goodsType } = req.body as {
-    sellerId?: number; productId?: number; characterName?: string; goodsType?: string;
+  const { sellerId, buyerId, productId, characterName, goodsType } = req.body as {
+    sellerId?: number; buyerId?: number; productId?: number; characterName?: string; goodsType?: string;
   };
 
-  if (!sellerId || typeof sellerId !== "number") {
-    res.status(400).json({ error: "sellerId가 필요합니다." });
+  // sellerId가 오면 "내가 구매자" (판매글에서 채팅), buyerId가 오면 "내가 판매자" (구매글에서 채팅)
+  let resolvedBuyerId: number;
+  let resolvedSellerId: number;
+  if (sellerId && typeof sellerId === "number") {
+    resolvedBuyerId = userId;
+    resolvedSellerId = sellerId;
+  } else if (buyerId && typeof buyerId === "number") {
+    resolvedBuyerId = buyerId;
+    resolvedSellerId = userId;
+  } else {
+    res.status(400).json({ error: "sellerId 또는 buyerId가 필요합니다." });
     return;
   }
-  if (sellerId === userId) {
+
+  if (resolvedBuyerId === resolvedSellerId) {
     res.status(400).json({ error: "자신과 채팅할 수 없습니다." });
     return;
   }
 
-  const conditions = [eq(chatRoomsTable.buyerId, userId), eq(chatRoomsTable.sellerId, sellerId)];
+  const conditions = [eq(chatRoomsTable.buyerId, resolvedBuyerId), eq(chatRoomsTable.sellerId, resolvedSellerId)];
   if (productId) conditions.push(eq(chatRoomsTable.productId, productId));
 
   const [existing] = await db.select().from(chatRoomsTable).where(and(...conditions)).limit(1);
@@ -103,7 +113,7 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
   const [room] = await db
     .insert(chatRoomsTable)
     .values({
-      buyerId: userId, sellerId, productId: productId ?? null,
+      buyerId: resolvedBuyerId, sellerId: resolvedSellerId, productId: productId ?? null,
       characterName: characterName ?? null, goodsType: goodsType ?? null,
     })
     .returning();
