@@ -5148,6 +5148,9 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
   }
 
   var STATUS_LABEL = { pending:'거래대기', active:'거래중', handover:'인계완료(인수대기)', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
+  // trade_state_text 요소에 줄바꿈 방지 스타일 적용
+  var stateTextEl = document.getElementById('trade_state_text');
+  if (stateTextEl) stateTextEl.style.cssText += ';white-space:nowrap';
   var roomId = null;
   var myId = null;
   var lastMsgId = 0;
@@ -5229,7 +5232,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
             var hBtn2 = document.createElement('button');
             hBtn2.id = '_im_handover_btn';
             hBtn2.textContent = '인계하기';
-            hBtn2.style.cssText = 'display:block;width:100%;margin-bottom:8px;padding:10px 0;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:-.02em';
+            hBtn2.style.cssText = 'display:block;width:100%;margin-bottom:8px;padding:10px 0;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:-.02em;text-align:center';
             tc2.parentNode.insertBefore(hBtn2, tc2);
           }
         }
@@ -5295,7 +5298,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         var noticeEl2 = document.getElementById('chat_notice_txt');
         if (noticeEl2) {
           if (!isBuyer) {
-            noticeEl2.innerHTML = '<b>✅ 입금이 완료된 상품입니다 (아이템을 먼저 전달해 주세요.)</b><br><span class="sub_txt">안전한 거래를 위해 구매자는 아이템을 정상적으로 전달받은 후에만 구매확정을 진행해 주세요.</span>';
+            noticeEl2.innerHTML = '<b>입금이 완료된 상품입니다 (아이템을 먼저 전달해 주세요.)</b><br><span class="sub_txt">안전한 거래를 위해 구매자는 아이템을 정상적으로 전달받은 후에만 구매확정을 진행해 주세요.</span>';
             noticeEl2.style.display = '';
           } else {
             noticeEl2.style.display = 'none';
