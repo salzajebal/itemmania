@@ -5166,7 +5166,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         if (list2) {
           var box2 = document.createElement('div');
           box2.id = '_im_trade_end_notice';
-          box2.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#c9184a;font-size:13px;font-weight:600;text-align:center;line-height:1.4';
+          box2.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#222;font-size:13px;font-weight:500;text-align:center;line-height:1.4';
           box2.textContent = '거래가 종료되었습니다.';
           list2.appendChild(box2);
           list2.scrollTop = list2.scrollHeight;
@@ -5340,7 +5340,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
             if (list && !document.getElementById('_im_trade_end_notice')) {
               var box = document.createElement('div');
               box.id = '_im_trade_end_notice';
-              box.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#c9184a;font-size:13px;font-weight:600;text-align:center;line-height:1.4';
+              box.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#222;font-size:13px;font-weight:500;text-align:center;line-height:1.4';
               box.textContent = '거래가 종료되었습니다.';
               list.appendChild(box);
               list.scrollTop = list.scrollHeight;
