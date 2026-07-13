@@ -5571,7 +5571,15 @@ const CHAT_INTERCEPT_SCRIPT = `
 
   function init() {
     var myroomBtn = document.querySelector('button.go_myroom');
-    if (myroomBtn) myroomBtn.addEventListener('click', function(e) { e.preventDefault(); location.href = '/myroom/index.html'; });
+    if (myroomBtn) myroomBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (window.opener && !window.opener.closed) {
+        window.opener.location.href = '/myroom/index.html';
+        window.close();
+      } else {
+        window.top.location.href = '/myroom/index.html';
+      }
+    });
     var blockBtn = document.querySelector('button.block_list');
     if (blockBtn) blockBtn.addEventListener('click', function(e) { e.preventDefault(); alert('차단리스트 기능은 준비 중입니다.'); });
 
