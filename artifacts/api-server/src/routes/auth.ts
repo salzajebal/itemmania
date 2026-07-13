@@ -36,6 +36,8 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     phone: phone ?? null,
     passwordHash,
     role: "user",
+    grade: "bronze",
+    creditScore: 220,
   }).returning();
 
   // 지갑 자동 생성
@@ -74,6 +76,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       phone: null,
       passwordHash,
       role: "user",
+      grade: "bronze",
+      creditScore: 220,
     }).returning();
     await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
     user = created;

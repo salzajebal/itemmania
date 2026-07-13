@@ -29,8 +29,8 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull().default("user"),
   authStates: jsonb("auth_states").$type<AuthStates>().notNull().default(DEFAULT_AUTH_STATES),
-  grade: text("grade"),
-  creditScore: integer("credit_score").notNull().default(0),
+  grade: text("grade").notNull().default("bronze"),
+  creditScore: integer("credit_score").notNull().default(220),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

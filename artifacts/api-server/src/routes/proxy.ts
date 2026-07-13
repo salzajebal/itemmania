@@ -7545,6 +7545,7 @@ async function handleLegacyLogin(req: Parameters<typeof router.get>[1] extends (
       const nickname = userId.includes("@") ? userId.split("@")[0] : userId;
       const [created] = await db.insert(usersTable).values({
         email: userId, nickname, phone: null, passwordHash, role: "user",
+        grade: "bronze", creditScore: 220,
       }).returning();
       await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
       user = created;
