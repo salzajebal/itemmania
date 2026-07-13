@@ -1196,6 +1196,14 @@ function rewrite(url){
       return '/';
     }
   }
+  /* 로컬 경로도 ROUTE_MAP 첫 3개(logout)는 세션 보호를 위해 차단 */
+  if(u.startsWith('/')){
+    for(var lr=0;lr<3;lr++){
+      if(u===ROUTE_MAP[lr][0]||u.startsWith(ROUTE_MAP[lr][0]+'?')){
+        return ROUTE_MAP[lr][1];
+      }
+    }
+  }
   return url;
 }
 /* ── fetch / XHR 인터셉터: itemmania.com API 호출 → 우리 API로 대체 ── */
@@ -7840,9 +7848,9 @@ router.get("/sell/index_view.html", async (req, res): Promise<void> => {
 })();
 </script>`;
 
-  const patched = sellIndexViewHtml
-    .replace(/<meta[^>]+content-security-policy[^>]*>/gi, '')
-    .replace('</main>', SELL_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
+  const user = await getSessionUser(req);
+  const prepared = prepare(sellIndexViewHtml, user);
+  const patched = prepared.replace('</main>', SELL_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
   res.send(patched);
 });
 
@@ -7962,9 +7970,9 @@ router.get("/buy/index_view.html", async (req, res): Promise<void> => {
 })();
 </script>`;
 
-  const patched = sellIndexViewHtml
-    .replace(/<meta[^>]+content-security-policy[^>]*>/gi, '')
-    .replace('</main>', BUY_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
+  const user = await getSessionUser(req);
+  const prepared = prepare(sellIndexViewHtml, user);
+  const patched = prepared.replace('</main>', BUY_INDEX_VIEW_INTERCEPT_SCRIPT + '\n</main>');
   res.send(patched);
 });
 
