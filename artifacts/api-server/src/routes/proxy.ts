@@ -2261,6 +2261,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
 (function() {
   function showToast(msg, ok) {
     var t = document.createElement('div');
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
     t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
       + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
       + 'background:' + (ok ? '#0070d2' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
@@ -2632,13 +2634,13 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       setupGameSearch(cleanInp);
     })();
 
-    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트
+    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트 (캡처 페이즈로 stopPropagation 우회)
     document.addEventListener('click', function(e) {
       var btn = e.target;
-      if (btn && (btn.classList.contains('btn_name_save') || btn.closest && btn.closest('.btn_name_save'))) {
+      if (btn && btn.classList && btn.classList.contains('btn_name_save')) {
         showToast('저장되었습니다.', true);
       }
-    });
+    }, true);
 
     // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
@@ -2936,6 +2938,8 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
 (function() {
   function showToast(msg, ok) {
     var t = document.createElement('div');
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
     t.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
       + 'padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;color:#fff;'
       + 'background:' + (ok ? '#39A742' : '#e53e3e') + ';box-shadow:0 4px 20px rgba(0,0,0,.18);pointer-events:none';
@@ -3341,13 +3345,13 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       setupGameSearch(cleanInp);
     })();
 
-    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트
+    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트 (캡처 페이즈로 stopPropagation 우회)
     document.addEventListener('click', function(e) {
       var btn = e.target;
-      if (btn && (btn.classList.contains('btn_name_save') || btn.closest && btn.closest('.btn_name_save'))) {
+      if (btn && btn.classList && btn.classList.contains('btn_name_save')) {
         showToast('저장되었습니다.', true);
       }
-    });
+    }, true);
 
     // 판매등록 링크 → /sell/register.html
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
