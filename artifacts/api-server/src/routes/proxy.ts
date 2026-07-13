@@ -533,9 +533,14 @@ const INTERCEPT_SCRIPT = `
       }, true);
     } else {
       loginsDiv.innerHTML =
-        '<a href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>' +
+        '<a id="_im_login_link" href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">로그인</a>' +
         '<div class="divider"></div>' +
-        '<a href="/join" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
+        '<a id="_im_join_link" href="/login" style="font-size:14px;font-weight:600;color:#2e2e2e;text-decoration:none">회원가입</a>';
+      var ll = document.getElementById('_im_login_link');
+      var jl = document.getElementById('_im_join_link');
+      function _goLogin(e) { e.preventDefault(); e.stopImmediatePropagation(); try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {} location.href = '/login'; }
+      if (ll) ll.addEventListener('click', _goLogin, true);
+      if (jl) jl.addEventListener('click', _goLogin, true);
     }
   }
 
@@ -699,13 +704,13 @@ const INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
     if (registerLink) {
       registerLink.addEventListener('click', function(e){
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
 
@@ -810,8 +815,12 @@ const LOGIN_INTERCEPT_SCRIPT = `
           });
           var data = await res.json();
           if (res.ok) {
-            var returnUrl = new URLSearchParams(location.search).get('returnUrl');
-            location.href = returnUrl ? '/' : '/';
+            var dest = '/myroom/index.html';
+            try {
+              var next = sessionStorage.getItem('_im_login_next');
+              if (next && !next.includes('/login')) { dest = next; sessionStorage.removeItem('_im_login_next'); }
+            } catch(e2) {}
+            location.href = dest;
           } else {
             showError(data.error || '아이디 또는 비밀번호가 올바르지 않습니다.');
             if (btn) btn.disabled = false;
@@ -937,7 +946,7 @@ const GIFTCARD_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
 
@@ -1010,7 +1019,7 @@ const GAMECHARGE_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
 
@@ -1280,11 +1289,20 @@ try{
   location.replace=function(u){_rep(rewrite(u));};
 }catch(e){}
 
+/* 로그인 이동 전 현재 URL 저장 (로그인 후 복귀용) */
+function _imSaveLoginNext(dest){
+  var d=dest||'';
+  var isLogin=d==='/login'||d.startsWith('/login?')||d.startsWith('/login#')||d.includes('/login');
+  if(isLogin&&location.pathname&&!location.pathname.startsWith('/login')){
+    try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){}
+  }
+}
 /* a[href] 전역 클릭 */
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href]');
   if(!a) return;
   var h=a.getAttribute('href')||'';
+  _imSaveLoginNext(h);
   var rw=rewrite(h);
   if(rw!==h){e.preventDefault();e.stopImmediatePropagation();location.href=rw;}
 },true);
@@ -1295,6 +1313,7 @@ try{
     Object.defineProperty(Location.prototype,'href',{
       get:_locDesc.get,
       set:function(val){
+        _imSaveLoginNext(val);
         var rw=rewrite(val);
         _locDesc.set.call(this,rw);
       },
@@ -1806,7 +1825,7 @@ const SELL_INTERCEPT_SCRIPT = `
     div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:380px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button></div></div>';
     document.body.appendChild(div.firstChild);
     document.getElementById('_im_close').onclick = function() { document.getElementById('_im_overlay').style.display='none'; };
-    document.getElementById('_im_login_btn').onclick = function() { location.href='/login'; };
+    document.getElementById('_im_login_btn').onclick = function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href='/login'; };
   }
 
   function interceptBuyButtons() {
@@ -1840,7 +1859,7 @@ const SELL_INTERCEPT_SCRIPT = `
     var loginBtn = document.querySelector('.header-logins button');
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopPropagation(); location.href = '/login';
+        e.preventDefault(); e.stopPropagation(); try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       });
     }
     var joinBtn = document.querySelector('.header-logins a');
@@ -2866,7 +2885,7 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200);
+              setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200);
               return;
             }
             var gameEl = form.querySelector('[name=searchGameServer],[id=searchRegGameServer]');
@@ -3577,7 +3596,7 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200);
+              setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200);
               return;
             }
             var priceEl = form.querySelector('[name=user_price]');
@@ -3696,7 +3715,7 @@ const SELL_NEW_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200); return;
+              setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200); return;
             }
             var priceEl = form.querySelector('[name=user_price]');
             if (!priceEl || !priceEl.value.trim()) { showToast('가격을 입력해주세요.', false); return; }
@@ -3766,7 +3785,7 @@ const BUY_NEW_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200); return;
+              setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200); return;
             }
             var priceEl = form.querySelector('[name=user_price]');
             if (!priceEl || !priceEl.value.trim()) { showToast('가격을 입력해주세요.', false); return; }
@@ -3811,7 +3830,7 @@ const BATCH_GOODS_INTERCEPT_SCRIPT = `
           .then(function(d) {
             if (!d || !d.id) {
               showToast('로그인이 필요합니다.', false);
-              setTimeout(function() { location.href = '/login'; }, 1200); return;
+              setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200); return;
             }
             var fileEl = document.getElementById('excel_upload');
             showToast('일괄등록이 완료되었습니다!', true);
@@ -5399,7 +5418,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     window._IM_auth().then(function(me) {
       if (!me || !me.id) {
         if (window.opener) { alert('로그인이 필요합니다.'); window.close(); }
-        else { location.href = '/login?redirect=' + encodeURIComponent(location.href); }
+        else { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }
         return;
       }
       myId = me.id;
@@ -5856,7 +5875,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
         e.preventDefault(); e.stopImmediatePropagation();
         window._IM_auth().then(function(user) {
           if (!user || !user.id) {
-            location.href = '/login?redirect=' + encodeURIComponent(location.href);
+            try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
             return;
           }
           var params2 = new URLSearchParams(location.search);
@@ -5950,7 +5969,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
 
@@ -6088,7 +6107,7 @@ const APPLICATION_DYNAMIC_SCRIPT = `
         window._IM_auth().then(function(user) {
           if (!user || !user.id) {
             showToast('로그인이 필요합니다.', false);
-            setTimeout(function() { location.href = '/login?redirect=' + encodeURIComponent(location.href); }, 1200);
+            setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200);
             return;
           }
           if (p.sellerId && Number(user.id) === Number(p.sellerId)) {
@@ -6135,7 +6154,7 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       chatBtn.addEventListener('click', function() {
         window._IM_auth().then(function(user) {
           if (!user || !user.id) {
-            location.href = '/login?redirect=' + encodeURIComponent(location.href);
+            try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
             return;
           }
           if (!p || !p.sellerId) { location.href = '/myroom/chat/list.html'; return; }
@@ -6514,7 +6533,7 @@ const BUY_INTERCEPT_SCRIPT = `
     if (loginBtn) {
       loginBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        location.href = '/login';
+        try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
       }, true);
     }
 
@@ -6602,7 +6621,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     '</div>';
     document.body.appendChild(overlay);
     document.getElementById('_im_modal_cancel').onclick = function(){ document.body.removeChild(overlay); };
-    document.getElementById('_im_modal_login').onclick = function(){ location.href = '/login'; };
+    document.getElementById('_im_modal_login').onclick = function(){ try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; };
     overlay.addEventListener('click', function(e){ if(e.target === overlay) document.body.removeChild(overlay); });
   }
 
