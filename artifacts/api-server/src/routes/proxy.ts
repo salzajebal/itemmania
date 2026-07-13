@@ -343,7 +343,7 @@ const INTERCEPT_SCRIPT = `
 .header-panel .header-service-icon img{display:block;width:50px;height:50px}
 .header-panel .header-service-label{font-size:16px;font-weight:500;display:block;margin-top:8px;text-align:center}
 .header-panel .header-box{overflow:hidden;margin:0 20px 20px;border:1px solid var(--color-gray3);border-radius:15px;background:#fff}
-.header-panel .header-box-title{font-size:16px;font-weight:600;display:flex;align-items:center;height:40px;padding:0 20px;color:#2e2e2e;background:#e8f2ff}
+.header-panel .header-box-title{font-size:16px;font-weight:600;display:flex;align-items:center;height:40px;padding:0 20px;margin:0;color:#2e2e2e;background:#e8f2ff}
 .header-panel .header-box-grid{font-size:16px;font-weight:500;display:grid;margin:0;padding:20px 25px 24px;list-style:none;color:#2e2e2e;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px 5px}
 .header-panel .header-box-grid li:last-child{width:100px}
 .header-panel .header-box-grid a{color:inherit;text-decoration:none}
