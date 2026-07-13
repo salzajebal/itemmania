@@ -1382,29 +1382,20 @@ function _imSetupSearchFrame() {
   var gsList = frame.querySelector('.gs_list');
   var _acTimer = null;
   frame.dataset.selGoods = 'all';
-  /* 프레임 내 클릭 시 검색 input 포커스 유지 — blur → hideFrame 방지 */
-  frame.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-  }, false);
-  /* 카테고리 탭 선택 감지: capture click + change 이중으로 data-sel-goods에 저장 */
-  function _imUpdateSelGoods(val) {
-    if (val && val !== frame.dataset.selGoods) { frame.dataset.selGoods = val; }
-  }
-  frame.addEventListener('click', function(e) {
-    var item = e.target && e.target.closest && e.target.closest('.search-select-item');
-    if (!item) return;
+  /* 카테고리 탭: mousedown에서 포커스 유지 + 라디오 수동 체크 + selGoods 업데이트 */
+  var _selItems = frame.querySelectorAll('.search-select-item');
+  _selItems.forEach(function(item) {
     var radio = item.querySelector('input[name=search_goods]');
-    if (radio) { _imUpdateSelGoods(radio.value); }
-    /* mousedown.preventDefault 때문에 change가 안 올 수 있으므로 setTimeout으로도 체크 */
-    setTimeout(function() {
-      var chk = item.querySelector('input[name=search_goods]:checked');
-      if (chk) { _imUpdateSelGoods(chk.value); }
-    }, 0);
-  }, true);
-  frame.addEventListener('change', function(e) {
-    var t = e.target;
-    if (t && t.name === 'search_goods') { _imUpdateSelGoods(t.value); }
-  }, false);
+    if (!radio) return;
+    item.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      frame.querySelectorAll('input[name=search_goods]').forEach(function(r) { r.checked = false; });
+      radio.checked = true;
+      frame.dataset.selGoods = radio.value;
+      setTimeout(function() { inp.focus(); }, 0);
+    }, true);
+  });
+  /* 게임 결과 목록도 mousedown에서 포커스 이탈 방지 (게임 선택은 mousedown에서 처리) */
   function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
   function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
   function showInitial() {
@@ -1471,6 +1462,7 @@ function _imSetupSearchFrame() {
       var li = e.target.closest('li[data-id]');
       if (!li) return;
       e.preventDefault();
+      e.stopImmediatePropagation();
       var code = li.getAttribute('data-code');
       var id = li.getAttribute('data-id');
       var name = li.getAttribute('data-name');
@@ -1483,7 +1475,7 @@ function _imSetupSearchFrame() {
       var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
       if (itemCat) url += '&itemCategory=' + encodeURIComponent(itemCat);
       location.href = url;
-    }, false);
+    }, true);
   }
   inp.addEventListener('blur', function() {
     setTimeout(function() {
