@@ -165,7 +165,7 @@ export async function fetchProxyPage(path: string, userAgent: string): Promise<{
         "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
         "Referer": base + "/",
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(5000),
     });
 
     const contentType = response.headers.get("content-type") || "text/html";

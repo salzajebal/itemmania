@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, desc, asc, count, inArray } from "drizzle-orm";
 import { db, productsTable, gamesTable, ordersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { getAllGamesWithServers } from "./games";
 
 const router: IRouter = Router();
 
@@ -57,27 +58,12 @@ router.get("/products", async (req, res): Promise<void> => {
     conditions.push(eq(productsTable.itemCategory, itemCategory));
   }
 
-  // gameCode → gameName 변환 (itemmania 게임코드 또는 숫자 id)
+  // gameCode → gameName 변환 (캐시 기반, DB 추가 쿼리 없음)
   if (gameCode && typeof gameCode === "string" && gameCode.trim()) {
-    let game: { name: string } | null = null;
-    const [byCode] = await db
-      .select()
-      .from(gamesTable)
-      .where(eq(gamesTable.code, gameCode.trim()))
-      .limit(1);
-    if (byCode) {
-      game = byCode;
-    } else {
-      const numId = parseInt(gameCode.trim(), 10);
-      if (!isNaN(numId)) {
-        const [byId] = await db
-          .select()
-          .from(gamesTable)
-          .where(eq(gamesTable.id, numId))
-          .limit(1);
-        if (byId) game = byId;
-      }
-    }
+    const allGames = await getAllGamesWithServers();
+    const codeStr = gameCode.trim();
+    const numId = parseInt(codeStr, 10);
+    const game = allGames.find(g => g.code === codeStr || (!isNaN(numId) && g.id === numId));
     if (game) {
       conditions.push(eq(productsTable.gameName, game.name));
     }
