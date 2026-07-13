@@ -5261,26 +5261,44 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
           userInfoEl.className = 'chat_user_info ' + (isBuyer ? 'sell' : 'buy');
           var roleLabel = userInfoEl.querySelector('.user_info_txt');
           if (roleLabel) roleLabel.innerHTML = isBuyer ? '판매자<br>정보' : '구매자<br>정보';
-          var nickEl = userInfoEl.querySelector('ul li:first-child');
-          if (nickEl) nickEl.textContent = partnerName;
           var ul = userInfoEl.querySelector('ul');
           if (ul) {
-            var charLi = ul.querySelector('li.character');
-            var showChar = (r.goodsType === '게임머니' || r.goodsType === '아이템') && r.characterName;
-            if (showChar) {
-              if (!charLi) {
-                charLi = document.createElement('li');
+            // 기존 li 모두 제거 후 재구성
+            ul.innerHTML = '';
+            if (isBuyer) {
+              // 구매자 입장: 판매자 닉네임
+              var li0 = document.createElement('li');
+              li0.textContent = partnerName;
+              ul.appendChild(li0);
+            } else {
+              // 판매자 입장: 구매자 실명 + 전화번호 + 캐릭터명
+              var buyerDisplayName = r.buyerName || partnerName;
+              var li0 = document.createElement('li');
+              li0.textContent = buyerDisplayName;
+              ul.appendChild(li0);
+              if (r.buyerPhone) {
+                var liPhone = document.createElement('li');
+                liPhone.textContent = r.buyerPhone;
+                ul.appendChild(liPhone);
+              }
+              var showChar = r.characterName && (r.goodsType === '게임머니' || r.goodsType === '아이템');
+              if (showChar) {
+                var charLi = document.createElement('li');
                 charLi.className = 'character';
+                charLi.innerHTML = '캐릭터명: ' + esc(r.characterName) + ' <button type="button" class="other_font" style="font-size:12px;padding:2px 7px;border:1px solid #aaa;border-radius:4px;background:#fff;cursor:pointer;margin-left:4px">다른 글꼴로 보기</button>';
                 ul.appendChild(charLi);
               }
-              charLi.textContent = '구매자 캐릭터명: ' + r.characterName;
-            } else if (charLi) {
-              charLi.parentNode.removeChild(charLi);
             }
-            var allLi = Array.from(ul.querySelectorAll('li'));
-            allLi.slice(1).forEach(function(li) {
-              if (!li.classList.contains('character')) ul.removeChild(li);
-            });
+          }
+        }
+        // 판매자: 입금 안내 박스 표시 / 구매자: 숨김
+        var noticeEl2 = document.getElementById('chat_notice_txt');
+        if (noticeEl2) {
+          if (!isBuyer) {
+            noticeEl2.innerHTML = '<b>✅ 입금이 완료된 상품입니다 (아이템을 먼저 전달해 주세요.)</b><br><span class="sub_txt">안전한 거래를 위해 구매자는 아이템을 정상적으로 전달받은 후에만 구매확정을 진행해 주세요.</span>';
+            noticeEl2.style.display = '';
+          } else {
+            noticeEl2.style.display = 'none';
           }
         }
       }
@@ -5324,10 +5342,9 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     var params = new URLSearchParams(location.search);
     roomId = params.get('roomId') ? Number(params.get('roomId')) : null;
 
-    // 배너는 기본 숨김 — 인수하기 클릭 후에만 표시
+    // 배너·인수하기: loadMessages에서 구매자/판매자 여부 확인 후 표시
     var noticeEl = document.getElementById('chat_notice_txt');
     if (noticeEl) noticeEl.style.display = 'none';
-    // 인수하기 버튼도 기본 숨김 — loadMessages에서 구매자 여부 확인 후 표시
     var tiInit = document.getElementById('trade_ing');
     if (tiInit) tiInit.style.display = 'none';
 

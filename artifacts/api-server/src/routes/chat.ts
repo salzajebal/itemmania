@@ -250,7 +250,7 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
     .orderBy(chatMessagesTable.id)
     .limit(50);
 
-  const [buyer] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, room.buyerId));
+  const [buyer] = await db.select({ nickname: usersTable.nickname, name: usersTable.name, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, room.buyerId));
   const [seller] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, room.sellerId));
 
   let productTitle: string | null = null;
@@ -260,6 +260,11 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
     productTitle = prod?.title ?? null;
     productPrice = prod?.price ?? null;
   }
+
+  // 구매자 실명/전화번호: 판매자 또는 어드민에게만 노출
+  const isSeller = userId === room.sellerId || req.session.userRole === "admin";
+  const buyerName = isSeller ? (buyer?.name ?? null) : null;
+  const buyerPhone = isSeller ? (buyer?.phone ?? null) : null;
 
   res.json({
     room: {
@@ -274,6 +279,8 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
       goodsType: room.goodsType ?? null,
       buyerNickname: buyer?.nickname ?? String(room.buyerId),
       sellerNickname: seller?.nickname ?? String(room.sellerId),
+      buyerName,
+      buyerPhone,
     },
     messages: messages.map(m => ({
       id: m.id,
