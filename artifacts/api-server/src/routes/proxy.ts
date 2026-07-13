@@ -226,6 +226,20 @@ const INTERCEPT_SCRIPT = `
 .swiper-container-main .swiper-slide img {
   height: auto !important;
 }
+/* ── 검색창 + 드롭다운 연결 테두리 ───────────────────────────────────────── */
+.g_search_wrapper .search_area:has(.focus_on) {
+  border-radius: 15px 15px 0 0 !important;
+}
+.g_search_frame {
+  height: 300px;
+}
+.g_search_frame.g_hidden {
+  display: inherit !important;
+  visibility: hidden;
+  height: 0 !important;
+  padding: 0;
+  opacity: 0;
+}
 /* ────────────────────────────────────────────────────────────────────────── */
 #_im_overlay {
   display: none;
@@ -1364,17 +1378,17 @@ function _imSetupSearchFrame() {
   if (!form) return;
   var frame = form.querySelector('.g_search_frame');
   if (!frame) return;
-  function showFrame() { frame.classList.remove('g_hidden'); }
-  function hideFrame() { if (!inp.value.trim()) frame.classList.add('g_hidden'); }
+  function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
+  function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
   inp.addEventListener('focus', showFrame, true);
   inp.addEventListener('input', showFrame, true);
-  document.addEventListener('click', function(e) {
-    var wrapper = inp.closest('.g_search_wrapper') || form;
-    if (wrapper && wrapper.contains(e.target)) return;
-    frame.classList.add('g_hidden');
+  inp.addEventListener('blur', function() {
+    setTimeout(function() {
+      if (!form.contains(document.activeElement)) { hideFrame(); }
+    }, 150);
   }, false);
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { frame.classList.add('g_hidden'); inp.blur(); }
+    if (e.key === 'Escape') { hideFrame(); inp.blur(); }
   }, false);
 }
 _imSetupSearchFrame();
