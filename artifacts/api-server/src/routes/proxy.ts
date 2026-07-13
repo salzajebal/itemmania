@@ -5512,7 +5512,18 @@ const CHAT_INTERCEPT_SCRIPT = `
             method: 'PATCH', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'ended' })
-          }).then(function() { location.reload(); });
+          }).then(function(res) {
+            if (res.ok) {
+              li.remove();
+              var list = document.querySelector('.chat_list');
+              if (list && !list.querySelector('li.chat_list_item')) {
+                var empty = document.createElement('li');
+                empty.style.cssText = 'padding:40px;text-align:center;color:#888;font-size:15px';
+                empty.innerHTML = '채팅 내역이 없습니다.<br><small>상품 상세 페이지의 채팅 버튼을 눌러 시작하세요.</small>';
+                list.appendChild(empty);
+              }
+            }
+          });
         }
       });
     });
