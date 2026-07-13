@@ -7106,6 +7106,33 @@ function injectBuyTableRows(html: string, rowsHtml: string): string {
   );
 }
 
+const MYROOM_BUY_REGIST_SCRIPT = `<script>
+(function(){
+  window.addEventListener('DOMContentLoaded',function(){
+    if(!window._IM_USER||!window._IM_USER.id){location.replace('/login');return;}
+    /* 행 클릭 → 상세 페이지 이동 */
+    document.addEventListener('click',function(e){
+      if(e.target.closest&&e.target.closest('.list_icon')) return;
+      var tr=e.target.closest&&e.target.closest('tr[data-href]');
+      if(!tr) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      location.href=tr.getAttribute('data-href');
+    },true);
+    /* 삭제 버튼 — product DELETE */
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest&&e.target.closest('.list_icon.delete[data-id]');
+      if(!btn)return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      var pid=btn.getAttribute('data-id');
+      if(!pid||!confirm('이 구매 등록글을 삭제하시겠습니까?'))return;
+      fetch('/api/products/'+pid,{method:'DELETE',credentials:'include'})
+        .then(function(r){if(r.ok)location.reload();else alert('삭제 실패');})
+        .catch(function(){alert('삭제 실패');});
+    });
+  });
+})();
+</script>`;
+
 const MYROOM_BUY_SCRIPT = `<script>
 (function(){
   window.addEventListener('DOMContentLoaded',function(){
@@ -7152,35 +7179,32 @@ const MYROOM_BUY_SCRIPT = `<script>
 function serveBuyMyregist(
   html: string,
   user: Record<string, unknown> | null,
-  orders: Array<{
-    id: number; productId: number | null; productTitle: string; amount: number; createdAt: Date;
+  products: Array<{
+    id: number; title: string; price: number; createdAt: Date;
     gameName: string | null; serverName: string | null; itemCategory: string | null; category: string | null;
   }>
 ): string {
   let result = prepare(html, user);
 
   let rowsHtml: string;
-  if (orders.length === 0) {
+  if (products.length === 0) {
     rowsHtml = "<tr><td colspan=5 class=empty_item>등록된 구매 물품이 없습니다.</td></tr>";
   } else {
-    rowsHtml = orders.map((o) => {
-      const game = o.gameName || "";
-      const server = o.serverName ? `<p class=f_gray>${o.serverName}</p>` : "";
-      const cat = o.itemCategory || o.category || "아이템";
-      const price = fmtKRW(o.amount);
-      const date = fmtKRDate(o.createdAt);
-      const detailHref = o.productId ? `/sell/application.html?id=${o.productId}` : null;
-      const trOpen = detailHref
-        ? `<tr data-href="${detailHref}" style="cursor:pointer">`
-        : "<tr>";
+    rowsHtml = products.map((p) => {
+      const game = p.gameName || "";
+      const server = p.serverName ? `<p class=f_gray>${p.serverName}</p>` : "";
+      const cat = p.itemCategory || p.category || "아이템";
+      const price = fmtKRW(p.price);
+      const date = fmtKRDate(p.createdAt);
+      const detailHref = `/buy/application.html?id=${p.id}`;
       return (
-        trOpen +
+        `<tr data-href="${detailHref}" style="cursor:pointer">` +
         `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
-        `<td class=left><div class=trade_title>${o.productTitle}</div></td>` +
+        `<td class=left><div class=trade_title>${p.title}</div></td>` +
         `<td class="right td_money">${price}원</td>` +
         `<td class=flex_box><p class=f_gray>${date}</p>` +
-        `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${o.id}" data-desc=취소>` +
+        `<div class=icon_box><a href="javascript:void(0)" class="list_icon delete" data-id="${p.id}" data-desc=삭제>` +
         `<span class=list_icon_img></span></a></div></td>` +
         "</tr>"
       );
@@ -7189,8 +7213,8 @@ function serveBuyMyregist(
 
   result = injectBuyTableRows(result, rowsHtml);
   return result.includes("</body>")
-    ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
-    : result + MYROOM_BUY_SCRIPT;
+    ? result.replace("</body>", MYROOM_BUY_REGIST_SCRIPT + "</body>")
+    : result + MYROOM_BUY_REGIST_SCRIPT;
 }
 
 function serveBuyMycheck(html: string, user: Record<string, unknown> | null): string {
@@ -8239,7 +8263,11 @@ router.get("/myroom/sell/sell_regist.html", async (req, res): Promise<void> => {
   const prods = await db
     .select()
     .from(productsTable)
-    .where(and(eq(productsTable.sellerId, user.id as number), eq(productsTable.status, "active")))
+    .where(and(
+      eq(productsTable.sellerId, user.id as number),
+      eq(productsTable.category, "sell"),
+      eq(productsTable.status, "active"),
+    ))
     .orderBy(desc(productsTable.createdAt));
 
   res.send(serveSellMyregist(sellMyroomRegistHtml, user, prods.map((p) => ({
@@ -8335,7 +8363,7 @@ router.get("/myroom/sell/sell_ing.html", async (req, res): Promise<void> => {
 
 // ─── 마이룸 구매관련 4개 페이지 ────────────────────────────────────────
 
-// 구매등록물품 (orders WHERE buyerId=userId AND status='pending')
+// 구매등록물품 (내가 올린 구매 글 — products WHERE sellerId=userId AND category='buy')
 router.get("/myroom/buy/buy_regist.html", async (req, res): Promise<void> => {
   if (!buyMyroomRegistHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
@@ -8346,23 +8374,25 @@ router.get("/myroom/buy/buy_regist.html", async (req, res): Promise<void> => {
   const user = await getSessionUser(req);
   if (!user) { res.redirect(302, "/login"); return; }
 
-  const rows = await db
-    .select({ o: ordersTable, p: productsTable })
-    .from(ordersTable)
-    .leftJoin(productsTable, eq(ordersTable.productId, productsTable.id))
-    .where(and(eq(ordersTable.buyerId, user.id as number), eq(ordersTable.status, "pending")))
-    .orderBy(desc(ordersTable.createdAt));
+  const prods = await db
+    .select()
+    .from(productsTable)
+    .where(and(
+      eq(productsTable.sellerId, user.id as number),
+      eq(productsTable.category, "buy"),
+      eq(productsTable.status, "active"),
+    ))
+    .orderBy(desc(productsTable.createdAt));
 
-  res.send(serveBuyMyregist(buyMyroomRegistHtml, user, rows.map((r) => ({
-    id: r.o.id,
-    productId: r.o.productId,
-    productTitle: r.o.productTitle,
-    amount: Number(r.o.amount),
-    createdAt: r.o.createdAt,
-    gameName: r.p?.gameName ?? null,
-    serverName: r.p?.serverName ?? null,
-    itemCategory: r.p?.itemCategory ?? null,
-    category: r.p?.category ?? null,
+  res.send(serveBuyMyregist(buyMyroomRegistHtml, user, prods.map((p) => ({
+    id: p.id,
+    title: p.title,
+    price: Number(p.price),
+    createdAt: p.createdAt,
+    gameName: p.gameName,
+    serverName: p.serverName,
+    itemCategory: p.itemCategory,
+    category: p.category,
   }))));
 });
 
