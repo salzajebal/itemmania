@@ -261,6 +261,47 @@ export interface MessageInput {
   content: string;
 }
 
+export type AdminProductStatus = typeof AdminProductStatus[keyof typeof AdminProductStatus];
+
+
+export const AdminProductStatus = {
+  active: 'active',
+  sold: 'sold',
+  inactive: 'inactive',
+} as const;
+
+export interface AdminProduct {
+  id: number;
+  /** @nullable */
+  itemmaniaid?: string | null;
+  title: string;
+  price: number;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  gameName?: string | null;
+  /** @nullable */
+  sellerName?: string | null;
+  status: AdminProductStatus;
+  createdAt: string;
+}
+
+export interface AdminChatRoom {
+  id: number;
+  sellerId: number;
+  buyerId: number;
+  /** @nullable */
+  sellerNickname?: string | null;
+  /** @nullable */
+  buyerNickname?: string | null;
+  /** @nullable */
+  productTitle?: string | null;
+  /** @nullable */
+  amount?: number | null;
+  status: string;
+  createdAt: string;
+}
+
 export type AdminUserRole = typeof AdminUserRole[keyof typeof AdminUserRole];
 
 

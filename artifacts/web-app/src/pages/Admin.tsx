@@ -7,7 +7,9 @@ import {
   useAdminListOrders, 
   useAdminListWithdrawals, 
   useAdminUpdateWithdrawal,
-  getAdminListWithdrawalsQueryKey
+  getAdminListWithdrawalsQueryKey,
+  useAdminListProducts,
+  useAdminListChatRooms,
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,6 +149,102 @@ function WithdrawalsTab() {
   );
 }
 
+function ProductsTab() {
+  const { data: products } = useAdminListProducts();
+
+  return (
+    <div className="space-y-4 overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>제목</TableHead>
+            <TableHead>게임</TableHead>
+            <TableHead>가격</TableHead>
+            <TableHead>카테고리</TableHead>
+            <TableHead>판매자</TableHead>
+            <TableHead>상태</TableHead>
+            <TableHead>등록일</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {products?.map(p => (
+            <TableRow key={p.id} data-testid={`row-product-${p.id}`}>
+              <TableCell>{p.id}</TableCell>
+              <TableCell className="max-w-[200px] truncate">{p.title}</TableCell>
+              <TableCell>{p.gameName ?? "-"}</TableCell>
+              <TableCell className="font-medium">{p.price.toLocaleString("ko-KR")}원</TableCell>
+              <TableCell>{p.category ?? "-"}</TableCell>
+              <TableCell>{p.sellerName ?? "-"}</TableCell>
+              <TableCell>
+                <Badge variant={p.status === "active" ? "default" : p.status === "sold" ? "secondary" : "outline"}>
+                  {p.status === "active" ? "판매중" : p.status === "sold" ? "판매완료" : "비활성"}
+                </Badge>
+              </TableCell>
+              <TableCell>{new Date(p.createdAt).toLocaleDateString("ko-KR")}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function ChatRoomsTab() {
+  const { data: rooms } = useAdminListChatRooms();
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case "active": return "진행중";
+      case "handover": return "인계완료";
+      case "ended": return "거래완료";
+      case "cancelled": return "취소";
+      default: return s;
+    }
+  };
+  const statusVariant = (s: string): "default" | "secondary" | "outline" | "destructive" => {
+    if (s === "ended") return "default";
+    if (s === "handover") return "secondary";
+    if (s === "cancelled") return "destructive";
+    return "outline";
+  };
+
+  return (
+    <div className="space-y-4 overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>판매자</TableHead>
+            <TableHead>구매자</TableHead>
+            <TableHead>상품</TableHead>
+            <TableHead>거래금액</TableHead>
+            <TableHead>상태</TableHead>
+            <TableHead>생성일</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rooms?.map(r => (
+            <TableRow key={r.id} data-testid={`row-chatroom-${r.id}`}>
+              <TableCell>{r.id}</TableCell>
+              <TableCell>{r.sellerNickname ?? r.sellerId}</TableCell>
+              <TableCell>{r.buyerNickname ?? r.buyerId}</TableCell>
+              <TableCell className="max-w-[200px] truncate">{r.productTitle ?? "-"}</TableCell>
+              <TableCell className="font-medium">
+                {r.amount != null ? r.amount.toLocaleString("ko-KR") + "원" : "-"}
+              </TableCell>
+              <TableCell>
+                <Badge variant={statusVariant(r.status)}>{statusLabel(r.status)}</Badge>
+              </TableCell>
+              <TableCell>{new Date(r.createdAt).toLocaleDateString("ko-KR")}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -170,10 +268,12 @@ export default function Admin() {
         <Card>
           <CardContent className="p-6">
             <Tabs defaultValue="withdrawals">
-              <TabsList className="mb-4">
+              <TabsList className="mb-4 flex-wrap">
                 <TabsTrigger value="withdrawals" data-testid="tab-admin-withdrawals">출금 관리</TabsTrigger>
                 <TabsTrigger value="users" data-testid="tab-admin-users">유저 관리</TabsTrigger>
-                <TabsTrigger value="orders" data-testid="tab-admin-orders">거래 내역</TabsTrigger>
+                <TabsTrigger value="orders" data-testid="tab-admin-orders">주문 내역</TabsTrigger>
+                <TabsTrigger value="chat-rooms" data-testid="tab-admin-chat-rooms">채팅 거래</TabsTrigger>
+                <TabsTrigger value="products" data-testid="tab-admin-products">판매/구매글</TabsTrigger>
               </TabsList>
               <TabsContent value="withdrawals">
                 <WithdrawalsTab />
@@ -183,6 +283,12 @@ export default function Admin() {
               </TabsContent>
               <TabsContent value="orders">
                 <OrdersTab />
+              </TabsContent>
+              <TabsContent value="chat-rooms">
+                <ChatRoomsTab />
+              </TabsContent>
+              <TabsContent value="products">
+                <ProductsTab />
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -41,11 +41,12 @@ async function doLogout(){
 
 function switchTab(tab){
   currentTab=tab;
-  var tabs=['products','users','orders','withdrawals','crawl'];
+  var tabs=['products','users','orders','withdrawals','crawl','chatrooms'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',tabs[i]===tab);});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='crawl')initCrawlTab();
+  if(tab==='chatrooms')loadChatRooms();
 }
 
 var crawlGamesData=[];
@@ -851,6 +852,36 @@ async function loadOrders(){
         +'<td>'+fmtMoney(o.amount)+'</td>'
         +'<td><span class="badge '+o.status+'">'+sl+'</span></td>'
         +'<td>'+fmtDate(o.createdAt)+'</td>'
+        +'</tr>';
+    }).join('');
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="7">오류 발생</td></tr>';}
+}
+
+// ── 채팅 거래 ─────────────────────────────────────────────
+async function loadChatRooms(){
+  var tbody=document.getElementById('chatroomsBody');
+  if(!tbody)return;
+  tbody.innerHTML='<tr class="empty-row"><td colspan="7">로딩 중...</td></tr>';
+  var statusFilter=document.getElementById('chatroomStatusFilter').value;
+  var url='/api/admin/chat-rooms'+(statusFilter?'?status='+statusFilter:'');
+  try{
+    var r=await fetch(url,{credentials:'include'});
+    var rooms=await r.json();
+    if(!Array.isArray(rooms))rooms=[];
+    if(!rooms.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">채팅 거래가 없습니다</td></tr>';return;}
+    var filtered=statusFilter?rooms.filter(function(rm){return rm.status===statusFilter;}):rooms;
+    if(!filtered.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">해당 상태의 거래가 없습니다</td></tr>';return;}
+    var statusLabel={active:'진행중',handover:'인계완료',ended:'거래완료',cancelled:'취소'};
+    tbody.innerHTML=filtered.map(function(rm){
+      var sl=statusLabel[rm.status]||rm.status;
+      return '<tr>'
+        +'<td>'+rm.id+'</td>'
+        +'<td>'+escHtml(rm.sellerNickname||String(rm.sellerId))+'</td>'
+        +'<td>'+escHtml(rm.buyerNickname||String(rm.buyerId))+'</td>'
+        +'<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(rm.productTitle||'-')+'</td>'
+        +'<td>'+(rm.amount!=null?fmtMoney(rm.amount):'-')+'</td>'
+        +'<td><span class="badge '+rm.status+'">'+sl+'</span></td>'
+        +'<td>'+fmtDate(rm.createdAt)+'</td>'
         +'</tr>';
     }).join('');
   }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="7">오류 발생</td></tr>';}

@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './adminChatRoom';
 export * from './adminListOrdersParams';
 export * from './adminListUsersParams';
 export * from './adminListWithdrawalsParams';
 export * from './adminListWithdrawalsStatus';
+export * from './adminProduct';
+export * from './adminProductStatus';
 export * from './adminUser';
 export * from './adminUserRole';
 export * from './authUser';

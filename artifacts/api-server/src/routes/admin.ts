@@ -557,6 +557,37 @@ router.delete("/admin/products/:id", async (req, res): Promise<void> => {
   res.json({ ok: true });
 });
 
+// 전체 채팅 거래 내역
+router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
+  const rooms = await db
+    .select({
+      id: chatRoomsTable.id,
+      sellerId: chatRoomsTable.sellerId,
+      buyerId: chatRoomsTable.buyerId,
+      productId: chatRoomsTable.productId,
+      status: chatRoomsTable.status,
+      createdAt: chatRoomsTable.createdAt,
+      sellerNickname: sql<string>`(SELECT nickname FROM users WHERE id = ${chatRoomsTable.sellerId})`,
+      buyerNickname:  sql<string>`(SELECT nickname FROM users WHERE id = ${chatRoomsTable.buyerId})`,
+      productTitle:   sql<string>`(SELECT title FROM products WHERE id = ${chatRoomsTable.productId})`,
+      amount:         sql<number>`(SELECT price FROM products WHERE id = ${chatRoomsTable.productId})`,
+    })
+    .from(chatRoomsTable)
+    .orderBy(desc(chatRoomsTable.createdAt));
+
+  res.json(rooms.map(r => ({
+    id: r.id,
+    sellerId: r.sellerId,
+    buyerId: r.buyerId,
+    sellerNickname: r.sellerNickname ?? null,
+    buyerNickname:  r.buyerNickname  ?? null,
+    productTitle:   r.productTitle   ?? null,
+    amount:         r.amount ? Number(r.amount) : null,
+    status:         r.status,
+    createdAt:      r.createdAt,
+  })));
+});
+
 // 대시보드 통계
 router.get("/admin/stats", async (_req, res): Promise<void> => {
   const [[userCount], [productCount], [orderCount], [pendingOrderCount], [totalRevenue]] = await Promise.all([

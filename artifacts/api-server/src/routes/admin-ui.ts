@@ -128,6 +128,7 @@ tbody tr:hover{background:#fafbff}
       <button class="tab-btn" onclick="switchTab('orders')">🛒 주문 관리</button>
       <button class="tab-btn" onclick="switchTab('withdrawals')">💸 출금 관리</button>
       <button class="tab-btn" onclick="switchTab('crawl')">🕷️ 크롤링</button>
+      <button class="tab-btn" onclick="switchTab('chatrooms')">💬 채팅 거래</button>
     </div>
 
     <!-- 상품 탭 -->
@@ -214,6 +215,28 @@ tbody tr:hover{background:#fafbff}
         <table>
           <thead><tr><th>ID</th><th>유저ID</th><th>금액</th><th>은행</th><th>계좌번호</th><th>예금주</th><th>상태</th><th>메모</th><th>신청일</th><th>처리</th></tr></thead>
           <tbody id="withdrawalsBody"><tr class="empty-row"><td colspan="10">로딩 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 채팅 거래 탭 -->
+    <div class="tab-panel" id="tab-chatrooms">
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span class="title">채팅 거래 내역</span>
+          <select class="filter-select" id="chatroomStatusFilter" onchange="loadChatRooms()">
+            <option value="">전체 상태</option>
+            <option value="active">진행중</option>
+            <option value="handover">인계완료</option>
+            <option value="ended">거래완료</option>
+            <option value="cancelled">취소</option>
+          </select>
+          <div class="spacer"></div>
+          <button class="refresh-btn" onclick="loadChatRooms()">↻ 새로고침</button>
+        </div>
+        <table>
+          <thead><tr><th>ID</th><th>판매자</th><th>구매자</th><th>상품명</th><th>거래금액</th><th>상태</th><th>생성일</th></tr></thead>
+          <tbody id="chatroomsBody"><tr class="empty-row"><td colspan="7">탭을 클릭하면 로드됩니다</td></tr></tbody>
         </table>
       </div>
     </div>

@@ -449,6 +449,40 @@ export const AdminListWithdrawalsResponse = zod.array(AdminListWithdrawalsRespon
 
 
 /**
+ * @summary 전체 상품(판매/구매글) 목록
+ */
+export const AdminListProductsResponseItem = zod.object({
+  "id": zod.number(),
+  "itemmaniaid": zod.string().nullish(),
+  "title": zod.string(),
+  "price": zod.number(),
+  "category": zod.string().nullish(),
+  "gameName": zod.string().nullish(),
+  "sellerName": zod.string().nullish(),
+  "status": zod.enum(['active', 'sold', 'inactive']),
+  "createdAt": zod.coerce.date()
+})
+export const AdminListProductsResponse = zod.array(AdminListProductsResponseItem)
+
+
+/**
+ * @summary 전체 채팅 거래 내역
+ */
+export const AdminListChatRoomsResponseItem = zod.object({
+  "id": zod.number(),
+  "sellerId": zod.number(),
+  "buyerId": zod.number(),
+  "sellerNickname": zod.string().nullish(),
+  "buyerNickname": zod.string().nullish(),
+  "productTitle": zod.string().nullish(),
+  "amount": zod.number().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const AdminListChatRoomsResponse = zod.array(AdminListChatRoomsResponseItem)
+
+
+/**
  * @summary 출금 처리 (승인/거절)
  */
 export const AdminUpdateWithdrawalParams = zod.object({

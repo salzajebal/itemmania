@@ -20,9 +20,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminChatRoom,
   AdminListOrdersParams,
   AdminListUsersParams,
   AdminListWithdrawalsParams,
+  AdminProduct,
   AdminUser,
   AuthUser,
   CancelInput,
@@ -1790,6 +1792,160 @@ export function useAdminListWithdrawals<TData = Awaited<ReturnType<typeof adminL
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getAdminListWithdrawalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAdminListProductsUrl = () => {
+
+
+
+
+  return `/api/admin/products`
+}
+
+/**
+ * @summary 전체 상품(판매/구매글) 목록
+ */
+export const adminListProducts = async ( options?: RequestInit): Promise<AdminProduct[]> => {
+
+  return customFetch<AdminProduct[]>(getAdminListProductsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminListProductsQueryKey = () => {
+    return [
+    `/api/admin/products`
+    ] as const;
+    }
+
+
+export const getAdminListProductsQueryOptions = <TData = Awaited<ReturnType<typeof adminListProducts>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminListProductsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListProducts>>> = ({ signal }) => adminListProducts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminListProducts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminListProductsQueryResult = NonNullable<Awaited<ReturnType<typeof adminListProducts>>>
+export type AdminListProductsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary 전체 상품(판매/구매글) 목록
+ */
+
+export function useAdminListProducts<TData = Awaited<ReturnType<typeof adminListProducts>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminListProductsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAdminListChatRoomsUrl = () => {
+
+
+
+
+  return `/api/admin/chat-rooms`
+}
+
+/**
+ * @summary 전체 채팅 거래 내역
+ */
+export const adminListChatRooms = async ( options?: RequestInit): Promise<AdminChatRoom[]> => {
+
+  return customFetch<AdminChatRoom[]>(getAdminListChatRoomsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminListChatRoomsQueryKey = () => {
+    return [
+    `/api/admin/chat-rooms`
+    ] as const;
+    }
+
+
+export const getAdminListChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof adminListChatRooms>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminListChatRoomsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListChatRooms>>> = ({ signal }) => adminListChatRooms({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminListChatRoomsQueryResult = NonNullable<Awaited<ReturnType<typeof adminListChatRooms>>>
+export type AdminListChatRoomsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary 전체 채팅 거래 내역
+ */
+
+export function useAdminListChatRooms<TData = Awaited<ReturnType<typeof adminListChatRooms>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminListChatRoomsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
