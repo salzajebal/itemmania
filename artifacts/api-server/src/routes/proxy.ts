@@ -190,6 +190,11 @@ const buyMyroomCheckHtml      = loadSellHtml("buy/buy_check.html");
 const buyMyroomPayWaitHtml    = loadSellHtml("buy/buy_pay_wait.html");
 const buyMyroomIngHtml        = loadSellHtml("buy/buy_ing.html");
 
+// 리니지클래식 스냅샷 기반 게임: 서버 사이드에서 게임명 치환 필요
+const LINEAGE_CLASSIC_BASED_GAMES: Record<string, string> = {
+  "5990": "메이플랜드",
+};
+
 // game_id → html 매핑 (TOP 10)
 const SELL_HTML_MAP: Record<string, string> = {
   "5913": "", // 리니지클래식 — 별도 변수로 처리
@@ -6275,7 +6280,7 @@ const BUY_INTERCEPT_SCRIPT = `
     }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
   }
 
-  // ── search_game으로 게임명 동적 교체 (기본 HTML은 리니지클래식) ───────
+  // ── search_game으로 게임명 + 서버필터 동적 교체 (기본 HTML은 리니지클래식) ───────
   (function() {
     var _gc = new URLSearchParams(location.search).get('search_game') || '5913';
     if (_gc === '5913') return;
@@ -6295,6 +6300,28 @@ const BUY_INTERCEPT_SCRIPT = `
         }
         replaceText(document.body);
         document.title = document.title.replace(/리니지클래식/g, gn);
+        /* ── 서버 필터 버튼 동적 교체 ── */
+        if (g.id) {
+          fetch('/api/games/' + g.id + '/servers', { credentials: 'include' })
+            .then(function(rs) { return rs.ok ? rs.json() : []; })
+            .then(function(servers) {
+              if (!servers || !servers.length) return;
+              var serverList = document.getElementById('search_server_list');
+              if (!serverList) return;
+              var ul = serverList.querySelector('ul');
+              if (!ul) return;
+              var firstLi = ul.querySelector('li:first-child');
+              ul.innerHTML = '';
+              if (firstLi) ul.appendChild(firstLi);
+              servers.forEach(function(sv) {
+                var li = document.createElement('li');
+                var uid = 'row_server_dyn_' + sv.id;
+                li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio><label for="' + uid + '">' + sv.name + '</label>';
+                ul.appendChild(li);
+              });
+            })
+            .catch(function() {});
+        }
       })
       .catch(function() {});
   })();
@@ -6333,6 +6360,28 @@ const BUY_INTERCEPT_SCRIPT = `
             }
             replaceText(document.body);
             document.title = document.title.replace(/리니지클래식/g, gn);
+            /* ── 서버 필터 버튼 동적 교체 (buy list) ── */
+            if (g.id) {
+              fetch('/api/games/' + g.id + '/servers', { credentials: 'include' })
+                .then(function(rs) { return rs.ok ? rs.json() : []; })
+                .then(function(servers) {
+                  if (!servers || !servers.length) return;
+                  var serverList = document.getElementById('search_server_list');
+                  if (!serverList) return;
+                  var ul = serverList.querySelector('ul');
+                  if (!ul) return;
+                  var firstLi = ul.querySelector('li:first-child');
+                  ul.innerHTML = '';
+                  if (firstLi) ul.appendChild(firstLi);
+                  servers.forEach(function(sv) {
+                    var li = document.createElement('li');
+                    var uid = 'row_server_dyn_' + sv.id;
+                    li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio><label for="' + uid + '">' + sv.name + '</label>';
+                    ul.appendChild(li);
+                  });
+                })
+                .catch(function() {});
+            }
           })
           .catch(function() {});
       }
@@ -7705,6 +7754,10 @@ router.get(
       res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
       return;
     }
+    // 리니지클래식 스냅샷 기반 게임 → 서버 사이드 게임명 치환
+    if (LINEAGE_CLASSIC_BASED_GAMES[game]) {
+      html = html.replace(/리니지클래식/g, LINEAGE_CLASSIC_BASED_GAMES[game]);
+    }
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const user = await getSessionUser(req);
@@ -8263,6 +8316,10 @@ router.get("/buy/list.html", async (req, res): Promise<void> => {
   if (!html) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
+  }
+  // 리니지클래식 스냅샷 기반 게임 → 서버 사이드 게임명 치환
+  if (LINEAGE_CLASSIC_BASED_GAMES[game]) {
+    html = html.replace(/리니지클래식/g, LINEAGE_CLASSIC_BASED_GAMES[game]);
   }
   res.send(serveBuy(html, user));
 });
