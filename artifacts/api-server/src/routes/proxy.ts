@@ -1381,6 +1381,17 @@ function _imSetupSearchFrame() {
   var initScr = frame.querySelector('.initial_screen');
   var gsList = frame.querySelector('.gs_list');
   var _acTimer = null;
+  var _selGoods = 'all';
+  frame.addEventListener('click', function(e) {
+    var item = e.target && e.target.closest && e.target.closest('.search-select-item');
+    if (!item) return;
+    var radio = item.querySelector('input[name=search_goods]');
+    if (radio) { _selGoods = radio.value; }
+  }, true);
+  frame.addEventListener('change', function(e) {
+    var t = e.target;
+    if (t && t.name === 'search_goods') { _selGoods = t.value; }
+  }, false);
   function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
   function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
   function showInitial() {
@@ -1453,8 +1464,7 @@ function _imSetupSearchFrame() {
       inp.value = name || '';
       window._IM_sel_game = { code: code, id: id, name: name };
       hideFrame();
-      var goods = form.querySelector('[name=goods]');
-      var goodsVal = goods ? goods.value : 'all';
+      var goodsVal = _selGoods || 'all';
       var catMap = window._IM_GOODS_CAT_MAP || {};
       var itemCat = catMap[goodsVal] || '';
       var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
