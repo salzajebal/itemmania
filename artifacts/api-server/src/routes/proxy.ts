@@ -5160,6 +5160,18 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       if (ti) { ti.disabled = true; ti.style.opacity = '0.4'; }
       if (tc) { tc.disabled = true; tc.style.opacity = '0.4'; }
       if (hBtn) { hBtn.disabled = true; hBtn.textContent = '인계완료'; hBtn.style.opacity = '0.4'; }
+      // 거래종료 시 핑크 알림 박스 (아직 없는 경우에만)
+      if (status === 'ended' && !document.getElementById('_im_trade_end_notice')) {
+        var list2 = document.getElementById('chat_content_list');
+        if (list2) {
+          var box2 = document.createElement('div');
+          box2.id = '_im_trade_end_notice';
+          box2.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#c9184a;font-size:13px;font-weight:600;text-align:center;line-height:1.4';
+          box2.textContent = '거래가 종료되었습니다.';
+          list2.appendChild(box2);
+          list2.scrollTop = list2.scrollHeight;
+        }
+      }
     } else if (status === 'handover') {
       // 판매자 인계완료 → 인계하기 버튼 비활성, 인수하기는 구매자가 누를 수 있도록 활성
       if (hBtn) { hBtn.disabled = true; hBtn.textContent = '인계완료✓'; hBtn.style.opacity = '0.6'; }
@@ -5321,7 +5333,19 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         var notice = document.getElementById('chat_notice_txt');
         if (notice) notice.style.display = '';
         api('PATCH', '/chat/rooms/' + roomId, { status: 'ended' }).then(function(res) {
-          if (res && res.status) updateStatusUI(res.status);
+          if (res && res.status) {
+            updateStatusUI(res.status);
+            // 채팅 목록 맨 아래에 핑크색 종료 알림 박스 추가
+            var list = document.getElementById('chat_content_list');
+            if (list && !document.getElementById('_im_trade_end_notice')) {
+              var box = document.createElement('div');
+              box.id = '_im_trade_end_notice';
+              box.style.cssText = 'margin:12px 8px 4px;padding:10px 16px;background:#fff0f3;border:1px solid #ffb3c1;border-radius:8px;color:#c9184a;font-size:13px;font-weight:600;text-align:center;line-height:1.4';
+              box.textContent = '거래가 종료되었습니다.';
+              list.appendChild(box);
+              list.scrollTop = list.scrollHeight;
+            }
+          }
         });
       }, true);
     }
