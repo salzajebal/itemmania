@@ -454,11 +454,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /chat/rooms/{roomId}:
+    patch:
+      operationId: updateChatRoom
+      tags: [chat]
+      summary: 채팅방 상태 변경 (인계하기/거래완료/거래취소)
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRoomUpdateInput"
+      responses:
+        "200":
+          description: 변경 완료
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatRoomUpdateResult"
+        "403":
+          description: 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /chat/rooms/{roomId}/messages:
     get:
       operationId: getChatMessages
       tags: [chat]
-      summary: 채팅 메시지 목록
+      summary: 채팅 메시지 목록 및 방 정보
       parameters:
         - name: roomId
           in: path
@@ -467,13 +498,11 @@ paths:
             type: integer
       responses:
         "200":
-          description: 메시지 목록
+          description: 메시지 목록 및 방 정보
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ChatMessage"
+                $ref: "#/components/schemas/ChatMessagesResponse"
         "403":
           description: 권한 없음
           content:
@@ -887,6 +916,67 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ChatRoomDetail:
+      type: object
+      required: [id, buyerId, sellerId, status, buyerNickname, sellerNickname]
+      properties:
+        id:
+          type: integer
+        buyerId:
+          type: integer
+        sellerId:
+          type: integer
+        productId:
+          type: ["integer", "null"]
+        status:
+          type: string
+        productTitle:
+          type: ["string", "null"]
+        productPrice:
+          type: ["integer", "null"]
+        characterName:
+          type: ["string", "null"]
+        goodsType:
+          type: ["string", "null"]
+        buyerNickname:
+          type: string
+        sellerNickname:
+          type: string
+        gameName:
+          type: ["string", "null"]
+        serverName:
+          type: ["string", "null"]
+        itemCategory:
+          type: ["string", "null"]
+
+    ChatMessagesResponse:
+      type: object
+      required: [room, messages]
+      properties:
+        room:
+          $ref: "#/components/schemas/ChatRoomDetail"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+
+    ChatRoomUpdateInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, active, handover, ended, cancelled, rejected]
+
+    ChatRoomUpdateResult:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
 
     MessageInput:
       type: object

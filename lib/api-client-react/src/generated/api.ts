@@ -28,7 +28,10 @@ import type {
   CancelInput,
   ChargeInput,
   ChatMessage,
+  ChatMessagesResponse,
   ChatRoom,
+  ChatRoomUpdateInput,
+  ChatRoomUpdateResult,
   ErrorResponse,
   HealthStatus,
   ListOrdersParams,
@@ -1326,6 +1329,78 @@ export function useListChatRooms<TData = Awaited<ReturnType<typeof listChatRooms
 
 
 
+export const getUpdateChatRoomUrl = (roomId: number,) => {
+
+
+
+
+  return `/api/chat/rooms/${roomId}`
+}
+
+/**
+ * @summary 채팅방 상태 변경 (인계하기/거래완료/거래취소)
+ */
+export const updateChatRoom = async (roomId: number,
+    chatRoomUpdateInput: ChatRoomUpdateInput, options?: RequestInit): Promise<ChatRoomUpdateResult> => {
+
+  return customFetch<ChatRoomUpdateResult>(getUpdateChatRoomUrl(roomId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      chatRoomUpdateInput,)
+  }
+);}
+
+
+
+
+export const getUpdateChatRoomMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateChatRoom>>, TError,{roomId: number;data: BodyType<ChatRoomUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateChatRoom>>, TError,{roomId: number;data: BodyType<ChatRoomUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateChatRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateChatRoom>>, {roomId: number;data: BodyType<ChatRoomUpdateInput>}> = (props) => {
+          const {roomId,data} = props ?? {};
+
+          return  updateChatRoom(roomId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateChatRoomMutationResult = NonNullable<Awaited<ReturnType<typeof updateChatRoom>>>
+    export type UpdateChatRoomMutationBody = BodyType<ChatRoomUpdateInput>
+    export type UpdateChatRoomMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary 채팅방 상태 변경 (인계하기/거래완료/거래취소)
+ */
+export const useUpdateChatRoom = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateChatRoom>>, TError,{roomId: number;data: BodyType<ChatRoomUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateChatRoom>>,
+        TError,
+        {roomId: number;data: BodyType<ChatRoomUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateChatRoomMutationOptions(options));
+    }
+
 export const getGetChatMessagesUrl = (roomId: number,) => {
 
 
@@ -1335,11 +1410,11 @@ export const getGetChatMessagesUrl = (roomId: number,) => {
 }
 
 /**
- * @summary 채팅 메시지 목록
+ * @summary 채팅 메시지 목록 및 방 정보
  */
-export const getChatMessages = async (roomId: number, options?: RequestInit): Promise<ChatMessage[]> => {
+export const getChatMessages = async (roomId: number, options?: RequestInit): Promise<ChatMessagesResponse> => {
 
-  return customFetch<ChatMessage[]>(getGetChatMessagesUrl(roomId),
+  return customFetch<ChatMessagesResponse>(getGetChatMessagesUrl(roomId),
   {
     ...options,
     method: 'GET'
@@ -1382,7 +1457,7 @@ export type GetChatMessagesQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary 채팅 메시지 목록
+ * @summary 채팅 메시지 목록 및 방 정보
  */
 
 export function useGetChatMessages<TData = Awaited<ReturnType<typeof getChatMessages>>, TError = ErrorType<ErrorResponse>>(

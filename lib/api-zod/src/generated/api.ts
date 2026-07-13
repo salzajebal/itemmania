@@ -313,20 +313,54 @@ export const ListChatRoomsResponse = zod.array(ListChatRoomsResponseItem)
 
 
 /**
- * @summary 채팅 메시지 목록
+ * @summary 채팅방 상태 변경 (인계하기/거래완료/거래취소)
+ */
+export const UpdateChatRoomParams = zod.object({
+  "roomId": zod.coerce.number()
+})
+
+export const UpdateChatRoomBody = zod.object({
+  "status": zod.enum(['pending', 'active', 'handover', 'ended', 'cancelled', 'rejected'])
+})
+
+export const UpdateChatRoomResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary 채팅 메시지 목록 및 방 정보
  */
 export const GetChatMessagesParams = zod.object({
   "roomId": zod.coerce.number()
 })
 
-export const GetChatMessagesResponseItem = zod.object({
+export const GetChatMessagesResponse = zod.object({
+  "room": zod.object({
+  "id": zod.number(),
+  "buyerId": zod.number(),
+  "sellerId": zod.number(),
+  "productId": zod.number().nullish(),
+  "status": zod.string(),
+  "productTitle": zod.string().nullish(),
+  "productPrice": zod.number().nullish(),
+  "characterName": zod.string().nullish(),
+  "goodsType": zod.string().nullish(),
+  "buyerNickname": zod.string(),
+  "sellerNickname": zod.string(),
+  "gameName": zod.string().nullish(),
+  "serverName": zod.string().nullish(),
+  "itemCategory": zod.string().nullish()
+}),
+  "messages": zod.array(zod.object({
   "id": zod.number(),
   "roomId": zod.number(),
   "senderId": zod.number(),
   "content": zod.string(),
   "createdAt": zod.coerce.date()
+}))
 })
-export const GetChatMessagesResponse = zod.array(GetChatMessagesResponseItem)
 
 
 /**

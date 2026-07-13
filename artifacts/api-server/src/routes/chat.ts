@@ -127,7 +127,7 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
   const userId = req.session.userId!;
   const { status } = req.body as { status?: string };
 
-  const validStatuses = ["pending", "active", "ended", "cancelled", "rejected"];
+  const validStatuses = ["pending", "active", "handover", "ended", "cancelled", "rejected"];
   if (!status || !validStatuses.includes(status)) {
     res.status(400).json({ error: "유효하지 않은 상태값입니다." });
     return;
@@ -139,7 +139,21 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
     res.status(403).json({ error: "접근 권한이 없습니다." }); return;
   }
 
+  // 인계하기: 판매자만 가능
+  if (status === "handover" && userId !== room.sellerId) {
+    res.status(403).json({ error: "판매자만 인계하기를 할 수 있습니다." }); return;
+  }
+  // 거래완료: 구매자만 가능
+  if (status === "ended" && userId !== room.buyerId) {
+    res.status(403).json({ error: "구매자만 거래완료를 할 수 있습니다." }); return;
+  }
+
   await db.update(chatRoomsTable).set({ status }).where(eq(chatRoomsTable.id, roomId));
+
+  // 판매자가 인계하기 → 구매자에게 실시간 알림 (인수확인 버튼 활성화)
+  if (status === "handover") {
+    pushToUser(room.buyerId, "chat_handover", { roomId });
+  }
 
   // 구매자가 인수하기(ended) 처리 → 판매자에게 거래금액 마일리지 지급
   if (status === "ended" && userId === room.buyerId && room.productId) {

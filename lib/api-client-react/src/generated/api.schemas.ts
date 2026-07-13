@@ -197,9 +197,29 @@ export interface ChatRoom {
   createdAt: string;
 }
 
-export interface MessageInput {
-  /** @minLength 1 */
-  content: string;
+export interface ChatRoomDetail {
+  id: number;
+  buyerId: number;
+  sellerId: number;
+  /** @nullable */
+  productId?: number | null;
+  status: string;
+  /** @nullable */
+  productTitle?: string | null;
+  /** @nullable */
+  productPrice?: number | null;
+  /** @nullable */
+  characterName?: string | null;
+  /** @nullable */
+  goodsType?: string | null;
+  buyerNickname: string;
+  sellerNickname: string;
+  /** @nullable */
+  gameName?: string | null;
+  /** @nullable */
+  serverName?: string | null;
+  /** @nullable */
+  itemCategory?: string | null;
 }
 
 export interface ChatMessage {
@@ -208,6 +228,37 @@ export interface ChatMessage {
   senderId: number;
   content: string;
   createdAt: string;
+}
+
+export interface ChatMessagesResponse {
+  room: ChatRoomDetail;
+  messages: ChatMessage[];
+}
+
+export type ChatRoomUpdateInputStatus = typeof ChatRoomUpdateInputStatus[keyof typeof ChatRoomUpdateInputStatus];
+
+
+export const ChatRoomUpdateInputStatus = {
+  pending: 'pending',
+  active: 'active',
+  handover: 'handover',
+  ended: 'ended',
+  cancelled: 'cancelled',
+  rejected: 'rejected',
+} as const;
+
+export interface ChatRoomUpdateInput {
+  status: ChatRoomUpdateInputStatus;
+}
+
+export interface ChatRoomUpdateResult {
+  id: number;
+  status: string;
+}
+
+export interface MessageInput {
+  /** @minLength 1 */
+  content: string;
 }
 
 export type AdminUserRole = typeof AdminUserRole[keyof typeof AdminUserRole];
