@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, lt, desc, sql } from "drizzle-orm";
+import { eq, and, or, ne, lt, desc, sql } from "drizzle-orm";
 import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
@@ -62,7 +62,12 @@ router.get("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
   const rooms = await db
     .select()
     .from(chatRoomsTable)
-    .where(or(eq(chatRoomsTable.buyerId, userId), eq(chatRoomsTable.sellerId, userId)));
+    .where(
+      and(
+        or(eq(chatRoomsTable.buyerId, userId), eq(chatRoomsTable.sellerId, userId)),
+        ne(chatRoomsTable.status, "cancelled")
+      )
+    );
 
   const enriched = await Promise.all(rooms.map(enrichRoom));
   res.json(enriched);
@@ -143,10 +148,12 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
   if (status === "handover" && userId !== room.sellerId) {
     res.status(403).json({ error: "판매자만 인계하기를 할 수 있습니다." }); return;
   }
-  // 거래완료: 구매자만 가능
+  // 거래완료(인수확인): 구매자만 가능
   if (status === "ended" && userId !== room.buyerId) {
     res.status(403).json({ error: "구매자만 거래완료를 할 수 있습니다." }); return;
   }
+  // 채팅취소: 판매자 또는 구매자 모두 가능
+  // (cancelled는 별도 제한 없음)
 
   await db.update(chatRoomsTable).set({ status }).where(eq(chatRoomsTable.id, roomId));
 

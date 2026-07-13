@@ -5511,7 +5511,7 @@ const CHAT_INTERCEPT_SCRIPT = `
           fetch('/api/chat/rooms/' + r.id, {
             method: 'PATCH', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'ended' })
+            body: JSON.stringify({ status: 'cancelled' })
           }).then(function(res) {
             if (res.ok) {
               li.remove();
