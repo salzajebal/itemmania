@@ -327,95 +327,27 @@ const INTERCEPT_SCRIPT = `
   padding: 4px;
 }
 #_im_modal .close-btn:hover { color: #333; }
-/* ── 전체서비스 패널 ──────────────────────────────────────────────── */
-#headerMainPanel {
-  position: absolute !important;
-  right: 0 !important;
-  left: auto !important;
-  top: 80px !important;
-  width: 440px !important;
-  max-height: calc(100vh - 90px);
-  overflow-y: auto;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 12px 0 12px 12px;
-  box-shadow: 0 4px 24px rgba(0,0,0,.18);
-  z-index: 400 !important;
-  padding: 20px;
-  box-sizing: border-box;
-}
-.im-panel-section {
-  border: 1px solid #e8e8e8;
-  border-radius: 10px;
-  padding: 16px 16px 12px;
-  margin-bottom: 10px;
-}
-.im-panel-section:last-child { margin-bottom: 0; }
-.im-panel-stitle {
-  font-size: 13px;
-  font-weight: 700;
-  color: #2e2e2e;
-  margin: 0 0 12px;
-}
-/* 전체서비스 아이콘 그리드 */
-.im-svc-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px 4px;
-}
-.im-svc-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  text-decoration: none;
-  cursor: pointer;
-}
-.im-svc-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 1.5px solid #c8c8c8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: #444;
-  background: #f5f5f5;
-  transition: border-color .15s;
-}
-.im-svc-item:hover .im-svc-icon { border-color: #159EFD; }
-.im-svc-label {
-  font-size: 11px;
-  color: #616161;
-  text-align: center;
-  line-height: 1.3;
-}
-/* 마이룸 링크 */
-.im-myroom-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px 0;
-}
-.im-myroom-grid a {
-  font-size: 13px;
-  color: #444;
-  text-decoration: none;
-}
-.im-myroom-grid a:hover { color: #159EFD; }
-/* 게임정보 링크 */
-.im-gameinfo-links {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-.im-gameinfo-links a {
-  font-size: 13px;
-  color: #444;
-  text-decoration: none;
-}
-.im-gameinfo-links a:hover { color: #159EFD; }
+/* ── 전체서비스 패널 (원본 CSS) ──────────────────────────────────── */
+.header-panel{position:absolute;z-index:400;top:80px;left:0;width:100%}
+.header-panel.is-open{display:block}
+.header-panel .header-panel-backdrop{position:fixed;background:0 0;inset:0}
+.header-panel .header-panel-inner{position:relative;z-index:2}
+.header-panel .header-panel-card{width:584px;margin-left:auto;padding:18px 20px 24px;border-radius:15px;background:#fff;box-shadow:0 1px 10px rgba(0,0,0,.25)}
+.header-panel .header-panel-title{font-weight:600;padding:4px 5px 14px;color:#000}
+.header-panel .header-panel-title h2{font-size:18px}
+.header-panel .header-panel-divider{height:1px;margin:0 5px 20px;background:#d9d9d9}
+.header-panel .header-service-grid{display:grid;margin:0;padding:0 14px 35px;list-style:none;grid-template-columns:repeat(5,83px);gap:25px 25px}
+.header-panel .header-service-item{text-align:center}
+.header-panel .header-service-item a{display:block;text-decoration:none;color:#2e2e2e}
+.header-panel .header-service-icon{display:flex;align-items:center;justify-content:center;width:63px;height:63px;margin:0 auto;border-radius:20px;background:#e8f2ff}
+.header-panel .header-service-icon img{display:block;width:50px;height:50px}
+.header-panel .header-service-label{font-size:16px;font-weight:500;display:block;margin-top:8px;text-align:center}
+.header-panel .header-box{overflow:hidden;margin:0 20px 20px;border:1px solid var(--color-gray3);border-radius:15px;background:#fff}
+.header-panel .header-box-title{font-size:16px;font-weight:600;display:flex;align-items:center;height:40px;padding:0 20px;color:#2e2e2e;background:#e8f2ff}
+.header-panel .header-box-grid{font-size:16px;font-weight:500;display:grid;margin:0;padding:20px 25px 24px;list-style:none;color:#2e2e2e;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px 5px}
+.header-panel .header-box-grid li:last-child{width:100px}
+.header-panel .header-box-grid a{color:inherit;text-decoration:none}
+.header-panel .header-box-grid a:hover{color:#159EFD}
 </style>
 
 <div id="_im_overlay">
@@ -667,65 +599,12 @@ const INTERCEPT_SCRIPT = `
     var menuBtn = document.querySelector('.header-menu');
     if (!panel || !menuBtn) { setTimeout(initPanel, 200); return; }
 
-    // 패널 HTML 주입 (스냅샷에서 비어있으므로 직접 구성)
-    if (!panel.querySelector('.im-panel-section')) {
-      function svc(href, icon, label) {
-        return '<a href="' + href + '" class="im-svc-item">' +
-          '<div class="im-svc-icon">' + icon + '</div>' +
-          '<span class="im-svc-label">' + label + '</span>' +
-          '</a>';
-      }
-      function mrLink(href, label) {
-        return '<a href="' + href + '">' + label + '</a>';
-      }
-      panel.innerHTML =
-        '<div class="im-panel-section">' +
-          '<p class="im-panel-stitle">전체서비스</p>' +
-          '<div class="im-svc-grid">' +
-            svc('/sell/register.html',  'SELL',  '판매등록') +
-            svc('/buy/register.html',   'BUY',   '구매등록') +
-            svc('/sell/list.html?search_trade_type=3', '&#128100;', '계정거래') +
-            svc('/giftcard/index.html', '&#127867;', '상품권몰') +
-            svc('/event/gamecharge.html', '&#9889;', '게임 할인충전') +
-            svc('/gamemania/index.html', 'G', '게임매니아') +
-            svc('/randombox/index.html', '&#127873;', '랜덤BOX') +
-            svc('/point/index.html',    'P',     '쇼핑포인트') +
-            svc('/event/index.html',    '&#128142;', '이벤트') +
-            svc('/ssadaprice/index.html','싸다', '싸다프라이스') +
-            svc('/info/guide.html',     '&#9432;', '이용안내') +
-            svc('/notice/index.html',   '&#128226;', '공지사항') +
-            svc('/cs/index.html',       '&#127911;', '고객센터') +
-            svc('/community/index.html','&#128101;', '커뮤니티') +
-          '</div>' +
-        '</div>' +
-        '<div class="im-panel-section">' +
-          '<p class="im-panel-stitle">마이룸</p>' +
-          '<div class="im-myroom-grid">' +
-            mrLink('/myroom/message/index.html',  '메시지함') +
-            mrLink('/myroom/sell/index.html',     '판매관련') +
-            mrLink('/myroom/buy/index.html',      '구매관련') +
-            mrLink('/myroom/end/index.html',      '종료내역') +
-            mrLink('/myroom/cancel/index.html',   '취소내역') +
-            mrLink('/myroom/mileage/index.html',  '마일리지') +
-            mrLink('/myroom/charge/index.html',   '충전') +
-            mrLink('/myroom/withdraw/index.html', '출금') +
-            mrLink('/myroom/member/index.html',   '개인정보') +
-            mrLink('/myroom/receipt/index.html',  '현금영수증') +
-            mrLink('/myroom/coupon/index.html',   '이용권 현황') +
-            mrLink('/myroom/security/index.html', '보안센터') +
-            mrLink('/myroom/config/index.html',   '환경설정') +
-            mrLink('/myroom/alarm/index.html',    '물품등록알리미') +
-          '</div>' +
-        '</div>' +
-        '<div class="im-panel-section">' +
-          '<p class="im-panel-stitle">게임정보</p>' +
-          '<div class="im-gameinfo-links">' +
-            mrLink('/gameprice/index.html', '게임시세') +
-            mrLink('/ranking/index.html',   '순위정보') +
-            mrLink('/calendar/index.html',  '게임달력') +
-            mrLink('/hotgame/index.html',   '매니아 핫게임') +
-          '</div>' +
-        '</div>';
+    // 패널 HTML 주입 — /api/panel-inner에서 원본 HTML fetch
+    if (!panel.querySelector('.header-panel-inner')) {
+      fetch('/api/panel-inner')
+        .then(function(r){ return r.text(); })
+        .then(function(html){ panel.innerHTML = html; })
+        .catch(function(){});
     }
 
     // 패널 초기화: sf-hidden(display:none) 제거 후 display로 제어
@@ -7654,6 +7533,18 @@ router.get(["/game-charge", "/game_charge", "/game_charge/"], async (req, res): 
   const user = await getSessionUser(req);
 
   res.send(serveGameCharge(gamechargeHtml, user));
+});
+
+// 전체서비스 패널 inner HTML 서빙
+router.get("/api/panel-inner", (_req, res): void => {
+  const filePath = join(STATIC_DIR, "panel-inner.html");
+  if (!existsSync(filePath)) {
+    res.status(404).send("");
+    return;
+  }
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.set("Cache-Control", "public, max-age=3600");
+  res.send(readFileSync(filePath, "utf-8"));
 });
 
 // 게임별 상품 목록 페이지 — search_game 쿼리로 분기 (TOP 10 전체)
