@@ -1381,16 +1381,29 @@ function _imSetupSearchFrame() {
   var initScr = frame.querySelector('.initial_screen');
   var gsList = frame.querySelector('.gs_list');
   var _acTimer = null;
-  var _selGoods = 'all';
+  frame.dataset.selGoods = 'all';
+  /* 프레임 내 클릭 시 검색 input 포커스 유지 — blur → hideFrame 방지 */
+  frame.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+  }, false);
+  /* 카테고리 탭 선택 감지: capture click + change 이중으로 data-sel-goods에 저장 */
+  function _imUpdateSelGoods(val) {
+    if (val && val !== frame.dataset.selGoods) { frame.dataset.selGoods = val; }
+  }
   frame.addEventListener('click', function(e) {
     var item = e.target && e.target.closest && e.target.closest('.search-select-item');
     if (!item) return;
     var radio = item.querySelector('input[name=search_goods]');
-    if (radio) { _selGoods = radio.value; }
+    if (radio) { _imUpdateSelGoods(radio.value); }
+    /* mousedown.preventDefault 때문에 change가 안 올 수 있으므로 setTimeout으로도 체크 */
+    setTimeout(function() {
+      var chk = item.querySelector('input[name=search_goods]:checked');
+      if (chk) { _imUpdateSelGoods(chk.value); }
+    }, 0);
   }, true);
   frame.addEventListener('change', function(e) {
     var t = e.target;
-    if (t && t.name === 'search_goods') { _selGoods = t.value; }
+    if (t && t.name === 'search_goods') { _imUpdateSelGoods(t.value); }
   }, false);
   function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
   function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
@@ -1464,7 +1477,7 @@ function _imSetupSearchFrame() {
       inp.value = name || '';
       window._IM_sel_game = { code: code, id: id, name: name };
       hideFrame();
-      var goodsVal = _selGoods || 'all';
+      var goodsVal = frame.dataset.selGoods || 'all';
       var catMap = window._IM_GOODS_CAT_MAP || {};
       var itemCat = catMap[goodsVal] || '';
       var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
