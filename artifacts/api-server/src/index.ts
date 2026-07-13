@@ -83,16 +83,23 @@ const GAME_SEED_DATA: Array<{ name: string; code: string | null; servers: string
 
 async function seedGames(): Promise<void> {
   try {
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(gamesTable);
-    if (count > 0) {
-      logger.info({ count }, "게임 데이터 이미 존재 — 시딩 건너뜀");
+    // 기존 게임명 목록을 가져와 누락된 게임만 삽입 (incremental upsert)
+    const existing = await db.select({ name: gamesTable.name }).from(gamesTable);
+    const existingNames = new Set(existing.map((r) => r.name));
+
+    const missing = GAME_SEED_DATA.filter((g) => !existingNames.has(g.name));
+    if (missing.length === 0) {
+      logger.info({ total: existing.length }, "게임 시드 데이터 최신 상태 — 건너뜀");
       return;
     }
 
-    let sortOrder = 1;
-    for (const g of GAME_SEED_DATA) {
+    // sort_order 최댓값 조회
+    const [{ maxOrder }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(sort_order), 0)::int` })
+      .from(gamesTable);
+    let sortOrder = maxOrder + 1;
+
+    for (const g of missing) {
       const values: { name: string; sortOrder: number; code?: string } = { name: g.name, sortOrder };
       if (g.code) values.code = g.code;
       const [inserted] = await db.insert(gamesTable).values(values).returning({ id: gamesTable.id });
@@ -104,7 +111,7 @@ async function seedGames(): Promise<void> {
         );
       }
     }
-    logger.info({ games: GAME_SEED_DATA.length }, "게임 시드 데이터 삽입 완료");
+    logger.info({ inserted: missing.length }, "게임 시드 데이터 삽입 완료");
   } catch (err) {
     logger.error({ err }, "게임 시드 데이터 삽입 실패");
   }
