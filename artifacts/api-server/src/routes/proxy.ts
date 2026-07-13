@@ -5128,7 +5128,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
   }
 
-  var STATUS_LABEL = { pending:'거래대기', active:'거래중', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
+  var STATUS_LABEL = { pending:'거래대기', active:'거래중', handover:'인계완료(인수대기)', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
   var roomId = null;
   var myId = null;
   var lastMsgId = 0;
@@ -5155,12 +5155,20 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     if (stateEl) stateEl.textContent = STATUS_LABEL[status] || status;
     var ti = document.getElementById('trade_ing');
     var tc = document.getElementById('trade_cancel');
+    var hBtn = document.getElementById('_im_handover_btn');
     if (status === 'ended' || status === 'cancelled' || status === 'rejected') {
       if (ti) { ti.disabled = true; ti.style.opacity = '0.4'; }
       if (tc) { tc.disabled = true; tc.style.opacity = '0.4'; }
+      if (hBtn) { hBtn.disabled = true; hBtn.textContent = '인계완료'; hBtn.style.opacity = '0.4'; }
+    } else if (status === 'handover') {
+      // 판매자 인계완료 → 인계하기 버튼 비활성, 인수하기는 구매자가 누를 수 있도록 활성
+      if (hBtn) { hBtn.disabled = true; hBtn.textContent = '인계완료✓'; hBtn.style.opacity = '0.6'; }
+      if (ti) { ti.disabled = false; ti.style.opacity = ''; if (isBuyerChat) ti.style.display = ''; }
+      if (tc) { tc.disabled = false; tc.style.opacity = ''; }
     } else {
       // 구매자 채팅창에서만 인수하기 표시
       if (ti) { ti.style.display = isBuyerChat ? '' : 'none'; }
+      if (hBtn) { hBtn.disabled = false; hBtn.textContent = '인계하기'; hBtn.style.opacity = ''; }
     }
   }
 
@@ -5175,6 +5183,17 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         // 인수하기 버튼: 구매자 채팅창에서만 표시
         var tiEl = document.getElementById('trade_ing');
         if (tiEl) tiEl.style.display = isBuyer ? '' : 'none';
+        // 인계하기 버튼: 판매자 채팅창에서만 주입
+        if (!isBuyer && !document.getElementById('_im_handover_btn')) {
+          var tc2 = document.getElementById('trade_cancel');
+          if (tc2 && tc2.parentNode) {
+            var hBtn2 = document.createElement('button');
+            hBtn2.id = '_im_handover_btn';
+            hBtn2.textContent = '인계하기';
+            hBtn2.style.cssText = 'display:block;width:100%;margin-bottom:8px;padding:10px 0;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:-.02em';
+            tc2.parentNode.insertBefore(hBtn2, tc2);
+          }
+        }
         var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
         var uidEl = document.querySelector('.chat_user .uid');
         if (uidEl) uidEl.textContent = partnerName;
@@ -5314,6 +5333,27 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         changeStatus('cancelled', '거래를 취소하시겠습니까?');
       }, true);
     }
+
+    // 인계하기 버튼: 동적 주입 후 document 위임으로 처리
+    document.addEventListener('click', function(e) {
+      var btn = e.target && (e.target.id === '_im_handover_btn' ? e.target : (e.target.closest && e.target.closest('#_im_handover_btn')));
+      if (!btn || btn.disabled) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (!confirm('인계하기를 처리하시겠습니까?\\n\\n구매자에게 물품/아이템을 전달한 후 클릭하세요.')) return;
+      btn.disabled = true;
+      btn.textContent = '처리중...';
+      api('PATCH', '/chat/rooms/' + roomId, { status: 'handover' }).then(function(res) {
+        if (res && res.status) {
+          updateStatusUI(res.status);
+        } else {
+          btn.disabled = false;
+          btn.textContent = '인계하기';
+        }
+      }).catch(function() {
+        btn.disabled = false;
+        btn.textContent = '인계하기';
+      });
+    }, true);
 
     var backBtn = document.querySelector('a.back_btn');
     if (backBtn) {
