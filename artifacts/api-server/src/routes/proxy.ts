@@ -1378,10 +1378,90 @@ function _imSetupSearchFrame() {
   if (!form) return;
   var frame = form.querySelector('.g_search_frame');
   if (!frame) return;
+  var initScr = frame.querySelector('.initial_screen');
+  var gsList = frame.querySelector('.gs_list');
+  var _acTimer = null;
   function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
   function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
+  function showInitial() {
+    if (initScr) initScr.style.display = '';
+    if (gsList) { gsList.classList.add('g_hidden'); gsList.classList.add('sf-hidden'); gsList.innerHTML = ''; }
+  }
+  function highlightName(name, q) {
+    if (!q) return name.replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; });
+    var CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    function getCho(c) { var code = c.charCodeAt(0); return (code >= 0xAC00 && code <= 0xD7A3) ? CHOSUNG[Math.floor((code-0xAC00)/(21*28))] : c; }
+    function isChoOnly(s) { return s.length > 0 && Array.from(s).every(function(c) { return c >= 'ㄱ' && c <= 'ㅎ'; }); }
+    function esc(s) { return s.replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    if (isChoOnly(q)) {
+      var result = '';
+      var chars = Array.from(name);
+      var qi = 0, qArr = Array.from(q);
+      for (var i = 0; i < chars.length; i++) {
+        if (qi < qArr.length && getCho(chars[i]) === qArr[qi]) {
+          result += '<span style="color:var(--color-blue7);font-weight:700">' + esc(chars[i]) + '</span>';
+          qi++;
+        } else {
+          result += esc(chars[i]);
+        }
+      }
+      return result;
+    }
+    var lq = q.toLowerCase(), ln = name.toLowerCase(), idx = ln.indexOf(lq);
+    if (idx < 0) return name.replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; });
+    return esc(name.slice(0, idx)) + '<span style="color:var(--color-blue7);font-weight:700">' + esc(name.slice(idx, idx + q.length)) + '</span>' + esc(name.slice(idx + q.length));
+  }
+  function renderResults(games, q) {
+    if (!gsList) return;
+    if (!games || !games.length) {
+      gsList.innerHTML = '<ul style="padding:10px 5px"><li style="color:var(--color-gray6);font-size:14px">검색 결과가 없습니다.</li></ul>';
+      gsList.classList.remove('g_hidden'); gsList.classList.remove('sf-hidden');
+      if (initScr) initScr.style.display = 'none';
+      return;
+    }
+    var html = '<ul style="padding:5px 0;list-style:none;margin:0">';
+    games.forEach(function(g) {
+      html += '<li data-code="' + (g.code||'') + '" data-id="' + (g.id||'') + '" data-name="' + (g.name||'').replace(/"/g,'&quot;') + '" style="padding:7px 10px;cursor:pointer;border-radius:7px;font-size:15px">' + highlightName(g.name, q) + '</li>';
+    });
+    html += '</ul>';
+    gsList.innerHTML = html;
+    gsList.classList.remove('g_hidden'); gsList.classList.remove('sf-hidden');
+    if (initScr) initScr.style.display = 'none';
+  }
+  function doSearch(q) {
+    fetch('/api/games/search?q=' + encodeURIComponent(q), { credentials: 'include' })
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(data) { renderResults(Array.isArray(data) ? data : (data && data.items ? data.items : []), q); })
+      .catch(function() { renderResults([], q); });
+  }
   inp.addEventListener('focus', showFrame, true);
-  inp.addEventListener('input', showFrame, true);
+  inp.addEventListener('input', function() {
+    showFrame();
+    var q = inp.value.trim();
+    if (!q) { showInitial(); return; }
+    clearTimeout(_acTimer);
+    _acTimer = setTimeout(function() { doSearch(q); }, 120);
+  }, true);
+  if (gsList) {
+    gsList.addEventListener('mousedown', function(e) {
+      var li = e.target.closest('li[data-id]');
+      if (!li) return;
+      e.preventDefault();
+      var code = li.getAttribute('data-code');
+      var id = li.getAttribute('data-id');
+      var name = li.getAttribute('data-name');
+      inp.value = name || '';
+      window._IM_sel_game = { code: code, id: id, name: name };
+      hideFrame();
+      var goods = form.querySelector('[name=goods]');
+      var goodsVal = goods ? goods.value : 'all';
+      var catMap = window._IM_GOODS_CAT_MAP || {};
+      var itemCat = catMap[goodsVal] || '';
+      var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
+      if (itemCat) url += '&itemCategory=' + encodeURIComponent(itemCat);
+      location.href = url;
+    }, false);
+  }
   inp.addEventListener('blur', function() {
     setTimeout(function() {
       if (!form.contains(document.activeElement)) { hideFrame(); }
