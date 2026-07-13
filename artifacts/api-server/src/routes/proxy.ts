@@ -1381,21 +1381,26 @@ function _imSetupSearchFrame() {
   var initScr = frame.querySelector('.initial_screen');
   var gsList = frame.querySelector('.gs_list');
   var _acTimer = null;
-  /* 카테고리 탭: mousedown에서 포커스 유지 + 라디오 수동 체크 + sessionStorage 저장 */
+  /* 카테고리 탭: document 레벨 capture로 원본 JS보다 반드시 먼저 실행 */
   try { sessionStorage.setItem('_imSelGoods', 'all'); } catch(e) {}
-  var _selItems = frame.querySelectorAll('.search-select-item');
-  _selItems.forEach(function(item) {
+  document.addEventListener('mousedown', function(e) {
+    var item = e.target.closest && e.target.closest('.search-select-item');
+    if (!item || !frame.contains(item)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
     var radio = item.querySelector('input[name=search_goods]');
     if (!radio) return;
-    item.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      frame.querySelectorAll('input[name=search_goods]').forEach(function(r) { r.checked = false; });
-      radio.checked = true;
-      try { sessionStorage.setItem('_imSelGoods', radio.value); } catch(ex) {}
-      setTimeout(function() { inp.focus(); }, 0);
-    }, true);
-  });
+    frame.querySelectorAll('input[name=search_goods]').forEach(function(r) { r.checked = false; });
+    radio.checked = true;
+    try { sessionStorage.setItem('_imSelGoods', radio.value); } catch(ex) {}
+    setTimeout(function() { inp.focus(); }, 0);
+  }, true);
+  document.addEventListener('click', function(e) {
+    var item = e.target.closest && e.target.closest('.search-select-item');
+    if (!item || !frame.contains(item)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
   /* 게임 결과 목록도 mousedown에서 포커스 이탈 방지 (게임 선택은 mousedown에서 처리) */
   function showFrame() { frame.classList.remove('g_hidden'); inp.classList.add('focus_on'); }
   function hideFrame() { frame.classList.add('g_hidden'); inp.classList.remove('focus_on'); }
@@ -1428,10 +1433,11 @@ function _imSetupSearchFrame() {
     return esc(name.slice(0, idx)) + '<span style="color:var(--color-blue7);font-weight:700">' + esc(name.slice(idx, idx + q.length)) + '</span>' + esc(name.slice(idx + q.length));
   }
   function renderResults(games, q) {
-    if (!gsList) return;
+    var gl = frame.querySelector('.gs_list');
+    if (!gl) return;
     if (!games || !games.length) {
-      gsList.innerHTML = '<ul style="padding:10px 5px"><li style="color:var(--color-gray6);font-size:14px">검색 결과가 없습니다.</li></ul>';
-      gsList.classList.remove('g_hidden'); gsList.classList.remove('sf-hidden');
+      gl.innerHTML = '<ul style="padding:10px 5px"><li style="color:var(--color-gray6);font-size:14px">검색 결과가 없습니다.</li></ul>';
+      gl.classList.remove('g_hidden'); gl.classList.remove('sf-hidden');
       if (initScr) initScr.style.display = 'none';
       return;
     }
@@ -1440,8 +1446,8 @@ function _imSetupSearchFrame() {
       html += '<li data-code="' + (g.code||'') + '" data-id="' + (g.id||'') + '" data-name="' + (g.name||'').replace(/"/g,'&quot;') + '" style="padding:7px 10px;cursor:pointer;border-radius:7px;font-size:15px">' + highlightName(g.name, q) + '</li>';
     });
     html += '</ul>';
-    gsList.innerHTML = html;
-    gsList.classList.remove('g_hidden'); gsList.classList.remove('sf-hidden');
+    gl.innerHTML = html;
+    gl.classList.remove('g_hidden'); gl.classList.remove('sf-hidden');
     if (initScr) initScr.style.display = 'none';
   }
   function doSearch(q) {
@@ -1458,30 +1464,29 @@ function _imSetupSearchFrame() {
     clearTimeout(_acTimer);
     _acTimer = setTimeout(function() { doSearch(q); }, 120);
   }, true);
-  if (gsList) {
-    gsList.addEventListener('mousedown', function(e) {
-      var li = e.target.closest('li[data-id]');
-      if (!li) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      var code = li.getAttribute('data-code');
-      var id = li.getAttribute('data-id');
-      var name = li.getAttribute('data-name');
-      inp.value = name || '';
-      window._IM_sel_game = { code: code, id: id, name: name };
-      hideFrame();
-      /* 카테고리는 sessionStorage에서 읽어 _imPendingCategory로 재저장
-         sell/list 페이지 로드 시 SELL_LIST_INTERCEPT_SCRIPT가 읽어 URL에 반영 */
-      var goodsVal = (function() { try { return sessionStorage.getItem('_imSelGoods') || 'all'; } catch(e) { return 'all'; } })();
-      if (goodsVal && goodsVal !== 'all') {
-        try { sessionStorage.setItem('_imPendingCategory', goodsVal); } catch(e) {}
-      } else {
-        try { sessionStorage.removeItem('_imPendingCategory'); } catch(e) {}
-      }
-      var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
-      location.href = url;
-    }, true);
-  }
+  /* 게임 결과 목록: document 레벨 capture + 동적 .gs_list 조회(stale ref 방지) */
+  document.addEventListener('mousedown', function(e) {
+    var li = e.target.closest && e.target.closest('li[data-id]');
+    if (!li) return;
+    var currentGsList = frame.querySelector('.gs_list');
+    if (!currentGsList || !currentGsList.contains(li)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var code = li.getAttribute('data-code');
+    var id = li.getAttribute('data-id');
+    var name = li.getAttribute('data-name');
+    inp.value = name || '';
+    window._IM_sel_game = { code: code, id: id, name: name };
+    hideFrame();
+    var goodsVal = (function() { try { return sessionStorage.getItem('_imSelGoods') || 'all'; } catch(e2) { return 'all'; } })();
+    if (goodsVal && goodsVal !== 'all') {
+      try { sessionStorage.setItem('_imPendingCategory', goodsVal); } catch(e3) {}
+    } else {
+      try { sessionStorage.removeItem('_imPendingCategory'); } catch(e4) {}
+    }
+    var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
+    location.href = url;
+  }, true);
   inp.addEventListener('blur', function() {
     setTimeout(function() {
       if (!form.contains(document.activeElement)) { hideFrame(); }

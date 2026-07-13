@@ -9,3 +9,5 @@
 - [Snapshot HTML data injection](snapshot-html-injection.md) — client-side JS injection into SingleFile snapshots unreliable; do server-side string/regex replace in applyProductToHtml() before serving.
 - [Qty control event delegation](qty-control-delegation.md) — quantity +/- listeners must use document-level delegation in init(), not direct addEventListener in injectProduct IIFE.
 - [Search category two-step nav](search-category-nav.md) — snapshot JS overrides location.href removing itemCategory; fix: store pending category in sessionStorage, sell/list page reads it on load and location.replace with itemCategory.
+- [Search frame stale gsList ref](search-gsList-stale.md) — snapshot JS may replace .gs_list element; always use frame.querySelector('.gs_list') dynamically, never capture element reference at setup time.
+- [Search frame document-level capture](search-doc-capture.md) — category/game handlers must be document.addEventListener capture=true to run before original JS; element-level capture can lose to earlier-registered document-level handlers.
