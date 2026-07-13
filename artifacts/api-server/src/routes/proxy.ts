@@ -5162,7 +5162,15 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     var hhmm = fmtTime(m.createdAt);
     var div = document.createElement('div');
     div.className = 'chat_item ' + (isMe ? 'me' : 'another');
-    div.innerHTML = '<div class=chat_msg><span>' + esc(m.content) + '</span></div><div class=send_time>' + hhmm + '</div>';
+    var isImg = m.content && m.content.startsWith('[img]');
+    var msgHtml;
+    if (isImg) {
+      var imgUrl = m.content.slice(5);
+      msgHtml = '<div class=chat_msg><img src="' + imgUrl + '" style="max-width:220px;max-height:220px;border-radius:8px;display:block;cursor:pointer" onclick="window.open(this.src,\\'_blank\\')" onerror="this.style.display=\\'none\\'"></div>';
+    } else {
+      msgHtml = '<div class=chat_msg><span>' + esc(m.content) + '</span></div>';
+    }
+    div.innerHTML = msgHtml + '<div class=send_time>' + hhmm + '</div>';
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
   }
@@ -5366,11 +5374,45 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       e.preventDefault();
       alert('알림을 보내었습니다.');
     });
-    // 나머지 (인쇄, 파일전송)
-    ['chat_print','send_file'].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener('click', function(e) { e.preventDefault(); alert('해당 기능은 준비 중입니다.'); });
-    });
+    // 인쇄
+    var chatPrintBtn = document.getElementById('chat_print');
+    if (chatPrintBtn) chatPrintBtn.addEventListener('click', function(e) { e.preventDefault(); alert('해당 기능은 준비 중입니다.'); });
+
+    // 파일(이미지) 첨부
+    var sendFileBtn = document.getElementById('send_file');
+    if (sendFileBtn) {
+      var _fileInput = document.createElement('input');
+      _fileInput.type = 'file';
+      _fileInput.accept = 'image/*';
+      _fileInput.style.display = 'none';
+      document.body.appendChild(_fileInput);
+
+      sendFileBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        _fileInput.value = '';
+        _fileInput.click();
+      });
+
+      _fileInput.addEventListener('change', function() {
+        var file = _fileInput.files && _fileInput.files[0];
+        if (!file || !roomId) return;
+        var formData = new FormData();
+        formData.append('image', file);
+        sendFileBtn.disabled = true;
+        fetch('/api/chat/rooms/' + roomId + '/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        }).then(function(r) { return r.json(); }).then(function(m) {
+          if (m && m.id) appendMessage(m);
+        }).catch(function() {
+          alert('이미지 업로드에 실패했습니다.');
+        }).finally(function() {
+          sendFileBtn.disabled = false;
+          _fileInput.value = '';
+        });
+      });
+    }
 
     var tradeIngBtn = document.getElementById('trade_ing');
     if (tradeIngBtn) {

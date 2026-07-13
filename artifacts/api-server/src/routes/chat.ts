@@ -1,8 +1,36 @@
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
+import multer from "multer";
 import { Router, type IRouter } from "express";
 import { eq, and, or, ne, lt, desc, sql } from "drizzle-orm";
 import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, "..", "..", "uploads", "chat-images");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      cb(new Error("이미지 파일만 업로드 가능합니다."));
+    } else {
+      cb(null, true);
+    }
+  },
+});
 
 const router: IRouter = Router();
 
@@ -254,6 +282,36 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
       content: m.content,
       createdAt: m.createdAt,
     })),
+  });
+});
+
+// 이미지 업로드
+router.post("/chat/rooms/:roomId/upload", requireAuth, upload.single("image"), async (req, res): Promise<void> => {
+  const roomId = parseInt(req.params.roomId as string, 10);
+  const userId = req.session.userId!;
+
+  const [room] = await db.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId));
+  if (!room) { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
+  if (room.buyerId !== userId && room.sellerId !== userId) {
+    res.status(403).json({ error: "접근 권한이 없습니다." }); return;
+  }
+  if (!req.file) { res.status(400).json({ error: "이미지를 선택하세요." }); return; }
+
+  const imageUrl = `/chat-images/${req.file.filename}`;
+
+  if (room.status === "pending") {
+    await db.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
+  }
+
+  const content = `[img]${imageUrl}`;
+  const [message] = await db.insert(chatMessagesTable).values({ roomId, senderId: userId, content }).returning();
+
+  res.status(201).json({
+    id: message.id,
+    roomId: message.roomId,
+    senderId: message.senderId,
+    content: message.content,
+    createdAt: message.createdAt,
   });
 });
 

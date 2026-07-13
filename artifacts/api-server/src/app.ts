@@ -1,3 +1,5 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import express, { type Express } from "express";
 import cors from "cors";
 import session from "express-session";
@@ -9,6 +11,9 @@ import adminUiRouter from "./routes/admin-ui";
 import customerUiRouter from "./routes/customer-ui";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app: Express = express();
 
@@ -67,6 +72,9 @@ app.use(
     },
   }),
 );
+
+// 채팅 이미지 업로드 정적 서빙
+app.use("/chat-images", express.static(path.join(__dirname, "..", "uploads", "chat-images")));
 
 // /proxy/* 는 /api 밖에 위치 (프록시는 API가 아님)
 app.use(proxyRouter);
