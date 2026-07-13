@@ -2632,6 +2632,14 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
       setupGameSearch(cleanInp);
     })();
 
+    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트
+    document.addEventListener('click', function(e) {
+      var btn = e.target;
+      if (btn && (btn.classList.contains('btn_name_save') || btn.closest && btn.closest('.btn_name_save'))) {
+        showToast('저장되었습니다.', true);
+      }
+    });
+
     // 구매등록 링크 → /buy/register.html
     document.querySelectorAll('a[href*="/buy/"]').forEach(function(a) {
       var h = a.getAttribute('href') || '';
@@ -3332,6 +3340,14 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
       }
       setupGameSearch(cleanInp);
     })();
+
+    // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트
+    document.addEventListener('click', function(e) {
+      var btn = e.target;
+      if (btn && (btn.classList.contains('btn_name_save') || btn.closest && btn.closest('.btn_name_save'))) {
+        showToast('저장되었습니다.', true);
+      }
+    });
 
     // 판매등록 링크 → /sell/register.html
     document.querySelectorAll('a[href*="/sell/"]').forEach(function(a) {
