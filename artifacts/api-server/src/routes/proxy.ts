@@ -1179,6 +1179,8 @@ var ROUTE_MAP=[
   ['/game_charge','/game-charge'],
   ['/portal/giftcard/','/giftcard'],
   ['/portal/giftcard','/giftcard'],
+  ['/customer/','/customer/'],
+  ['/customer','/customer/'],
   ['/myroom/','/myroom/index.html'],
   ['/myroom','/myroom/index.html'],
   ['/','/'],

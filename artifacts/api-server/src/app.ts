@@ -6,6 +6,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import proxyRouter from "./routes/proxy";
 import adminUiRouter from "./routes/admin-ui";
+import customerUiRouter from "./routes/customer-ui";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 
@@ -69,6 +70,9 @@ app.use(
 
 // /proxy/* 는 /api 밖에 위치 (프록시는 API가 아님)
 app.use(proxyRouter);
+
+// /customer 고객센터 UI
+app.use(customerUiRouter);
 
 // /admin 어드민 UI (api prefix 없이)
 app.use(adminUiRouter);
