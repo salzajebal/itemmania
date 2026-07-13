@@ -1225,11 +1225,9 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
 
 // 로컬 크롤러 스크립트 다운로드
 router.get("/admin/crawl/script", (_req, res): void => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const scriptPath = path.join(process.cwd(), "scripts/src/crawl-itemmania.mjs");
+  const scriptPath = join(process.cwd(), "../../scripts/src/crawl-itemmania.mjs");
   try {
-    const content = fs.readFileSync(scriptPath, "utf-8");
+    const content = readFileSync(scriptPath, "utf-8");
     res.set("Content-Type", "application/javascript; charset=utf-8");
     res.set("Content-Disposition", 'attachment; filename="crawl-itemmania.mjs"');
     res.send(content);
@@ -1240,11 +1238,9 @@ router.get("/admin/crawl/script", (_req, res): void => {
 
 // 자동 수집기 스크립트 다운로드
 router.get("/admin/crawl/auto-script", (_req, res): void => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const scriptPath = path.join(process.cwd(), "scripts/src/auto-crawl.mjs");
+  const scriptPath = join(process.cwd(), "../../scripts/src/auto-crawl.mjs");
   try {
-    const content = fs.readFileSync(scriptPath, "utf-8");
+    const content = readFileSync(scriptPath, "utf-8");
     res.set("Content-Type", "application/javascript; charset=utf-8");
     res.set("Content-Disposition", 'attachment; filename="auto-crawl.mjs"');
     res.send(content);
@@ -1333,6 +1329,67 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
   }
 
   res.json({ totalSaved, results });
+});
+
+// ── 로컬 크롤러: HTML 업로드 → 파싱 → DB 저장 ────────────────────────────
+// PC에서 auto-crawl.mjs 스크립트가 직접 itemmania HTML을 가져와 이 엔드포인트로 POST
+router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
+  const { html, gameId, category = "sell", gameName: overrideName } = req.body as {
+    html?: string;
+    gameId?: number;
+    category?: "sell" | "buy";
+    gameName?: string;
+  };
+
+  if (!html || typeof html !== "string") {
+    res.status(400).json({ error: "html 필드가 필요합니다" });
+    return;
+  }
+  if (!gameId || typeof gameId !== "number") {
+    res.status(400).json({ error: "gameId 필드가 필요합니다" });
+    return;
+  }
+
+  const products = parseProductsFromHtml(html, gameId, category);
+
+  // gameName 오버라이드 (클라이언트가 게임명을 명시한 경우)
+  if (overrideName) {
+    for (const p of products) {
+      if (!p.gameName) p.gameName = overrideName;
+    }
+  }
+
+  let saved = 0;
+  let failed = 0;
+  for (const p of products) {
+    try {
+      await db.insert(productsTable).values({
+        itemmaniaid: p.itemmaniaid,
+        title: p.title,
+        price: p.price,
+        category: p.category,
+        itemCategory: p.itemCategory,
+        gameName: p.gameName,
+        serverName: p.serverName,
+        sellerGrade: p.sellerGrade ?? null,
+        detailUrl: p.detailUrl,
+        status: "active",
+        crawledAt: new Date(),
+        ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
+      }).onConflictDoUpdate({
+        target: productsTable.itemmaniaid,
+        set: {
+          title: p.title, price: p.price,
+          gameName: p.gameName, serverName: p.serverName,
+          itemCategory: p.itemCategory, sellerGrade: p.sellerGrade ?? null,
+          detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+        },
+      });
+      saved++;
+    } catch { failed++; }
+  }
+
+  res.json({ parsed: products.length, saved, failed });
 });
 
 export default router;

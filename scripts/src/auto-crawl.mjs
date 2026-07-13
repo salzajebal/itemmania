@@ -1,191 +1,222 @@
 #!/usr/bin/env node
 /**
- * 아이템마니아 자동 상품 수집기
+ * 아이템마니아 로컬 크롤러 (ScraperAPI 불필요)
  *
- * ─────────────────────────────────────
- * 1. 아래 설정 3줄만 채우세요
- * 2. 터미널에서: node auto-crawl.mjs
- * 3. 창 닫지 말고 켜두면 1시간마다 자동 수집
- * ─────────────────────────────────────
+ * ─── 사용법 ───────────────────────────────────────
+ *  1. Node.js 18 이상 필요 (https://nodejs.org)
+ *  2. 아래 설정 3줄만 채우세요
+ *  3. 터미널에서: node auto-crawl.mjs
+ *  4. 창 닫지 말고 켜두면 1시간마다 자동 수집
+ * ──────────────────────────────────────────────────
+ *
+ * 이 스크립트는 외부 패키지가 전혀 필요 없습니다.
+ * HTML을 그대로 서버에 전송해 서버가 파싱 후 저장합니다.
  */
 
 // ★ 여기만 수정하세요 ★
-const API_URL     = 'https://itenmania.com';   // 우리 사이트 주소
-const ADMIN_EMAIL = 'admin@example.com';        // 관리자 이메일
-const ADMIN_PW    = 'yourpassword';             // 관리자 비밀번호
+const SITE_URL    = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
+const ADMIN_EMAIL = 'admin@admin.com';
+const ADMIN_PW    = 'admin1234';
 
-// 수집할 게임 목록 (전부 원하면 그대로 두세요)
+// 수집할 게임 목록 (주석처리하면 제외)
 const GAMES = [
-  { slug: 'maplestory-world',  id: 5233, name: '메이플스토리월드' },
-  { slug: 'lostark',           id: 2696, name: '로스트아크' },
-  { slug: 'lineage-classic',   id: 5913, name: '리니지클래식' },
-  { slug: 'maplestory',        id: 8458, name: '메이플스토리' },
-  { slug: 'odin',              id: 4696, name: '오딘' },
-  { slug: 'mabinogi',          id: 155,  name: '마비노기' },
-  { slug: 'lineage-m',         id: 3449, name: '리니지M' },
-  { slug: 'geosang',           id: 101,  name: '거상' },
-  { slug: 'aion2',             id: 5799, name: '아이온2' },
-  { slug: 'dnf',               id: 281,  name: '던전앤파이터' },
+  { id: 5913, name: '리니지클래식' },
+  { id: 8458, name: '메이플스토리' },
+  { id: 5233, name: '메이플스토리월드' },
+  { id: 5990, name: '메이플랜드' },
+  { id: 281,  name: '던전앤파이터' },
+  { id: 2696, name: '로스트아크' },
+  { id: 3449, name: '리니지M' },
+  { id: 4696, name: '오딘' },
+  { id: 5799, name: '아이온2' },
+  { id: 155,  name: '마비노기' },
+  { id: 101,  name: '거상' },
 ];
 
-// 1회 실행 시 게임당 가져올 페이지 수 (1페이지 = 약 50개)
-const PAGES_PER_GAME = 3;
+// 팝니다/삽니다 둘 다 수집 (한쪽만 원하면 제거)
+const CATEGORIES = ['sell', 'buy'];
 
-// 수집 주기 (밀리초) — 기본 1시간
+// 게임당 수집 페이지 수 (1페이지 ≈ 20개 상품)
+const PAGES_PER_GAME = 5;
+
+// 자동 반복 주기 (기본 1시간)
 const INTERVAL_MS = 60 * 60 * 1000;
 
-// ──────────────────────────────────────
-// 이하 수정 불필요
-// ──────────────────────────────────────
+// ─── 이하 수정 불필요 ──────────────────────────────
 
+import { createGunzip } from 'zlib';
 import https from 'https';
-import { JSDOM } from 'jsdom';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-const HTTPS_AGENT = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
+const AGENT = new https.Agent({ keepAlive: true });
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function ts() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }); }
+function log(msg) { console.log(`[${ts()}] ${msg}`); }
 
-function now() {
-  return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-}
-
-async function httpsGet(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      agent: HTTPS_AGENT,
-      headers: {
-        'User-Agent': UA,
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-        'Referer': 'https://www.itemmania.com/',
-      },
-      timeout: 20000,
-    }, (res) => {
-      let body = res;
-      if (res.headers['content-encoding'] === 'gzip') {
-        const { createGunzip } = await import('zlib');
-        body = res.pipe(createGunzip());
+// itemmania 페이지 HTML 가져오기 (gzip 지원, 재시도 포함)
+async function fetchHtml(url, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const html = await new Promise((resolve, reject) => {
+        const req = https.get(url, {
+          agent: AGENT,
+          headers: {
+            'User-Agent': UA,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'ko-KR,ko;q=0.9',
+            'Referer': 'https://www.itemmania.com/',
+          },
+          timeout: 25000,
+        }, (res) => {
+          // 리다이렉트 처리
+          if (res.statusCode >= 301 && res.statusCode <= 302 && res.headers.location) {
+            res.resume();
+            resolve(fetchHtml(res.headers.location, retries - 1));
+            return;
+          }
+          const stream = res.headers['content-encoding'] === 'gzip'
+            ? res.pipe(createGunzip())
+            : res;
+          const chunks = [];
+          stream.on('data', d => chunks.push(d));
+          stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+          stream.on('error', reject);
+        });
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+      });
+      if (typeof html === 'string' && html.length > 500) return html;
+      throw new Error(`응답 너무 짧음 (${typeof html === 'string' ? html.length : 0}바이트)`);
+    } catch (e) {
+      if (attempt < retries) {
+        await sleep(2000 * (attempt + 1));
+        continue;
       }
-      const chunks = [];
-      body.on('data', d => chunks.push(d));
-      body.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-      body.on('error', reject);
-    });
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-    req.on('error', reject);
-    req.end();
-  });
+      throw e;
+    }
+  }
 }
 
-async function adminLogin() {
-  const res = await fetch(`${API_URL}/api/admin/login`, {
+// 관리자 로그인 → 세션 쿠키 반환
+async function login() {
+  const res = await fetch(`${SITE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PW }),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(15000),
     redirect: 'manual',
   });
-  const setCookie = res.headers.get('set-cookie') || '';
-  const match = setCookie.match(/(connect\.sid=[^;]+)/);
-  if (!match) throw new Error('로그인 실패 — 이메일/비밀번호를 확인하세요');
-  return match[1];
-}
-
-function parseProducts(html, gameId, gameName) {
-  const doc = new JSDOM(html).window.document;
-  const products = [];
-  for (const el of doc.querySelectorAll('li.list_item')) {
-    const tid = el.getAttribute('data-tid');
-    if (!tid) continue;
-    const title   = el.querySelector('.goods_name, [data-search=name], .name')?.textContent?.trim() || '';
-    const priceRaw = el.querySelector('.goods_price, .price, [data-search=price]')?.textContent?.replace(/[^0-9]/g,'') || '0';
-    const server  = el.querySelector('[data-search=server]')?.textContent?.trim() || '';
-    const cat     = el.querySelector('[data-search=goods]')?.textContent?.trim()  || '';
-    const img     = el.querySelector('img')?.src || '';
-    const grade   = el.classList.contains('vip') ? 'vip'
-                  : el.classList.contains('platinum') ? 'platinum' : null;
-    if (!title) continue;
-    products.push({
-      itemmaniaid: tid, gameId, gameName,
-      title, price: parseInt(priceRaw, 10) || 0,
-      server, itemCategory: cat,
-      thumbnailUrl: img.startsWith('http') ? img : null,
-      sellerGrade: grade,
-    });
+  const cookie = (res.headers.get('set-cookie') || '').match(/(connect\.sid=[^;]+)/)?.[1];
+  if (!cookie) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`로그인 실패 (${res.status}) — 이메일/비밀번호 확인: ${body.slice(0, 100)}`);
   }
-  return products;
+  return cookie;
 }
 
-async function uploadBatch(products, cookie) {
-  const res = await fetch(`${API_URL}/api/admin/crawl/batch`, {
+// HTML을 서버에 업로드 → 서버가 파싱 & 저장
+async function uploadHtml(html, gameId, gameName, category, cookie) {
+  const res = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ products }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookie,
+    },
+    body: JSON.stringify({ html, gameId, gameName, category }),
     signal: AbortSignal.timeout(30000),
   });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`업로드 실패 (${res.status}): ${body.slice(0, 200)}`);
+  }
   return res.json();
 }
 
-async function runOnce() {
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`🕷️  수집 시작: ${now()}`);
-  console.log('='.repeat(50));
+async function runOnce(cookie) {
+  let totalSaved = 0, totalFailed = 0;
+
+  for (const cat of CATEGORIES) {
+    const label = cat === 'sell' ? '팝니다' : '삽니다';
+    log(`── [${label}] 수집 시작 ──`);
+
+    for (const game of GAMES) {
+      process.stdout.write(`  [${game.name}] `);
+      let gameSaved = 0;
+
+      for (let page = 1; page <= PAGES_PER_GAME; page++) {
+        const url = `https://www.itemmania.com/${cat}/list.html?search_game=${game.id}&search_goods=all&page=${page}`;
+        try {
+          const html = await fetchHtml(url);
+          const result = await uploadHtml(html, game.id, game.name, cat, cookie);
+          const saved = result.saved ?? 0;
+          const parsed = result.parsed ?? 0;
+          gameSaved += saved;
+          totalSaved += saved;
+          if (parsed === 0) {
+            process.stdout.write(`(${page}p:없음) `);
+            break; // 상품이 없으면 다음 페이지 불필요
+          } else {
+            process.stdout.write(`${page}p:${saved}개 `);
+          }
+        } catch (e) {
+          process.stdout.write(`${page}p:❌ `);
+          totalFailed++;
+        }
+        if (page < PAGES_PER_GAME) await sleep(600);
+      }
+      console.log(`→ 합계 ${gameSaved}개`);
+      await sleep(1000);
+    }
+  }
+
+  return { totalSaved, totalFailed };
+}
+
+async function main() {
+  console.log('\n' + '='.repeat(55));
+  console.log('  🕷️  아이템마니아 로컬 크롤러');
+  console.log('='.repeat(55));
+  console.log(`  서버:     ${SITE_URL}`);
+  console.log(`  게임:     ${GAMES.length}개`);
+  console.log(`  페이지:   게임당 ${PAGES_PER_GAME}페이지`);
+  console.log(`  카테고리: ${CATEGORIES.join(', ')}`);
+  console.log('='.repeat(55));
+  console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 계속 켜두세요!\n');
 
   let cookie;
   try {
     process.stdout.write('🔑 로그인 중...');
-    cookie = await adminLogin();
+    cookie = await login();
     console.log(' ✅');
   } catch (e) {
-    console.log(` ❌ ${e.message}`);
-    return;
+    console.error(` ❌ ${e.message}`);
+    process.exit(1);
   }
-
-  let totalSaved = 0;
-
-  for (const game of GAMES) {
-    console.log(`\n📦 [${game.name}]`);
-    for (let page = 1; page <= PAGES_PER_GAME; page++) {
-      process.stdout.write(`   ${page}페이지 수집 중...`);
-      try {
-        const html = await httpsGet(
-          `https://www.itemmania.com/sell/list.html?search_game=${game.id}&search_goods=all&page=${page}`
-        );
-        const products = parseProducts(html, game.id, game.name);
-        if (products.length === 0) { console.log(' 상품 없음'); break; }
-        const result = await uploadBatch(products, cookie);
-        const saved = result.upserted ?? 0;
-        totalSaved += saved;
-        console.log(` ${saved}개 저장 (누적: ${totalSaved}개)`);
-      } catch (e) {
-        console.log(` ❌ ${e.message}`);
-      }
-      if (page < PAGES_PER_GAME) await sleep(800);
-    }
-    await sleep(1000);
-  }
-
-  console.log(`\n✅ 이번 수집 완료 — 총 ${totalSaved}개 저장`);
-  console.log(`⏰ 다음 수집: ${new Date(Date.now() + INTERVAL_MS).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
-}
-
-async function main() {
-  console.log('🚀 자동 상품 수집기 시작');
-  console.log(`   서버: ${API_URL}`);
-  console.log(`   게임 수: ${GAMES.length}개`);
-  console.log(`   게임당 페이지: ${PAGES_PER_GAME}페이지 (약 ${PAGES_PER_GAME * 50}개)`);
-  console.log(`   수집 주기: 1시간`);
-  console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 켜두세요!');
 
   while (true) {
-    await runOnce();
-    console.log(`\n💤 1시간 대기 중... (창 닫지 마세요)`);
+    log('수집 시작');
+    try {
+      const { totalSaved, totalFailed } = await runOnce(cookie);
+      log(`✅ 완료 — ${totalSaved}개 저장, ${totalFailed}개 실패`);
+    } catch (e) {
+      log(`❌ 오류: ${e.message}`);
+      // 세션 만료 시 재로그인
+      if (e.message.includes('401') || e.message.includes('로그인')) {
+        try {
+          process.stdout.write('🔄 재로그인...');
+          cookie = await login();
+          console.log(' ✅');
+        } catch { /* next loop will retry */ }
+      }
+    }
+    log(`💤 ${INTERVAL_MS / 60000}분 후 재수집`);
     await sleep(INTERVAL_MS);
   }
 }
 
 main().catch(e => {
-  console.error('\n❌ 오류:', e.message);
+  console.error('\n❌ 치명적 오류:', e.message);
   process.exit(1);
 });
