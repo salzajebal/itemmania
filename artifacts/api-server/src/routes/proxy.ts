@@ -7169,7 +7169,7 @@ function serveSellMyregist(
       const detailHref = `/sell/application.html?id=${p.id}`;
       return (
         `<tr data-href="${detailHref}" style="cursor:pointer">` +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left><div class=trade_title>${p.title}</div></td>` +
         `<td class="right td_money">${price}원</td>` +
@@ -7219,7 +7219,7 @@ function serveSellMypaywait(
         : `<div class=trade_title>${o.productTitle}</div>`;
       return (
         "<tr>" +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
@@ -7265,7 +7265,7 @@ function serveSellMying(
         : `<span style="color:#159efd;font-size:12px;font-weight:600;white-space:nowrap">인계완료✓</span>`;
       return (
         "<tr>" +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
@@ -7394,7 +7394,7 @@ function serveBuyMyregist(
       const detailHref = `/buy/application.html?id=${p.id}`;
       return (
         `<tr data-href="${detailHref}" style="cursor:pointer">` +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left><div class=trade_title>${p.title}</div></td>` +
         `<td class="right td_money">${price}원</td>` +
@@ -7445,7 +7445,7 @@ function serveBuyMypaywait(
       const chatHref = `/myroom/chat/new_chat.html?orderId=${o.id}&amp;type=buy`;
       return (
         "<tr>" +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
@@ -7492,7 +7492,7 @@ function serveBuyMying(
       const confirmBtn = `<button class="btn-confirm" data-order-id="${o.id}" style="padding:5px 10px;border:none;border-radius:6px;background:#00b34f;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">인수완료</button>`;
       return (
         "<tr>" +
-        `<td class="first f_left"><strong>${game}</strong><br>${server}</td>` +
+        `<td class="first f_left" style="text-align:center"><strong>${game}</strong><br>${server}</td>` +
         `<td>${cat}</td>` +
         `<td class=left>${titleLink}</td>` +
         `<td class="right td_money">${price}원</td>` +
