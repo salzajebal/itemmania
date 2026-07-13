@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc } from "drizzle-orm";
-import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable } from "@workspace/db";
+import { eq, sql, desc, or, inArray } from "drizzle-orm";
+import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
 import * as cheerio from "cheerio";
@@ -432,12 +432,46 @@ router.patch("/admin/users/:id", async (req, res): Promise<void> => {
 // 회원 삭제
 router.delete("/admin/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
   if (target.role === "admin") { res.status(403).json({ error: "관리자 계정은 삭제할 수 없습니다." }); return; }
-  await db.delete(walletsTable).where(eq(walletsTable.userId, id));
-  await db.delete(usersTable).where(eq(usersTable.id, id));
-  res.json({ ok: true });
+  try {
+    // 1. 이 유저가 참여한 채팅방 목록 조회
+    const rooms = await db
+      .select({ id: chatRoomsTable.id })
+      .from(chatRoomsTable)
+      .where(or(eq(chatRoomsTable.buyerId, id), eq(chatRoomsTable.sellerId, id)));
+    const roomIds = rooms.map(r => r.id);
+
+    // 2. 채팅 메시지 삭제 (senderId FK + 채팅방 소속 메시지)
+    if (roomIds.length > 0) {
+      await db.delete(chatMessagesTable).where(inArray(chatMessagesTable.roomId, roomIds));
+    }
+    await db.delete(chatMessagesTable).where(eq(chatMessagesTable.senderId, id));
+
+    // 3. 채팅방 삭제
+    if (roomIds.length > 0) {
+      await db.delete(chatRoomsTable).where(inArray(chatRoomsTable.id, roomIds));
+    }
+
+    // 4. 주문 삭제 (buyerId / sellerId FK)
+    await db.delete(ordersTable).where(or(eq(ordersTable.buyerId, id), eq(ordersTable.sellerId, id)));
+
+    // 5. 출금 신청 삭제
+    await db.delete(withdrawalsTable).where(eq(withdrawalsTable.userId, id));
+
+    // 6. 지갑 삭제
+    await db.delete(walletsTable).where(eq(walletsTable.userId, id));
+
+    // 7. 유저 삭제
+    await db.delete(usersTable).where(eq(usersTable.id, id));
+
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "삭제에 실패했습니다: " + msg });
+  }
 });
 
 // ── 상품 관리 ──────────────────────────────────────────────────────
