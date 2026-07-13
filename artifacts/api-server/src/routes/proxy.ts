@@ -5334,11 +5334,40 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       e.preventDefault();
       if (confirm('채팅을 종료하시겠습니까?')) {
         if (pollTimer) clearInterval(pollTimer);
-        if (window.opener) { window.close(); } else { location.href = '/myroom/chat/list.html'; }
+        api('PATCH', '/chat/rooms/' + roomId, { status: 'cancelled' }).then(function() {
+          if (window.opener) { window.close(); } else { location.href = '/myroom/chat/list.html'; }
+        }).catch(function() {
+          if (window.opener) { window.close(); } else { location.href = '/myroom/chat/list.html'; }
+        });
       }
     });
 
-    ['chat_block','user_report','chat_template','chat_alarm','chat_print','send_file'].forEach(function(id) {
+    // 채팅차단
+    var chatBlockBtn = document.getElementById('chat_block');
+    if (chatBlockBtn) chatBlockBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert('차단되었습니다.');
+    });
+    // 신고하기
+    var userReportBtn = document.getElementById('user_report');
+    if (userReportBtn) userReportBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert('신고되었습니다.');
+    });
+    // 자주쓰는채팅
+    var chatTemplateBtn = document.getElementById('chat_template');
+    if (chatTemplateBtn) chatTemplateBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert('현재 거래 상대방이 채팅에 참여 중입니다. 해당 기능은 이용하실 수 없습니다.');
+    });
+    // 알림보내기
+    var chatAlarmBtn = document.getElementById('chat_alarm');
+    if (chatAlarmBtn) chatAlarmBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert('알림을 보내었습니다.');
+    });
+    // 나머지 (인쇄, 파일전송)
+    ['chat_print','send_file'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('click', function(e) { e.preventDefault(); alert('해당 기능은 준비 중입니다.'); });
     });
