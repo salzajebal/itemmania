@@ -1381,17 +1381,18 @@ function _imSetupSearchFrame() {
   var initScr = frame.querySelector('.initial_screen');
   var gsList = frame.querySelector('.gs_list');
   var _acTimer = null;
-  frame.dataset.selGoods = 'all';
-  /* 카테고리 탭: mousedown에서 포커스 유지 + 라디오 수동 체크 + selGoods 업데이트 */
+  /* 카테고리 탭: mousedown에서 포커스 유지 + 라디오 수동 체크 + sessionStorage 저장 */
+  try { sessionStorage.setItem('_imSelGoods', 'all'); } catch(e) {}
   var _selItems = frame.querySelectorAll('.search-select-item');
   _selItems.forEach(function(item) {
     var radio = item.querySelector('input[name=search_goods]');
     if (!radio) return;
     item.addEventListener('mousedown', function(e) {
       e.preventDefault();
+      e.stopImmediatePropagation();
       frame.querySelectorAll('input[name=search_goods]').forEach(function(r) { r.checked = false; });
       radio.checked = true;
-      frame.dataset.selGoods = radio.value;
+      try { sessionStorage.setItem('_imSelGoods', radio.value); } catch(ex) {}
       setTimeout(function() { inp.focus(); }, 0);
     }, true);
   });
@@ -1469,11 +1470,15 @@ function _imSetupSearchFrame() {
       inp.value = name || '';
       window._IM_sel_game = { code: code, id: id, name: name };
       hideFrame();
-      var goodsVal = frame.dataset.selGoods || 'all';
-      var catMap = window._IM_GOODS_CAT_MAP || {};
-      var itemCat = catMap[goodsVal] || '';
+      /* 카테고리는 sessionStorage에서 읽어 _imPendingCategory로 재저장
+         sell/list 페이지 로드 시 SELL_LIST_INTERCEPT_SCRIPT가 읽어 URL에 반영 */
+      var goodsVal = (function() { try { return sessionStorage.getItem('_imSelGoods') || 'all'; } catch(e) { return 'all'; } })();
+      if (goodsVal && goodsVal !== 'all') {
+        try { sessionStorage.setItem('_imPendingCategory', goodsVal); } catch(e) {}
+      } else {
+        try { sessionStorage.removeItem('_imPendingCategory'); } catch(e) {}
+      }
       var url = '/sell/list.html?search_game=' + encodeURIComponent(code || id);
-      if (itemCat) url += '&itemCategory=' + encodeURIComponent(itemCat);
       location.href = url;
     }, true);
   }
@@ -1877,6 +1882,21 @@ function serveLineageClassic(html: string, user: Record<string, unknown> | null 
 const SELL_LIST_INTERCEPT_SCRIPT = `
 <script>
 (function() {
+  /* ── sessionStorage 대기 카테고리 → URL 즉시 반영 ─────────────────────── */
+  (function() {
+    try {
+      var pending = sessionStorage.getItem('_imPendingCategory');
+      if (!pending || pending === 'all') return;
+      var params = new URLSearchParams(location.search);
+      if (params.get('itemCategory')) return; /* 이미 있으면 스킵 */
+      var _CAT = {money:'게임머니', item:'아이템', character:'계정', etc:'기타'};
+      var label = _CAT[pending];
+      if (!label) return;
+      sessionStorage.removeItem('_imPendingCategory');
+      params.set('itemCategory', label);
+      location.replace(location.pathname + '?' + params.toString());
+    } catch(e) {}
+  })();
   function fmt(n) { return Number(n||0).toLocaleString('ko-KR'); }
   function timeLabel(d) {
     if (!d) return '';

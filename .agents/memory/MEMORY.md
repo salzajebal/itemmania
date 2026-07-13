@@ -8,3 +8,4 @@
 - [SingleFile charge page clipping](singlefile-charge-clipping.md) — #g_POPUP inner anonymous div clips content after .mile_detail; fix by dynamically injecting charge UI after #g_POPUP via JS, not inside clipped area.
 - [Snapshot HTML data injection](snapshot-html-injection.md) — client-side JS injection into SingleFile snapshots unreliable; do server-side string/regex replace in applyProductToHtml() before serving.
 - [Qty control event delegation](qty-control-delegation.md) — quantity +/- listeners must use document-level delegation in init(), not direct addEventListener in injectProduct IIFE.
+- [Search category two-step nav](search-category-nav.md) — snapshot JS overrides location.href removing itemCategory; fix: store pending category in sessionStorage, sell/list page reads it on load and location.replace with itemCategory.
