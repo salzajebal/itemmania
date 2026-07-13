@@ -5,3 +5,4 @@ export * from "./orders";
 export * from "./chat";
 export * from "./withdrawals";
 export * from "./games";
+export * from "./sessions";
