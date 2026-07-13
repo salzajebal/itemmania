@@ -1,19 +1,43 @@
 import { Router } from "express";
 import { db, gamesTable, gameServersTable } from "@workspace/db";
-import { ilike, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 const router = Router();
 
-// GET /api/games/search?q=검색어
+const CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+
+function getChosung(char: string): string {
+  const code = char.charCodeAt(0);
+  if (code < 0xAC00 || code > 0xD7A3) return char;
+  return CHOSUNG[Math.floor((code - 0xAC00) / (21 * 28))];
+}
+
+function isChosungOnly(str: string): boolean {
+  return str.length > 0 && [...str].every(c => c >= 'ㄱ' && c <= 'ㅎ');
+}
+
+function matchesQuery(name: string, query: string): boolean {
+  const q = query.toLowerCase();
+  const n = name.toLowerCase();
+  if (n.includes(q)) return true;
+  if (isChosungOnly(query)) {
+    const nameChosung = [...name].map(getChosung).join('');
+    return nameChosung.includes(query);
+  }
+  return false;
+}
+
+// GET /api/games/search?q=검색어 (초성 검색 지원)
 router.get("/games/search", async (req, res): Promise<void> => {
   const q = String(req.query["q"] ?? "").trim();
 
   if (!q) { res.json([]); return; }
 
-  const games = await db.select().from(gamesTable).where(ilike(gamesTable.name, `%${q}%`)).orderBy(asc(gamesTable.sortOrder)).limit(20);
+  const allGames = await db.select().from(gamesTable).orderBy(asc(gamesTable.sortOrder));
+  const matched = allGames.filter(g => matchesQuery(g.name, q)).slice(0, 20);
 
   const result = await Promise.all(
-    games.map(async (game) => {
+    matched.map(async (game) => {
       const servers = await db
         .select({ id: gameServersTable.id, name: gameServersTable.name })
         .from(gameServersTable)
