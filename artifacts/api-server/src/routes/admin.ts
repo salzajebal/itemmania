@@ -27,6 +27,7 @@ const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string 
   { file: "sell-geosang.html", gameId: 101, gameName: "거상" },
   { file: "sell-aion2.html", gameId: 5799, gameName: "아이온2" },
   { file: "sell-dnf.html", gameId: 281, gameName: "던전앤파이터" },
+  { file: "sell-mapleland.html", gameId: 5990, gameName: "메이플랜드" },
 ];
 
 const router: IRouter = Router();
@@ -587,6 +588,7 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 5799, name: "아이온2",            slug: "aion2" },
   { id: 155,  name: "마비노기",           slug: "mabinogi" },
   { id: 101,  name: "거상",               slug: "geosang" },
+  { id: 5990, name: "메이플랜드",         slug: "mapleland" },
 ];
 
 function scraperUrl(targetUrl: string, apiKey: string, sessionNumber: number): string {

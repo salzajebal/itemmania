@@ -173,6 +173,7 @@ const paymentListHtml         = loadSellHtml("payment-list.html");
 const paymentPhoneListHtml    = loadSellHtml("payment-phone-list.html");
 const sellApplicationHtml     = loadSellHtml("sell-application-1.html");
 const sellMaplestoryHtml      = loadSellHtml("sell-maplestory.html");
+const sellMaplelandHtml       = loadSellHtml("sell-mapleland.html");
 const sellOdinHtml            = loadSellHtml("sell-odin.html");
 const sellMabinogiHtml        = loadSellHtml("sell-mabinogi.html");
 const sellLostarkHtml         = loadSellHtml("sell-lostark.html");
@@ -201,6 +202,7 @@ const SELL_HTML_MAP: Record<string, string> = {
   "101":  sellGeosangHtml,     // 거상
   "5799": sellAion2Html,       // 아이온2
   "281":  sellDnfHtml,         // 던전앤파이터
+  "5990": sellMaplelandHtml,   // 메이플랜드
 };
 
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
