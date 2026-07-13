@@ -1280,38 +1280,74 @@ document.addEventListener('submit',function(e){
     }
   }
 },true);
-/* ── g_searchbar_form (게임 검색) 전용 처리 ── */
+/* ── 메인 검색 공통 함수: 카테고리 포함 sell list 이동 ── */
+var _IM_GOODS_CAT_MAP = {all:'',money:'게임머니',item:'아이템',character:'계정',etc:'기타'};
+function _imDoGameSearch() {
+  var form = document.getElementById('g_searchbar_form');
+  var inp = form ? form.querySelector('input[name="searchGameServer"],input.search_gs_name') : null;
+  var goodsEl = form ? form.querySelector('input[name="search_goods"]:checked') : null;
+  var goods = goodsEl ? goodsEl.value : 'all';
+  var itemCat = _IM_GOODS_CAT_MAP[goods] || '';
+  function doNav(code) {
+    var url = '/sell/list.html?search_game=' + encodeURIComponent(code);
+    if (itemCat) url += '&itemCategory=' + encodeURIComponent(itemCat);
+    location.href = url;
+  }
+  if (window._IM_sel_game && (window._IM_sel_game.code || window._IM_sel_game.id)) {
+    doNav(window._IM_sel_game.code || String(window._IM_sel_game.id));
+    return;
+  }
+  var keyword = (inp && inp.value.trim()) || '';
+  if (keyword) {
+    fetch('/api/games/search?q=' + encodeURIComponent(keyword), {credentials:'include'})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(data){
+        var games = data&&data.items ? data.items : (Array.isArray(data)?data:[]);
+        if (games.length && (games[0].code || games[0].id)) {
+          doNav(games[0].code || String(games[0].id));
+        } else { location.href='/'; }
+      })
+      .catch(function(){ location.href='/'; });
+  } else {
+    location.href='/';
+  }
+}
+/* ── g_searchbar_form submit 인터셉트 ── */
 document.addEventListener('submit',function(e){
   var form=e.target;
   if(!form||form.id!=='g_searchbar_form') return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  // 자동완성으로 게임이 선택된 경우 → 해당 게임의 sell list로 이동 (code = itemmania 게임코드)
-  if(window._IM_sel_game && window._IM_sel_game.code){
-    location.href='/sell/list.html?search_game='+window._IM_sel_game.code;
-    return;
-  }
-  // 키워드 입력만 있는 경우 → /api/games/search 후 첫 결과 게임의 code로 이동
-  var inp=form.querySelector('input[name="searchGameServer"],input.search_gs_name');
-  var keyword=(inp&&inp.value.trim())||'';
-  if(keyword){
-    fetch('/api/games/search?q='+encodeURIComponent(keyword),{credentials:'include'})
-      .then(function(r){return r.ok?r.json():null;})
-      .then(function(data){
-        var games=data&&data.items?data.items:(Array.isArray(data)?data:[]);
-        if(games.length && games[0].code){
-          location.href='/sell/list.html?search_game='+games[0].code;
-        } else {
-          location.href='/';
-        }
-      })
-      .catch(function(){
-        location.href='/';
-      });
-  } else {
-    location.href='/';
-  }
+  _imDoGameSearch();
 },true);
+/* ── 검색 버튼 직접 클릭 인터셉트 (원본 JS 보다 먼저 capture) ── */
+document.addEventListener('click',function(e){
+  var btn = e.target && e.target.closest && e.target.closest('#g_search_list, button.g_search_list[type="submit"]');
+  if (!btn) return;
+  if (!btn.closest('#g_searchbar_form')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  _imDoGameSearch();
+},true);
+/* ── 카테고리 선택 패널 표시/숨김 ── */
+function _imSetupSearchFrame() {
+  var inp = document.getElementById('searchGameServer');
+  if (!inp) { setTimeout(_imSetupSearchFrame, 300); return; }
+  var form = inp.closest('#g_searchbar_form');
+  if (!form) return;
+  var frame = form.querySelector('.g_search_frame');
+  if (!frame) return;
+  function showFrame() { frame.classList.remove('g_hidden'); }
+  function hideFrame() { if (!inp.value.trim()) frame.classList.add('g_hidden'); }
+  inp.addEventListener('focus', showFrame, true);
+  inp.addEventListener('input', showFrame, true);
+  document.addEventListener('click', function(e) {
+    var wrapper = inp.closest('.g_search_wrapper') || form;
+    if (wrapper && wrapper.contains(e.target)) return;
+    frame.classList.add('g_hidden');
+  }, false);
+}
+_imSetupSearchFrame();
 /* ── 전역 헤더 로그인/로그아웃 업데이트 (모든 페이지 공통) ── */
 var _imHeaderObserver=null;
 function _imApplyHeader(data){

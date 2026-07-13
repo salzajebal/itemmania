@@ -57,13 +57,27 @@ router.get("/products", async (req, res): Promise<void> => {
     conditions.push(eq(productsTable.itemCategory, itemCategory));
   }
 
-  // gameCode → gameName 변환 (itemmania 게임코드를 게임명으로)
+  // gameCode → gameName 변환 (itemmania 게임코드 또는 숫자 id)
   if (gameCode && typeof gameCode === "string" && gameCode.trim()) {
-    const [game] = await db
+    let game: { name: string } | null = null;
+    const [byCode] = await db
       .select()
       .from(gamesTable)
       .where(eq(gamesTable.code, gameCode.trim()))
       .limit(1);
+    if (byCode) {
+      game = byCode;
+    } else {
+      const numId = parseInt(gameCode.trim(), 10);
+      if (!isNaN(numId)) {
+        const [byId] = await db
+          .select()
+          .from(gamesTable)
+          .where(eq(gamesTable.id, numId))
+          .limit(1);
+        if (byId) game = byId;
+      }
+    }
     if (game) {
       conditions.push(eq(productsTable.gameName, game.name));
     }
