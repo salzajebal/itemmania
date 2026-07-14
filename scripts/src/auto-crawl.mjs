@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 아이템마니아 로컬 크롤러 — AJAX 직접 POST 방식
+ * 아이템마니아 로컬 크롤러 — AJAX JSON 직접 파싱
  *
  * ─── 사용법 ───────────────────────────────────────
  *  1. Node.js 18 이상 필요 (https://nodejs.org)
@@ -18,22 +18,11 @@ const SITE_URL  = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없
 const CRAWL_KEY = 'YOUR_CRAWL_KEY';               // 어드민 패널에서 확인
 
 // ─── CLI 인수 파싱 ─────────────────────────────────────────────────────────
-// 사용 예시:
-//   node auto-crawl.mjs                      → 전체 게임, 5페이지, 1시간 반복
-//   node auto-crawl.mjs --games 5990         → 메이플랜드만
-//   node auto-crawl.mjs --games 5990,5913    → 여러 게임 (쉼표 구분)
-//   node auto-crawl.mjs --pages 3            → 게임당 3페이지
-//   node auto-crawl.mjs --once               → 1회만 실행 후 종료
-//   node auto-crawl.mjs --games 5990 --pages 3 --once
-// ──────────────────────────────────────────────────────────────────────────
 const _args = process.argv.slice(2);
-function _getArg(name) {
-  const idx = _args.indexOf(name);
-  return idx >= 0 ? _args[idx + 1] : undefined;
-}
-const _gamesArg  = _getArg('--games');
-const _pagesArg  = _getArg('--pages');
-const _onceFlag  = _args.includes('--once');
+function _getArg(name) { const idx = _args.indexOf(name); return idx >= 0 ? _args[idx + 1] : undefined; }
+const _gamesArg = _getArg('--games');
+const _pagesArg = _getArg('--pages');
+const _onceFlag = _args.includes('--once');
 
 // 수집할 게임 목록
 const ALL_GAMES = [
@@ -50,20 +39,11 @@ const ALL_GAMES = [
   { id: 101,  name: '거상' },
 ];
 
-// CLI --games 로 필터 (없으면 전체)
 const _filterIds = _gamesArg ? _gamesArg.split(',').map(s => parseInt(s.trim(), 10)) : null;
 const GAMES = _filterIds ? ALL_GAMES.filter(g => _filterIds.includes(g.id)) : ALL_GAMES;
-
-// 팝니다/삽니다 둘 다 수집 (한쪽만 원하면 제거)
 const CATEGORIES = ['sell', 'buy'];
-
-// 게임당 수집 페이지 수 (CLI --pages 로 오버라이드 가능)
 const PAGES_PER_GAME = _pagesArg ? Math.max(1, parseInt(_pagesArg, 10)) : 5;
-
-// 자동 반복 주기 (기본 1시간) — --once 이면 무시
 const INTERVAL_MS = 60 * 60 * 1000;
-
-// ─── 이하 수정 불필요 ──────────────────────────────
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const AGENT = new https.Agent({ keepAlive: true });
@@ -73,7 +53,6 @@ function ts() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seou
 function log(msg) { console.log(`[${ts()}] ${msg}`); }
 
 // ─── AJAX POST 직접 호출 ───────────────────────────────────────────────────
-// itemmania /sell/ajax_list.php 또는 /buy/ajax_list.php 에 form POST
 async function fetchAjaxList(gameId, category, tid, retries = 2) {
   const url = `https://www.itemmania.com/${category}/ajax_list.php`;
   const body = new URLSearchParams({
@@ -97,7 +76,7 @@ async function fetchAjaxList(gameId, category, tid, retries = 2) {
             'User-Agent': UA,
             'Content-Type': 'application/x-www-form-urlencoded',
             'Content-Length': Buffer.byteLength(body),
-            'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
+            'Accept': 'application/json, text/html, */*',
             'Accept-Encoding': 'gzip, deflate',
             'Accept-Language': 'ko-KR,ko;q=0.9',
             'Referer': `https://www.itemmania.com/${category}/list.html?search_game=${gameId}&search_goods=all`,
@@ -108,11 +87,10 @@ async function fetchAjaxList(gameId, category, tid, retries = 2) {
         };
         const req = https.request(options, (res) => {
           const stream = res.headers['content-encoding'] === 'gzip'
-            ? res.pipe(createGunzip())
-            : res;
+            ? res.pipe(createGunzip()) : res;
           const chunks = [];
           stream.on('data', d => chunks.push(d));
-          stream.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+          stream.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
           stream.on('error', reject);
         });
         req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
@@ -128,38 +106,58 @@ async function fetchAjaxList(gameId, category, tid, retries = 2) {
   }
 }
 
-// ─── 응답 HTML에서 nextTid 추출 ───────────────────────────────────────────
-// ajax_list.php 응답에는 data-tid 항목들 + 다음 페이지를 위한 tid 값이 포함됨
-function extractNextTid(html) {
-  // 형태 1: <input type="hidden" id="tid" value="12345">
-  const m1 = html.match(/id=["']tid["'][^>]*value=["']([0-9]+)["']/i);
-  if (m1) return parseInt(m1[1], 10);
-  // 형태 2: value="12345" id="tid"
-  const m2 = html.match(/value=["']([0-9]+)["'][^>]*id=["']tid["']/i);
-  if (m2) return parseInt(m2[1], 10);
-  // 형태 3: JS 변수 tid = 12345
-  const m3 = html.match(/\btid\s*[=:]\s*['""]?([0-9]+)/);
-  if (m3) return parseInt(m3[1], 10);
-  // 형태 4: data-tid 마지막 값 (페이지 커서로 사용)
-  const all = [...html.matchAll(/data-tid=["']([0-9]+)["']/g)];
-  if (all.length > 0) return parseInt(all[all.length - 1][1], 10);
-  return null;
+// ─── JSON 응답 → 상품 배열 변환 ───────────────────────────────────────────
+// trade_id, trade_money, gs_name, str_trade_kind, trade_category 등 매핑
+function parseProducts(data, gameId, gameName, category) {
+  // data.p = 일반 상품 배열, data.pp = 프리미엄 상품 배열 (추정)
+  const items = [
+    ...(Array.isArray(data.p)  ? data.p  : []),
+    ...(Array.isArray(data.pp) ? data.pp : []),
+  ];
+
+  return items.map(item => {
+    const price = parseInt(String(item.trade_money ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
+    // 제목: trade_title > goods_name > str_trade_kind 순 fallback
+    const title = (item.trade_title || item.goods_name || item.str_trade_kind || item.trade_kind_name || '').trim();
+    // 서버명: server_name > gs_name (게임+서버 합산일 수 있음)
+    const serverName = (item.server_name || item.gs_name || '').trim();
+    // 종목: trade_category_name > str_goods_kind > str_trade_kind
+    const itemCategory = (item.trade_category_name || item.str_goods_kind || item.str_trade_kind || '').trim();
+    // 판매자 등급: seller_icon_type 또는 premium 필드
+    const gradeRaw = (item.seller_icon_type || item.seller_grade || '').toLowerCase();
+    const gradeMap = { vip: 'vip', platinum: 'platinum', gold: 'gold', silver: 'silver', bronze: 'bronze', p: 'platinum' };
+    const sellerGrade = gradeMap[gradeRaw] ?? null;
+    // 판매자명
+    const sellerName = (item.seller_id || item.member_id || '').trim() || null;
+
+    return {
+      itemmaniaid: String(item.trade_id ?? ''),
+      title: title || itemCategory || '(제목없음)',
+      price,
+      gameName,
+      serverName,
+      itemCategory,
+      category,
+      sellerGrade,
+      sellerName,
+      detailUrl: item.trade_id
+        ? `https://www.itemmania.com/${category}/application.html?id=${item.trade_id}`
+        : null,
+    };
+  }).filter(p => p.itemmaniaid);
 }
 
-// ─── HTML을 서버에 업로드 → 파싱 & DB 저장 ────────────────────────────────
-async function uploadHtml(html, gameId, gameName, category) {
-  const res = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
+// ─── 서버 배치 업로드 ──────────────────────────────────────────────────────
+async function batchUpload(products) {
+  const res = await fetch(`${SITE_URL}/api/admin/crawl/batch`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Crawl-Key': CRAWL_KEY,
-    },
-    body: JSON.stringify({ html, gameId, gameName, category }),
+    headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
+    body: JSON.stringify({ products }),
     signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`업로드 실패 (${res.status}): ${body.slice(0, 200)}`);
+    throw new Error(`배치 업로드 실패 (${res.status}): ${body.slice(0, 200)}`);
   }
   return res.json();
 }
@@ -175,42 +173,56 @@ async function runOnce() {
     for (const game of GAMES) {
       process.stdout.write(`  [${game.name}] `);
       let gameSaved = 0;
-      let tid = 0;          // 첫 페이지는 tid=0
+      let tid = 0;
       let pagesDone = 0;
 
       for (let page = 1; page <= PAGES_PER_GAME; page++) {
         try {
-          const { status, body: html } = await fetchAjaxList(game.id, cat, tid);
+          const { status, text } = await fetchAjaxList(game.id, cat, tid);
 
-          if (status !== 200 || !html || html.length < 100) {
+          if (status !== 200 || !text || text.length < 10) {
             process.stdout.write(`${page}p:❌(${status}) `);
             totalFailed++;
             break;
           }
 
-          // 서버에 업로드 & 파싱
-          const result = await uploadHtml(html, game.id, game.name, cat);
-          const saved = result.saved ?? 0;
-          const parsed = result.parsed ?? 0;
+          // JSON 파싱
+          let json;
+          try { json = JSON.parse(text); }
+          catch { process.stdout.write(`${page}p:❌(JSON오류) `); break; }
 
-          if (parsed === 0) {
-            // 첫 페이지에서 파싱 실패 시 디버그 출력
-            if (page === 1) {
-              const d = result.debug || {};
-              process.stdout.write(`\n  [디버그] status=${status} len=${html.length} tid_count=${d.dataTidCount??'?'}\n`);
-              process.stdout.write(`  응답 앞 300자: ${html.slice(0, 300).replace(/\s+/g, ' ')}\n`);
-            }
-            break; // 이 게임/카테고리 더 이상 데이터 없음
+          if (json.result !== 'SUCCESS') {
+            process.stdout.write(`${page}p:❌(${json.result}) `);
+            break;
           }
 
+          const products = parseProducts(json.data ?? json, game.id, game.name, cat);
+
+          if (products.length === 0) {
+            if (page === 1) {
+              // 첫 페이지 빈 응답: 필드 구조 출력
+              const sampleItem = (json.data?.p ?? json.data?.pp ?? [])[0];
+              if (sampleItem) {
+                process.stdout.write(`\n  [필드구조] ${JSON.stringify(Object.keys(sampleItem))}\n`);
+                process.stdout.write(`  [샘플] ${JSON.stringify(sampleItem)}\n`);
+              } else {
+                process.stdout.write(`\n  [데이터없음] keys=${JSON.stringify(Object.keys(json.data ?? json))}\n`);
+              }
+            }
+            break;
+          }
+
+          // 서버에 배치 업로드
+          const result = await batchUpload(products);
+          const saved = result.upserted ?? 0;
           gameSaved += saved;
           totalSaved += saved;
           pagesDone++;
           process.stdout.write(`${page}p:${saved}개 `);
 
-          // 다음 페이지 tid 추출
-          const nextTid = extractNextTid(html);
-          if (nextTid === null || nextTid === tid) break; // 더 이상 페이지 없음
+          // 다음 tid: JSON 응답에서 추출
+          const nextTid = json.data?.tid ?? json.tid ?? json.data?.next_tid ?? null;
+          if (nextTid === null || nextTid === tid || nextTid === 0) break;
           tid = nextTid;
 
         } catch (e) {
@@ -231,7 +243,7 @@ async function runOnce() {
 
 async function main() {
   console.log('\n' + '='.repeat(55));
-  console.log('  🕷️  아이템마니아 로컬 크롤러 (AJAX 직접 POST)');
+  console.log('  🕷️  아이템마니아 로컬 크롤러 (AJAX JSON)');
   console.log('='.repeat(55));
   console.log(`  서버:     ${SITE_URL}`);
   console.log(`  게임:     ${GAMES.map(g => g.name).join(', ')}`);
@@ -244,10 +256,10 @@ async function main() {
   // 서버 연결 테스트
   process.stdout.write('🔗 서버 연결 확인 중...');
   try {
-    const testRes = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
+    const testRes = await fetch(`${SITE_URL}/api/admin/crawl/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
-      body: JSON.stringify({ html: '<test>', gameId: 0, category: 'sell' }),
+      body: JSON.stringify({ products: [] }),
       signal: AbortSignal.timeout(10000),
     });
     if (testRes.status === 401) {
@@ -257,26 +269,27 @@ async function main() {
     console.log(' ✅');
   } catch (e) {
     console.error(` ❌ 서버 연결 실패: ${e.message}`);
-    console.error(`   SITE_URL을 확인하세요: ${SITE_URL}`);
     process.exit(1);
   }
 
-  // itemmania AJAX 응답 포맷 확인 (첫 1회)
-  log('🔍 itemmania AJAX 응답 확인 중...');
+  // JSON 구조 사전 확인 (리니지클래식 1페이지)
+  log('🔍 AJAX JSON 구조 확인 중...');
   try {
-    const { status, body: testHtml } = await fetchAjaxList(5913, 'sell', 0, 1);
-    log(`   status=${status} len=${testHtml?.length ?? 0}`);
-    if (testHtml && testHtml.length > 100) {
-      const tidCount = (testHtml.match(/data-tid=/g) || []).length;
-      const nextTid = extractNextTid(testHtml);
-      log(`   data-tid 항목 수: ${tidCount}`);
-      log(`   nextTid: ${nextTid}`);
-      log(`   응답 앞 400자: ${testHtml.slice(0, 400).replace(/\s+/g, ' ')}`);
-    } else {
-      log(`   ⚠️  응답이 짧습니다: ${testHtml?.slice(0, 300)}`);
+    const { status, text } = await fetchAjaxList(5913, 'sell', 0, 1);
+    log(`   status=${status} len=${text?.length ?? 0}`);
+    const json = JSON.parse(text);
+    log(`   result=${json.result}`);
+    log(`   data keys: ${JSON.stringify(Object.keys(json.data ?? json))}`);
+    const pArr = json.data?.p ?? [];
+    log(`   p[] 개수: ${pArr.length}`);
+    if (pArr.length > 0) {
+      log(`   첫 번째 항목 keys: ${JSON.stringify(Object.keys(pArr[0]))}`);
+      log(`   첫 번째 항목: ${JSON.stringify(pArr[0])}`);
     }
+    // tid/pagination 확인
+    log(`   tid/pagination: tid=${json.data?.tid} next_tid=${json.data?.next_tid} total=${json.data?.total}`);
   } catch (e) {
-    log(`   ⚠️  AJAX 테스트 실패: ${e.message}`);
+    log(`   ⚠️  구조 확인 실패: ${e.message}`);
   }
 
   if (_onceFlag) {
