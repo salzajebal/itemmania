@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 아이템마니아 로컬 크롤러 (ScraperAPI 불필요)
+ * 아이템마니아 로컬 크롤러 — AJAX 직접 POST 방식
  *
  * ─── 사용법 ───────────────────────────────────────
  *  1. Node.js 18 이상 필요 (https://nodejs.org)
@@ -72,94 +72,81 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function ts() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }); }
 function log(msg) { console.log(`[${ts()}] ${msg}`); }
 
-// itemmania 페이지 HTML 가져오기 (gzip 지원, 재시도 포함)
-async function fetchHtml(url, retries = 2) {
+// ─── AJAX POST 직접 호출 ───────────────────────────────────────────────────
+// itemmania /sell/ajax_list.php 또는 /buy/ajax_list.php 에 form POST
+async function fetchAjaxList(gameId, category, tid, retries = 2) {
+  const url = `https://www.itemmania.com/${category}/ajax_list.php`;
+  const body = new URLSearchParams({
+    search_game: String(gameId),
+    search_goods: 'all',
+    tid: String(tid),
+    search_kind: '',
+    search_word: '',
+  }).toString();
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const html = await new Promise((resolve, reject) => {
-        const req = https.get(url, {
+      const result = await new Promise((resolve, reject) => {
+        const urlObj = new URL(url);
+        const options = {
+          hostname: urlObj.hostname,
+          path: urlObj.pathname,
+          method: 'POST',
           agent: AGENT,
           headers: {
             'User-Agent': UA,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(body),
+            'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
             'Accept-Encoding': 'gzip, deflate',
             'Accept-Language': 'ko-KR,ko;q=0.9',
-            'Referer': 'https://www.itemmania.com/',
+            'Referer': `https://www.itemmania.com/${category}/list.html?search_game=${gameId}&search_goods=all`,
+            'Origin': 'https://www.itemmania.com',
+            'X-Requested-With': 'XMLHttpRequest',
           },
           timeout: 25000,
-        }, (res) => {
-          if (res.statusCode >= 301 && res.statusCode <= 302 && res.headers.location) {
-            res.resume();
-            resolve(fetchHtml(res.headers.location, retries - 1));
-            return;
-          }
+        };
+        const req = https.request(options, (res) => {
           const stream = res.headers['content-encoding'] === 'gzip'
             ? res.pipe(createGunzip())
             : res;
           const chunks = [];
           stream.on('data', d => chunks.push(d));
-          stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+          stream.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
           stream.on('error', reject);
         });
         req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
         req.on('error', reject);
+        req.write(body);
+        req.end();
       });
-      if (typeof html === 'string' && html.length > 500) return html;
-      throw new Error(`응답 너무 짧음 (${typeof html === 'string' ? html.length : 0}바이트)`);
+      return result;
     } catch (e) {
-      if (attempt < retries) {
-        await sleep(2000 * (attempt + 1));
-        continue;
-      }
+      if (attempt < retries) { await sleep(2000 * (attempt + 1)); continue; }
       throw e;
     }
   }
 }
 
-// itemmania 리스트 JS에서 API 엔드포인트 추출
-async function discoverApi() {
-  try {
-    const html = await fetchHtml('https://www.itemmania.com/sell/list.html?search_game=5913&search_goods=all&page=1');
-    const jsMatch = html.match(/src=["']([^"']*\/(?:list|goods|trade)[^"']*\.(?:js|min\.js)[^"']*)["']/i);
-    if (!jsMatch) { log('⚠️  리스트 JS URL 탐지 실패'); return null; }
-    const jsUrl = jsMatch[1].startsWith('http') ? jsMatch[1] : 'https://www.itemmania.com' + jsMatch[1].split('?')[0] + (jsMatch[1].includes('?') ? '?' + jsMatch[1].split('?')[1] : '');
-    log(`🔍 리스트 JS: ${jsUrl}`);
-    const jsText = await fetchHtml(jsUrl);
-    log(`   JS 크기: ${jsText.length}바이트`);
-
-    // 1) 슬래시로 시작하는 모든 경로 문자열 추출
-    const allPaths = [...new Set((jsText.match(/["'`](\/[a-zA-Z][a-zA-Z0-9/_.-]{4,80})["'`]/g) || [])
-      .map(s => s.slice(1, -1)))];
-    const apiPaths = allPaths.filter(p => /sell|buy|list|goods|trade|item|product|search|api/.test(p));
-    if (apiPaths.length) {
-      log(`📡 경로 패턴 (${apiPaths.length}개):`);
-      apiPaths.slice(0, 15).forEach(p => log(`   ${p}`));
-    }
-
-    // 2) XMLHttpRequest.open 또는 fetch 호출 주변 50자
-    const xhrMatches = (jsText.match(/\.open\s*\(\s*["'][A-Z]+["']\s*,\s*["'`][^"'`]{3,100}["'`]/g) || []).slice(0, 8);
-    if (xhrMatches.length) { log('XHR open:'); xhrMatches.forEach(x => log('   ' + x)); }
-
-    // 3) JS 앞 2000자 출력 (URL 조합 패턴 확인)
-    log('--- JS 시작 2000자 ---');
-    log(jsText.slice(0, 2000));
-    log('--- JS 끝 ---');
-
-    // 서버에 전달
-    await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
-      body: JSON.stringify({ html: jsText.slice(0, 80000), gameId: 0, category: 'sell', gameName: '__JS_DISCOVERY__' }),
-      signal: AbortSignal.timeout(30000),
-    }).catch(() => {});
-    return apiPaths;
-  } catch (e) {
-    log(`⚠️  API 탐색 실패: ${e.message}`);
-    return null;
-  }
+// ─── 응답 HTML에서 nextTid 추출 ───────────────────────────────────────────
+// ajax_list.php 응답에는 data-tid 항목들 + 다음 페이지를 위한 tid 값이 포함됨
+function extractNextTid(html) {
+  // 형태 1: <input type="hidden" id="tid" value="12345">
+  const m1 = html.match(/id=["']tid["'][^>]*value=["']([0-9]+)["']/i);
+  if (m1) return parseInt(m1[1], 10);
+  // 형태 2: value="12345" id="tid"
+  const m2 = html.match(/value=["']([0-9]+)["'][^>]*id=["']tid["']/i);
+  if (m2) return parseInt(m2[1], 10);
+  // 형태 3: JS 변수 tid = 12345
+  const m3 = html.match(/\btid\s*[=:]\s*['""]?([0-9]+)/);
+  if (m3) return parseInt(m3[1], 10);
+  // 형태 4: data-tid 마지막 값 (페이지 커서로 사용)
+  const all = [...html.matchAll(/data-tid=["']([0-9]+)["']/g)];
+  if (all.length > 0) return parseInt(all[all.length - 1][1], 10);
+  return null;
 }
 
-// HTML을 서버에 업로드 → 서버가 파싱 & 저장
+// ─── HTML을 서버에 업로드 → 파싱 & DB 저장 ────────────────────────────────
 async function uploadHtml(html, gameId, gameName, category) {
   const res = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
     method: 'POST',
@@ -177,6 +164,7 @@ async function uploadHtml(html, gameId, gameName, category) {
   return res.json();
 }
 
+// ─── 메인 수집 루프 ────────────────────────────────────────────────────────
 async function runOnce() {
   let totalSaved = 0, totalFailed = 0;
 
@@ -187,34 +175,54 @@ async function runOnce() {
     for (const game of GAMES) {
       process.stdout.write(`  [${game.name}] `);
       let gameSaved = 0;
+      let tid = 0;          // 첫 페이지는 tid=0
+      let pagesDone = 0;
 
       for (let page = 1; page <= PAGES_PER_GAME; page++) {
-        const url = `https://www.itemmania.com/${cat}/list.html?search_game=${game.id}&search_goods=all&page=${page}`;
         try {
-          const html = await fetchHtml(url);
+          const { status, body: html } = await fetchAjaxList(game.id, cat, tid);
+
+          if (status !== 200 || !html || html.length < 100) {
+            process.stdout.write(`${page}p:❌(${status}) `);
+            totalFailed++;
+            break;
+          }
+
+          // 서버에 업로드 & 파싱
           const result = await uploadHtml(html, game.id, game.name, cat);
           const saved = result.saved ?? 0;
           const parsed = result.parsed ?? 0;
+
+          if (parsed === 0) {
+            // 첫 페이지에서 파싱 실패 시 디버그 출력
+            if (page === 1) {
+              const d = result.debug || {};
+              process.stdout.write(`\n  [디버그] status=${status} len=${html.length} tid_count=${d.dataTidCount??'?'}\n`);
+              process.stdout.write(`  응답 앞 300자: ${html.slice(0, 300).replace(/\s+/g, ' ')}\n`);
+            }
+            break; // 이 게임/카테고리 더 이상 데이터 없음
+          }
+
           gameSaved += saved;
           totalSaved += saved;
-          if (parsed === 0) {
-            const d = result.debug || {};
-            process.stdout.write(`\n  [디버그] tid=${d.dataTidCount??'?'} next=${d.hasNextData??'?'} len=${d.htmlLen??'?'}\n`);
-            if (d.apiMatches?.length) process.stdout.write(`  API패턴: ${d.apiMatches.slice(0,3).join(' | ')}\n`);
-            if (d.fetchUrls?.length) process.stdout.write(`  fetch: ${d.fetchUrls.slice(0,3).join(' | ')}\n`);
-            if (d.scriptSrcs?.length) process.stdout.write(`  scripts: ${d.scriptSrcs.join(', ')}\n`);
-            break;
-          } else {
-            process.stdout.write(`${page}p:${saved}개 `);
-          }
+          pagesDone++;
+          process.stdout.write(`${page}p:${saved}개 `);
+
+          // 다음 페이지 tid 추출
+          const nextTid = extractNextTid(html);
+          if (nextTid === null || nextTid === tid) break; // 더 이상 페이지 없음
+          tid = nextTid;
+
         } catch (e) {
           process.stdout.write(`${page}p:❌ `);
           totalFailed++;
+          if (page === 1) process.stdout.write(`\n  [오류] ${e.message}\n`);
+          break;
         }
-        if (page < PAGES_PER_GAME) await sleep(600);
+        if (page < PAGES_PER_GAME) await sleep(500);
       }
-      console.log(`→ 합계 ${gameSaved}개`);
-      await sleep(1000);
+      console.log(`→ 합계 ${gameSaved}개 (${pagesDone}페이지)`);
+      await sleep(800);
     }
   }
 
@@ -223,17 +231,17 @@ async function runOnce() {
 
 async function main() {
   console.log('\n' + '='.repeat(55));
-  console.log('  🕷️  아이템마니아 로컬 크롤러');
+  console.log('  🕷️  아이템마니아 로컬 크롤러 (AJAX 직접 POST)');
   console.log('='.repeat(55));
   console.log(`  서버:     ${SITE_URL}`);
   console.log(`  게임:     ${GAMES.map(g => g.name).join(', ')}`);
-  console.log(`  페이지:   게임당 ${PAGES_PER_GAME}페이지`);
+  console.log(`  페이지:   게임당 최대 ${PAGES_PER_GAME}페이지`);
   console.log(`  카테고리: ${CATEGORIES.join(', ')}`);
   console.log(`  반복:     ${_onceFlag ? '1회 실행 후 종료' : `${INTERVAL_MS / 60000}분마다 자동`}`);
   console.log('='.repeat(55));
   if (!_onceFlag) console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 계속 켜두세요!\n');
 
-  // 연결 테스트
+  // 서버 연결 테스트
   process.stdout.write('🔗 서버 연결 확인 중...');
   try {
     const testRes = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
@@ -253,9 +261,23 @@ async function main() {
     process.exit(1);
   }
 
-  // API 엔드포인트 자동 탐색
-  log('🔍 itemmania API 탐색 중...');
-  await discoverApi();
+  // itemmania AJAX 응답 포맷 확인 (첫 1회)
+  log('🔍 itemmania AJAX 응답 확인 중...');
+  try {
+    const { status, body: testHtml } = await fetchAjaxList(5913, 'sell', 0, 1);
+    log(`   status=${status} len=${testHtml?.length ?? 0}`);
+    if (testHtml && testHtml.length > 100) {
+      const tidCount = (testHtml.match(/data-tid=/g) || []).length;
+      const nextTid = extractNextTid(testHtml);
+      log(`   data-tid 항목 수: ${tidCount}`);
+      log(`   nextTid: ${nextTid}`);
+      log(`   응답 앞 400자: ${testHtml.slice(0, 400).replace(/\s+/g, ' ')}`);
+    } else {
+      log(`   ⚠️  응답이 짧습니다: ${testHtml?.slice(0, 300)}`);
+    }
+  } catch (e) {
+    log(`   ⚠️  AJAX 테스트 실패: ${e.message}`);
+  }
 
   if (_onceFlag) {
     log('수집 시작 (1회 모드)');
