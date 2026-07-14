@@ -823,8 +823,6 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
         if (GRADE_CLASS_MAP[c]) { sellerGrade = GRADE_CLASS_MAP[c]; break; }
       }
     }
-    // 등급 없는 상품 제외
-    if (!sellerGrade) return;
     // 수량 범위 파싱: .col.quantity 또는 .quantity_box 등
     const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
     // 원본 등록 시간 파싱
