@@ -6306,7 +6306,27 @@ const APPLICATION_DYNAMIC_SCRIPT = `
           if (p.sellerId && Number(user.id) === Number(p.sellerId)) {
             showToast('자신의 상품은 구매할 수 없습니다.', false); return;
           }
-          // 잔액 확인 후 구매
+
+          if (type !== 'sell') {
+            // 판매 신청하기 (구매글에서 판매자가 신청) → 채팅방 생성 후 바로 이동
+            buyBtn.disabled = true;
+            fetch('/api/chat/rooms', {
+              method: 'POST', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
+            }).then(function(r) { return r.json(); })
+            .then(function(room) {
+              if (room && room.id) {
+                location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+              } else {
+                showToast('채팅방 생성에 실패했습니다.', false);
+                buyBtn.disabled = false;
+              }
+            }).catch(function() { showToast('오류가 발생했습니다.', false); buyBtn.disabled = false; });
+            return;
+          }
+
+          // 잔액 확인 후 구매 (판매글에서 구매자가 구매)
           fetch('/api/wallet', { credentials: 'include' })
             .then(function(r) { return r.json(); })
             .then(function(w) {
@@ -6930,13 +6950,34 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     var _fixInterval = setInterval(fixBuyPagePriceAndQty, 300);
     setTimeout(function() { clearInterval(_fixInterval); }, 10000);
 
-    // 판매신청 버튼 (btn_green)
+    // 판매신청 버튼 (btn_green) → 채팅방 생성 후 바로 이동
     document.querySelectorAll('button.btn_green').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
         checkLogin().then(function(ok) {
           if (!ok) { showLoginModal(); return; }
-          showSuccessModal('판매신청이 완료되었습니다');
+          var p = window.__PRODUCT__;
+          if (!p || !p.sellerId) { showSuccessModal('판매신청이 완료되었습니다'); return; }
+          btn.disabled = true;
+          btn.textContent = '처리 중...';
+          fetch('/api/chat/rooms', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
+          }).then(function(r) { return r.json(); })
+          .then(function(room) {
+            if (room && room.id) {
+              location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+            } else {
+              showSuccessModal('판매신청이 완료되었습니다');
+              btn.disabled = false;
+              btn.textContent = '판매 신청하기';
+            }
+          }).catch(function() {
+            showSuccessModal('판매신청이 완료되었습니다');
+            btn.disabled = false;
+            btn.textContent = '판매 신청하기';
+          });
         });
       }, true);
     });
