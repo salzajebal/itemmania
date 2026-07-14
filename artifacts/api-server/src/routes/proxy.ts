@@ -1922,13 +1922,8 @@ const SELL_INTERCEPT_SCRIPT = `
   }
 
   function showLoginModal() {
-    const ov = document.getElementById('_im_overlay');
-    if (ov) { ov.classList.add('active'); return; }
-    const div = document.createElement('div');
-    div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:380px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button></div></div>';
-    document.body.appendChild(div.firstChild);
-    document.getElementById('_im_close').onclick = function() { document.getElementById('_im_overlay').style.display='none'; };
-    document.getElementById('_im_login_btn').onclick = function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href='/login'; };
+    try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+    location.href = '/login';
   }
 
   function interceptBuyButtons() {
@@ -5928,27 +5923,8 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
   }
 
   function showLoginModal() {
-    var existing = document.getElementById('_im_overlay');
-    if (existing) { existing.style.display = 'flex'; return; }
-    var div = document.createElement('div');
-    div.innerHTML = '<div id="_im_overlay" style="display:flex;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:36px 32px 28px;width:400px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Pretendard,-apple-system,sans-serif"><div style="text-align:right;margin-bottom:8px"><button id="_im_close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button></div><h2 style="margin:0 0 8px;font-size:22px;font-weight:700">로그인이 필요합니다</h2><p style="color:#555;margin:0 0 24px;font-size:14px">구매하시려면 먼저 로그인해주세요.</p><input type="email" id="_im_e" placeholder="이메일" style="display:block;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:10px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;outline:none"><input type="password" id="_im_p" placeholder="비밀번호" style="display:block;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:10px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;outline:none"><button id="_im_login_btn" style="width:100%;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">로그인하기</button><div id="_im_err" style="margin-top:10px;min-height:18px;font-size:13px;color:#e03030;text-align:center"></div></div></div>';
-    document.body.appendChild(div.firstChild);
-    document.getElementById('_im_close').onclick = function(){ document.getElementById('_im_overlay').style.display='none'; };
-    document.getElementById('_im_login_btn').onclick = function(){
-      var email = document.getElementById('_im_e').value;
-      var pw = document.getElementById('_im_p').value;
-      var errEl = document.getElementById('_im_err');
-      if (!email || !pw) { errEl.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
-      api('POST', '/auth/login', { email: email, password: pw }).then(function(data){
-        if (data && data.id) {
-          document.getElementById('_im_overlay').style.display = 'none';
-          showPurchaseSuccess();
-        } else {
-          errEl.textContent = (data && data.error) || '로그인에 실패했습니다.';
-        }
-      });
-    };
-    setTimeout(function(){ var el = document.getElementById('_im_e'); if(el) el.focus(); }, 50);
+    try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+    location.href = '/login';
   }
 
   function showPurchaseSuccess() {
