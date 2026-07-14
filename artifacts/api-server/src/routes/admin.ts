@@ -1415,13 +1415,17 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
 // PC에서 auto-crawl.mjs 스크립트가 직접 itemmania HTML을 가져와 이 엔드포인트로 POST
 // 크롤 키 조회 (어드민 전용)
 router.get("/admin/crawl-key", async (req, res): Promise<void> => {
-  if (req.session?.userRole !== "admin") { res.status(403).json({ error: "권한 없음" }); return; }
+  const isAdmin = req.session?.userRole === "admin" || req.session?.adminRole === "admin";
+  if (!isAdmin) { res.status(403).json({ error: "권한 없음" }); return; }
   res.json({ key: CRAWL_KEY });
 });
 
 // 크롤 스크립트 다운로드 (어드민 전용) — SITE_URL·CRAWL_KEY 자동 삽입
 router.get("/admin/crawl-script", async (req, res): Promise<void> => {
-  if (req.session?.userRole !== "admin") { res.status(403).json({ error: "권한 없음" }); return; }
+  const headerKey = req.headers["x-crawl-key"] as string | undefined;
+  const isAdmin = req.session?.userRole === "admin" || req.session?.adminRole === "admin";
+  const keyOk = headerKey === CRAWL_KEY;
+  if (!isAdmin && !keyOk) { res.status(403).json({ error: "권한 없음" }); return; }
 
   const scriptPath = join(process.cwd(), "scripts", "src", "auto-crawl.mjs");
   const altPath = join(process.cwd(), "..", "..", "scripts", "src", "auto-crawl.mjs");
