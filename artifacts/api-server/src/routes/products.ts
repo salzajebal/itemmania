@@ -73,7 +73,7 @@ router.get("/products", async (req, res): Promise<void> => {
   }
 
   if (serverName && typeof serverName === "string") {
-    conditions.push(eq(productsTable.serverName, serverName));
+    conditions.push(ilike(productsTable.serverName, `%${serverName}%`));
   }
 
   if (keyword && typeof keyword === "string") {

@@ -2208,6 +2208,38 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
 </style>
 <script>
 (function() {
+  var _oXOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, u) {
+    if (typeof u === 'string' && u.indexOf('itemmania.com') > -1) { this._imBlocked = true; }
+    return _oXOpen.apply(this, arguments);
+  };
+  var _oXSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function(b) {
+    if (this._imBlocked) {
+      var self = this;
+      setTimeout(function() {
+        try {
+          Object.defineProperty(self, 'readyState', { get: function(){ return 4; }, configurable: true });
+          Object.defineProperty(self, 'status', { get: function(){ return 200; }, configurable: true });
+          Object.defineProperty(self, 'responseText', { get: function(){ return '{"result":"ok","list":[],"TradeCount":0}'; }, configurable: true });
+          if (typeof self.onreadystatechange === 'function') self.onreadystatechange();
+          if (typeof self.onload === 'function') self.onload();
+        } catch(e2) {}
+      }, 0);
+      return;
+    }
+    return _oXSend.apply(this, arguments);
+  };
+  var _oFetch = window.fetch;
+  window.fetch = function(input, init) {
+    var u2 = typeof input === 'string' ? input : (input && input.url) || '';
+    if (u2.indexOf('itemmania.com') > -1) {
+      return Promise.resolve(new Response('{"result":"ok","list":[],"TradeCount":0}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return _oFetch.apply(this, arguments);
+  };
+})();
+(function() {
   /* ── sessionStorage 대기 카테고리 → URL 즉시 반영 ─────────────────────── */
   (function() {
     try {
