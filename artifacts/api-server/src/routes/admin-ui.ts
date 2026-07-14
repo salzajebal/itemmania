@@ -559,12 +559,20 @@ tbody tr:hover{background:#fafbff}
   }
 
   if (typeof EventSource === 'undefined') return;
+  function adminSpeak(text) {
+    if (!window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+    window.speechSynthesis.speak(u);
+  }
   function connectSSE() {
     var es = new EventSource('/api/events');
     es.addEventListener('notification', function(e){
       try {
         var d = JSON.parse(e.data);
         showAdminToast(d.title, d.body);
+        adminSpeak(d.title);
       } catch(ex){}
     });
     es.addEventListener('error', function(){
