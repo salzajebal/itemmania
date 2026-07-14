@@ -775,6 +775,19 @@ const INTERCEPT_SCRIPT = `
 
 // 로그인 페이지 전용 인터셉트 스크립트
 const LOGIN_INTERCEPT_SCRIPT = `
+<style>
+/* ── 로그인 페이지 모바일 ── */
+@media(max-width:768px){
+  html,body{overflow-x:hidden!important;}
+  #g_POPUP,.popup_content,.popup_wrap{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+  .login_form{width:100%!important;min-width:0!important;box-sizing:border-box!important;padding:40px 20px 80px!important;}
+  .login_form .g_title{font-size:20px!important;}
+  .login_form .btn,.login_form button{width:100%!important;box-sizing:border-box!important;}
+  #naver_id_login,.naver_login,.kakao_login,.social_login{width:100%!important;box-sizing:border-box!important;}
+  #naver_id_login img,.naver_login img{width:100%!important;height:auto!important;}
+  .login_sns_area{width:100%!important;box-sizing:border-box!important;}
+}
+</style>
 <script>
 (function() {
   function stripCSP() {
@@ -1143,6 +1156,42 @@ const ERROR_SUPPRESSOR = `<script>
   }
 })();
 </script>`;
+
+const GLOBAL_MOBILE_STYLE = `<style>
+/* ── 전역 모바일 반응형 ── */
+@media(max-width:768px){
+  html,body{overflow-x:hidden!important;max-width:100vw!important;}
+  /* 1. 1080px 고정 컨테이너 → 100% 반응형 */
+  .content_center,.content_wrap,.inner_wrap,.wrap,.page_wrap{
+    width:100%!important;min-width:0!important;max-width:100%!important;
+    box-sizing:border-box!important;
+  }
+  /* 2. 헤더 전체 */
+  .g_header{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+  .g_header .header-inner{
+    width:100%!important;min-width:0!important;box-sizing:border-box!important;
+    padding:0 12px!important;
+  }
+  /* 3. 네비 래퍼 */
+  .g_header .header-nav-wrapper{
+    margin-left:8px!important;height:auto!important;min-height:0!important;
+    flex:1!important;justify-content:flex-end!important;
+  }
+  /* 4. 네비 링크: 모바일에서 숨기고 햄버거만 표시 */
+  .g_header .header-nav{display:none!important;}
+  /* 5. header-actions 우측 아이콘 간격 축소 */
+  .g_header .header-actions{gap:6px!important;}
+  .g_header .header-logins{gap:8px!important;font-size:13px!important;}
+  .g_header .header-message,.g_header .header-fav{display:none!important;}
+  /* 6. 햄버거 버튼 항상 표시 */
+  .g_header .header-menu{display:flex!important;flex-direction:column!important;gap:5px!important;padding:8px!important;}
+  /* 7. 실시간 거래 탭 가로 스크롤 */
+  .real_time_list,.realtime_wrap,.live_tab,.live_list,.top_game_list{
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+    flex-wrap:nowrap!important;
+  }
+}
+</style>`;
 
 const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
@@ -1841,7 +1890,7 @@ function fixMyroomNavLinks(html: string): string {
 
 function prepare(html: string, user: Record<string, unknown> | null = null): string {
   const clean = fixMyroomNavLinks(rewriteExternalLinks(stripCsp(html)));
-  const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_NAV_INTERCEPTOR;
+  const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_MOBILE_STYLE + GLOBAL_NAV_INTERCEPTOR;
   // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
   let result: string;
   if (clean.includes("<head>")) {
@@ -2019,6 +2068,29 @@ function serveLineageClassic(html: string, user: Record<string, unknown> | null 
 
 
 const SELL_LIST_INTERCEPT_SCRIPT = `
+<style>
+/* ── 팝니다/삽니다 목록 모바일 ── */
+@media(max-width:768px){
+  /* 서버 탭: 가로 스크롤 */
+  #search_server_list,.search_server_row{
+    display:flex!important;flex-wrap:nowrap!important;
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+    gap:6px!important;padding-bottom:6px!important;
+    scrollbar-width:none!important;
+  }
+  #search_server_list::-webkit-scrollbar,.search_server_row::-webkit-scrollbar{display:none!important;}
+  #search_server_list label,.search_server_row label{white-space:nowrap!important;flex-shrink:0!important;}
+  /* 카테고리 탭도 가로 스크롤 */
+  .detail_search,.search_cate_wrap,.cate_tab_list{
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+  }
+  .detail_search .search_row{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;gap:6px!important;}
+  .detail_search .search_row label{white-space:nowrap!important;flex-shrink:0!important;}
+  /* 상품 목록 */
+  .gs_list,.item_list{width:100%!important;min-width:0!important;}
+  .gs_list li,.item_list li{width:100%!important;box-sizing:border-box!important;}
+}
+</style>
 <script>
 (function() {
   /* ── sessionStorage 대기 카테고리 → URL 즉시 반영 ─────────────────────── */
