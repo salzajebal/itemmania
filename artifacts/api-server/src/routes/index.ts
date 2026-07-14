@@ -8,6 +8,7 @@ import productsRouter from "./products";
 import adminRouter from "./admin";
 import gamesRouter from "./games";
 import eventsRouter from "./events";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -15,6 +16,7 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(walletRouter);
 router.use(ordersRouter);
+router.use(notificationsRouter);
 router.use(chatRouter);
 router.use(productsRouter);
 router.use(adminRouter);

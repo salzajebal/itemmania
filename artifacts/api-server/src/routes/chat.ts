@@ -7,6 +7,7 @@ import { eq, and, or, ne, lt, desc, sql } from "drizzle-orm";
 import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
+import { createNotification } from "./notifications";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,6 +189,19 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
   // 판매자가 인계하기 → 구매자에게 실시간 알림 (인수확인 버튼 활성화)
   if (status === "handover") {
     pushToUser(room.buyerId, "chat_handover", { roomId });
+    await createNotification(room.buyerId, "trade_handover", "아이템 인계 완료", {
+      body: "판매자가 아이템을 인계했습니다. 인수확인을 진행해 주세요.",
+      link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+    });
+  }
+
+  // 거래 취소
+  if (status === "cancelled") {
+    const otherId = userId === room.buyerId ? room.sellerId : room.buyerId;
+    await createNotification(otherId, "trade_cancelled", "거래가 취소되었습니다", {
+      body: "상대방이 거래를 취소했습니다.",
+      link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+    });
   }
 
   // 구매자가 인수하기(ended) 처리 → 판매자에게 거래금액 마일리지 지급
@@ -223,6 +237,10 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
 
       // SSE로 판매자 마이룸에 실시간 반영
       pushToUser(room.sellerId, "balance", { balance: newBalance });
+      await createNotification(room.sellerId, "trade_ended", "거래가 완료되었습니다", {
+        body: `마일리지 ${Number(prod.price).toLocaleString("ko-KR")}원이 지급되었습니다.`,
+        link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+      });
     }
   }
 
@@ -313,6 +331,14 @@ router.post("/chat/rooms/:roomId/upload", requireAuth, upload.single("image"), a
   const content = `[img]${imageUrl}`;
   const [message] = await db.insert(chatMessagesTable).values({ roomId, senderId: userId, content }).returning();
 
+  // 상대방에게 채팅 알림
+  const uploadRecipientId = userId === room.buyerId ? room.sellerId : room.buyerId;
+  const [uploadSender] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, userId));
+  await createNotification(uploadRecipientId, "chat_message", `${uploadSender?.nickname ?? "상대방"}님의 메시지`, {
+    body: "📷 사진을 보냈습니다.",
+    link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+  });
+
   res.status(201).json({
     id: message.id,
     roomId: message.roomId,
@@ -348,6 +374,16 @@ router.post("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promi
     senderId: userId,
     content: content.trim(),
   }).returning();
+
+  // 상대방에게 채팅 알림 전송
+  const recipientId = userId === room.buyerId ? room.sellerId : room.buyerId;
+  const [sender] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, userId));
+  const senderName = sender?.nickname ?? "상대방";
+  const preview = content.trim().startsWith("[img]") ? "📷 사진을 보냈습니다." : (content.trim().length > 30 ? content.trim().slice(0, 30) + "…" : content.trim());
+  await createNotification(recipientId, "chat_message", `${senderName}님의 메시지`, {
+    body: preview,
+    link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+  });
 
   res.status(201).json({
     id: message.id,
