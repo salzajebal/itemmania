@@ -1655,12 +1655,10 @@ const BALANCE_SSE_SCRIPT = `<script>
     var b = Number(balance || 0);
     var formatted = b.toLocaleString('ko-KR');
     var formattedWon = formatted + '원';
-    // 원본 구조가 살아있으면 해당 span만 업데이트
     var avail = document.querySelector('.over_mile');
     var total = document.querySelector('.total_mile');
     if (avail) avail.textContent = formatted;
     if (total) total.textContent = formatted;
-    // 스냅샷 JS가 .mr_user_mileage_txt 내부를 날린 경우 → 원래 구조 복원
     if (!avail || !total) {
       var mileageTxt = document.querySelector('.mr_user_mileage_txt');
       if (mileageTxt) {
@@ -1679,7 +1677,6 @@ const BALANCE_SSE_SCRIPT = `<script>
           + '</div>';
       }
     }
-    // 충전 페이지 등: #txtCurrentMileage
     document.querySelectorAll('#txtCurrentMileage,[id="txtCurrentMileage"]')
       .forEach(function(el){ el.textContent = formattedWon; });
   };
@@ -1690,172 +1687,130 @@ const BALANCE_SSE_SCRIPT = `<script>
   es.addEventListener('connected',function(){connected=true;});
   es.addEventListener('error',function(){if(!connected)es.close();});
   es.addEventListener('balance',function(e){
-    try{
-      var d=JSON.parse(e.data);
-      window._IM_updateBalance(d.balance);
-    }catch(ex){}
+    try{ var d=JSON.parse(e.data); window._IM_updateBalance(d.balance); }catch(ex){}
   });
   es.addEventListener('nickname',function(e){
-    try{
-      var d=JSON.parse(e.data);
-      if(d.nickname) window.dispatchEvent(new CustomEvent('im:nickname',{detail:{nickname:d.nickname}}));
-    }catch(ex){}
+    try{ var d=JSON.parse(e.data); if(d.nickname) window.dispatchEvent(new CustomEvent('im:nickname',{detail:{nickname:d.nickname}})); }catch(ex){}
   });
   es.addEventListener('grade',function(e){
-    try{
-      var d=JSON.parse(e.data);
-      window.dispatchEvent(new CustomEvent('im:grade',{detail:{grade:d.grade||null}}));
-    }catch(ex){}
+    try{ var d=JSON.parse(e.data); window.dispatchEvent(new CustomEvent('im:grade',{detail:{grade:d.grade||null}})); }catch(ex){}
   });
   es.addEventListener('credit_score',function(e){
-    try{
-      var d=JSON.parse(e.data);
-      window.dispatchEvent(new CustomEvent('im:credit_score',{detail:{score:d.score??0}}));
-    }catch(ex){}
+    try{ var d=JSON.parse(e.data); window.dispatchEvent(new CustomEvent('im:credit_score',{detail:{score:d.score??0}})); }catch(ex){}
   });
   es.addEventListener('notification',function(e){
-    try{
-      var d=JSON.parse(e.data);
-      _IM_NOTI.add(d);
-    }catch(ex){}
+    try{ var d=JSON.parse(e.data); window._IM_NOTI.showToast(d); window._IM_NOTI.addUnread(); }catch(ex){}
   });
 })();
 
-/* ── 알림 벨 아이콘 시스템 ── */
+/* ── 알림 토스트 시스템 (원본 chat_notice_layer + slide_up 애니메이션 활용) ── */
 (function(){
-  var NOTI_KEY='_im_noti_count';
-  var state={list:[],unread:0};
+  /* chat_notice_layer CSS 없는 페이지를 위한 폴백 스타일 보장 */
+  function ensureLayerStyle(){
+    if(document.getElementById('_im_noti_style')) return;
+    var s=document.createElement('style');
+    s.id='_im_noti_style';
+    s.textContent=
+      '@keyframes _im_slide_up{'
+      +'0%{transform:translateY(40px);opacity:0}'
+      +'12%,85%{transform:translateY(0);opacity:1}'
+      +'100%{transform:translateY(-20px);opacity:0;visibility:hidden}'
+      +'}'
+      +'#chat_notice_layer{'
+      +'position:fixed!important;z-index:9999!important;'
+      +'right:20px!important;bottom:50px!important;'
+      +'display:flex!important;flex-direction:column!important;gap:10px!important;'
+      +'pointer-events:none'
+      +'}';
+    document.head.appendChild(s);
+  }
 
-  /* 드롭다운 HTML 생성 */
-  function renderDropdown(){
-    var html='<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid #eee">'
-      +'<span style="font-size:14px;font-weight:700;color:#222">알림</span>'
-      +'<button onclick="_IM_NOTI.readAll()" style="font-size:12px;color:#159EFD;background:none;border:none;cursor:pointer;padding:0">모두 읽음</button>'
-      +'</div>';
-    if(state.list.length===0){
-      html+='<div style="padding:32px 0;text-align:center;color:#aaa;font-size:13px">알림이 없습니다.</div>';
-    } else {
-      state.list.slice(0,20).forEach(function(n){
-        var bg=n.isRead?'#fff':'#f0f8ff';
-        var dot=n.isRead?'':'<span style="width:7px;height:7px;background:#159EFD;border-radius:50%;display:inline-block;margin-left:6px;flex-shrink:0"></span>';
-        html+='<div onclick="_IM_NOTI.click('+n.id+',\\''+encodeURIComponent(n.link||'')+'\\',this)" '
-          +'style="display:flex;align-items:flex-start;gap:8px;padding:12px 16px;cursor:pointer;background:'+bg+';border-bottom:1px solid #f4f4f4;transition:background .15s"'
-          +' onmouseover="this.style.background=\\'#f5f9ff\\'" onmouseout="this.style.background=\\''+bg+'\\'">'
-          +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_IM_NOTI.esc(n.title)+'</div>'
-          +(n.body?'<div style="font-size:12px;color:#777;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_IM_NOTI.esc(n.body)+'</div>':'')
-          +'<div style="font-size:11px;color:#bbb;margin-top:3px">'+_IM_NOTI.timeAgo(n.createdAt)+'</div>'
-          +'</div>'+dot+'</div>';
-      });
+  function getLayer(){
+    var layer=document.getElementById('chat_notice_layer');
+    if(!layer){
+      layer=document.createElement('div');
+      layer.id='chat_notice_layer';
+      document.body.appendChild(layer);
     }
-    return html;
+    return layer;
   }
 
   window._IM_NOTI={
-    esc:function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); },
-    timeAgo:function(iso){
-      if(!iso) return '';
-      var diff=Math.floor((Date.now()-new Date(iso).getTime())/1000);
-      if(diff<60) return '방금';
-      if(diff<3600) return Math.floor(diff/60)+'분 전';
-      if(diff<86400) return Math.floor(diff/3600)+'시간 전';
-      return Math.floor(diff/86400)+'일 전';
+    _unread: 0,
+
+    showToast: function(n){
+      ensureLayerStyle();
+      var layer=getLayer();
+      var toast=document.createElement('div');
+      toast.style.cssText=
+        'background:#fff;border-radius:10px;'
+        +'box-shadow:0 4px 20px rgba(0,0,0,0.18);'
+        +'padding:13px 18px;min-width:240px;max-width:300px;'
+        +'border-left:3px solid #159EFD;'
+        +'pointer-events:auto;cursor:'+(n.link?'pointer':'default')+';'
+        +'animation:_im_slide_up 4s ease forwards;'
+        +'font-family:Pretendard,-apple-system,sans-serif';
+
+      var title=document.createElement('div');
+      title.style.cssText='font-size:13px;font-weight:700;color:#222;margin-bottom:3px';
+      title.textContent=n.title||'알림';
+      toast.appendChild(title);
+
+      if(n.body){
+        var body=document.createElement('div');
+        body.style.cssText='font-size:12px;color:#666;line-height:1.4';
+        body.textContent=n.body;
+        toast.appendChild(body);
+      }
+
+      if(n.link){
+        toast.onclick=function(){ location.href=n.link; };
+      }
+
+      layer.appendChild(toast);
+      setTimeout(function(){ if(toast.parentNode) toast.parentNode.removeChild(toast); },4100);
     },
-    add:function(n){
-      state.list.unshift(n);
-      if(!n.isRead) state.unread++;
-      this.updateBadge();
-      this.refreshDropdown();
-      this.pulse();
+
+    addUnread: function(){
+      this._unread++;
+      this._updateChatBadge();
     },
-    updateBadge:function(){
-      var badge=document.getElementById('_im_noti_badge');
+
+    _updateChatBadge: function(){
+      var chatEl=document.getElementById('chat_notice');
+      if(!chatEl) return;
+      var badge=chatEl.querySelector('.header-new');
       if(!badge) return;
-      if(state.unread>0){
-        badge.textContent=state.unread>99?'99+':String(state.unread);
-        badge.style.display='flex';
+      if(this._unread>0){
+        badge.textContent='N';
+        badge.classList.remove('sf-hidden');
+        badge.style.display='';
       } else {
+        badge.classList.add('sf-hidden');
         badge.style.display='none';
       }
     },
-    refreshDropdown:function(){
-      var body=document.getElementById('_im_noti_body');
-      if(body) body.innerHTML=renderDropdown();
-    },
-    pulse:function(){
-      var bell=document.getElementById('_im_noti_bell_icon');
-      if(!bell) return;
-      bell.style.transform='rotate(-20deg)';
-      setTimeout(function(){ bell.style.transform='rotate(20deg)'; },150);
-      setTimeout(function(){ bell.style.transform='rotate(0deg)'; },300);
-    },
-    readAll:function(){
-      fetch('/api/notifications/read-all',{method:'PATCH',credentials:'include'});
-      state.list.forEach(function(n){ n.isRead=true; });
-      state.unread=0;
-      this.updateBadge();
-      this.refreshDropdown();
-    },
-    click:function(id,encodedLink,el){
-      fetch('/api/notifications/'+id+'/read',{method:'PATCH',credentials:'include'});
-      var item=state.list.find(function(n){ return n.id===id; });
-      if(item){ item.isRead=true; state.unread=Math.max(0,state.unread-1); this.updateBadge(); }
-      var link=decodeURIComponent(encodedLink);
-      if(link) location.href=link;
-    },
-    toggle:function(){
-      var dd=document.getElementById('_im_noti_dropdown');
-      if(!dd) return;
-      var visible=dd.style.display!=='none';
-      dd.style.display=visible?'none':'block';
-    },
-    loadInitial:function(){
+
+    loadInitial: function(){
+      var self=this;
       fetch('/api/notifications',{credentials:'include'})
-        .then(function(r){ return r.json(); })
+        .then(function(r){ return r.ok?r.json():null; })
         .then(function(d){
-          if(!d||!d.notifications) return;
-          state.list=d.notifications;
-          state.unread=d.unreadCount||0;
-          window._IM_NOTI.updateBadge();
-          window._IM_NOTI.refreshDropdown();
+          if(!d) return;
+          self._unread=d.unreadCount||0;
+          self._updateChatBadge();
         }).catch(function(){});
     }
   };
 
-  /* 벨 버튼 DOM 주입 */
-  function injectBell(){
-    if(document.getElementById('_im_noti_wrap')) return;
-    var wrap=document.createElement('div');
-    wrap.id='_im_noti_wrap';
-    wrap.style.cssText='position:fixed;top:12px;right:16px;z-index:2147483640;font-family:Pretendard,-apple-system,sans-serif';
-    wrap.innerHTML=
-      '<button id="_im_noti_btn" onclick="_IM_NOTI.toggle()" '
-      +'style="position:relative;width:40px;height:40px;border-radius:50%;background:#fff;border:1.5px solid #e0e0e0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:0">'
-      +'<svg id="_im_noti_bell_icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
-      +'<span id="_im_noti_badge" style="display:none;position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;background:#e53e3e;color:#fff;font-size:10px;font-weight:700;border-radius:999px;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff;line-height:1"></span>'
-      +'</button>'
-      +'<div id="_im_noti_dropdown" style="display:none;position:absolute;top:48px;right:0;width:320px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.16);overflow:hidden;border:1px solid #eee">'
-      +'<div id="_im_noti_body">'+renderDropdown()+'</div>'
-      +'</div>';
-
-    document.body.appendChild(wrap);
-
-    /* 외부 클릭 시 닫기 */
-    document.addEventListener('click',function(e){
-      var dd=document.getElementById('_im_noti_dropdown');
-      var btn=document.getElementById('_im_noti_btn');
-      if(dd&&btn&&!btn.contains(e.target)&&!dd.contains(e.target)){
-        dd.style.display='none';
-      }
-    });
-
+  function init(){
     window._IM_NOTI.loadInitial();
   }
 
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',injectBell);
+    document.addEventListener('DOMContentLoaded',init);
   } else {
-    injectBell();
+    init();
   }
 })();
 </script>`;
