@@ -5357,7 +5357,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
             var hBtn2 = document.createElement('button');
             hBtn2.id = '_im_handover_btn';
             hBtn2.textContent = '인계하기';
-            hBtn2.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;box-sizing:border-box!important;margin-bottom:8px;padding:0;min-height:44px;background:#159EFD!important;color:#fff!important;border:none!important;border-radius:8px;font-size:16px!important;font-weight:700!important;cursor:pointer;letter-spacing:-.02em;line-height:1.2;';
+            hBtn2.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;box-sizing:border-box!important;margin-bottom:8px;padding:0;height:46px;background-color:#fff!important;color:#159EFD!important;border:1px solid #159EFD!important;border-radius:10px;font-size:15px!important;font-weight:bold!important;cursor:pointer;letter-spacing:-.02em;line-height:1.2;';
             tc2.parentNode.insertBefore(hBtn2, tc2);
           }
         }
