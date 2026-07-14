@@ -1,5 +1,11 @@
 import express, { Router, type IRouter } from "express";
 import { ADMIN_SCRIPT_CONTENT } from "../admin-script-content";
+import { createHmac } from "crypto";
+
+const CRAWL_KEY = createHmac("sha256", process.env.SESSION_SECRET || "itemmania-default")
+  .update("crawl-key-v1")
+  .digest("hex")
+  .slice(0, 32);
 
 const router: IRouter = Router();
 
@@ -644,7 +650,8 @@ function showAdminToast(title, body) {
 </html>`;
 
 router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (_req, res): void => {
-  const html = ADMIN_HTML.replace("<!--ADMIN_SCRIPT-->", "<script>\n" + loadAdminScript() + "\n</script>");
+  const keyScript = `<script>window._CK=${JSON.stringify(CRAWL_KEY)};</script>`;
+  const html = ADMIN_HTML.replace("<!--ADMIN_SCRIPT-->", keyScript + "\n<script>\n" + loadAdminScript() + "\n</script>");
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");

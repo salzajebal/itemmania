@@ -14,19 +14,9 @@ async function downloadCrawlScript(){
   var orig=btn.textContent;
   btn.disabled=true;btn.textContent='다운로드 중...';
   try{
-    // 1단계: 세션으로 CRAWL_KEY 조회
-    var kr=await fetch('/api/admin/crawl-key',{credentials:'include'});
-    if(!kr.ok){
-      var kerr=await kr.json().catch(function(){return{};});
-      alert('키 조회 실패 ('+kr.status+'): '+(kerr.error||'어드민으로 로그인되어 있는지 확인하세요'));
-      return;
-    }
-    var kd=await kr.json();
-    var crawlKey=kd.key;
-    // 2단계: CRAWL_KEY 헤더로 스크립트 다운로드
     var r=await fetch('/api/admin/crawl-script',{
       credentials:'include',
-      headers:{'X-Crawl-Key':crawlKey}
+      headers:{'X-Crawl-Key':window._CK||''}
     });
     if(!r.ok){
       var err=await r.json().catch(function(){return{};});
