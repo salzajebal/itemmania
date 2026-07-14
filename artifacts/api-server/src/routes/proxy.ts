@@ -2439,20 +2439,21 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         var ourTotal = data.total || 0;
 
         // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
-        var filteredOrig = itemCat ? origNormalItems.filter(function(el) {
+        // gameCode가 있으면 스냅샷 원본(리니지클래식 기본)은 표시하지 않음 — Phase 2에서 실시간으로 교체
+        var filteredOrig = gameCode ? [] : (itemCat ? origNormalItems.filter(function(el) {
           var goodsEl = el.querySelector('[data-search=goods]');
           return goodsEl && goodsEl.textContent.trim() === itemCat;
-        }) : origNormalItems;
+        }) : origNormalItems);
 
         // ── 프리미엄 섹션 itemCategory 필터 ────────────────────────
-        var filteredPremium = itemCat ? origPremiumItems.filter(function(el) {
+        var filteredPremium = gameCode ? [] : (itemCat ? origPremiumItems.filter(function(el) {
           var goodsEl = el.querySelector('[data-search=goods]');
           return goodsEl && goodsEl.textContent.trim() === itemCat;
-        }) : origPremiumItems;
+        }) : origPremiumItems);
 
-        // 전체 건수: 카테고리 필터 없으면 스냅샷 총 건수, 있으면 필터된 스냅샷 건수
+        // 전체 건수: gameCode/itemCategory 필터 없으면 스냅샷 총 건수, 있으면 filteredOrig 길이 사용
         var ourNormalCount = items.filter(function(p){return p.sellerGrade!=='vip'&&p.sellerGrade!=='platinum';}).length;
-        var snapshotCount = itemCat ? filteredOrig.length : origImCount;
+        var snapshotCount = (gameCode || itemCat) ? filteredOrig.length : origImCount;
         var totalCount = snapshotCount + ourNormalCount;
         if (countEl) countEl.textContent = fmt(totalCount) + '건';
 
@@ -2481,8 +2482,8 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         });
         all.forEach(function(el) { normalList.appendChild(el); });
 
-        // 둘 다 없으면 안내 메시지
-        if (items.length === 0 && origNormalCount === 0) {
+        // 둘 다 없으면 안내 메시지 (gameCode 있을 때 filteredOrig=[]이므로 length로 판단)
+        if (items.length === 0 && filteredOrig.length === 0) {
           normalList.innerHTML =
             '<li style="padding:60px 0;text-align:center;color:#999;font-size:15px;list-style:none">' +
             '등록된 상품이 없습니다.<br><br>' +
@@ -2988,6 +2989,26 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
     if (_gsInp) {
       _gsInp.addEventListener('focus', function() { _gsInp._imUserTouched = true; clearInterval(_clearTicker); }, { once: true });
     }
+
+    // URL search_game으로 게임 사전 선택 (메이플랜드 등 목록에서 등록 클릭 시 게임 유지)
+    (function() {
+      var sgCode = new URLSearchParams(location.search).get('search_game');
+      if (!sgCode) return;
+      fetch('/api/games/bycode/' + encodeURIComponent(sgCode), { credentials: 'include' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(g) {
+          if (!g || !g.name) return;
+          window._IM_sel_game = { id: g.id, code: g.code, name: g.name };
+          window._IM_sel_server = null;
+          var inp = document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer');
+          if (inp && !inp._imUserTouched) {
+            inp.value = g.name;
+            inp._imUserTouched = true;
+            clearInterval(_clearTicker);
+          }
+        })
+        .catch(function() {});
+    })();
 
     // ── receipt_layer: 캡처된 원본 HTML 사용 or MutationObserver로 자동 캡처 ─────
     (function() {
@@ -3771,6 +3792,22 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
         }
       }
       setupGameSearch(cleanInp);
+    })();
+
+    // URL search_game으로 게임 사전 선택 (메이플랜드 등 목록에서 구매등록 클릭 시 게임 유지)
+    (function() {
+      var sgCode = new URLSearchParams(location.search).get('search_game');
+      if (!sgCode) return;
+      fetch('/api/games/bycode/' + encodeURIComponent(sgCode), { credentials: 'include' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(g) {
+          if (!g || !g.name) return;
+          window._IM_sel_game = { id: g.id, code: g.code, name: g.name };
+          window._IM_sel_server = null;
+          var inp = document.getElementById('searchRegGameServer') || document.getElementById('searchGameServer');
+          if (inp) { inp.value = g.name; }
+        })
+        .catch(function() {});
     })();
 
     // 캐릭터명 저장 버튼 → "저장되었습니다." 토스트 (캡처 페이즈로 stopPropagation 우회)
