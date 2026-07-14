@@ -10,6 +10,9 @@
  * ──────────────────────────────────────────────────
  */
 
+import { createGunzip } from 'zlib';
+import https from 'https';
+
 // ★ 여기만 수정하세요 ★
 const SITE_URL  = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
 const CRAWL_KEY = 'YOUR_CRAWL_KEY';               // 어드민 패널에서 확인
@@ -61,9 +64,6 @@ const PAGES_PER_GAME = _pagesArg ? Math.max(1, parseInt(_pagesArg, 10)) : 5;
 const INTERVAL_MS = 60 * 60 * 1000;
 
 // ─── 이하 수정 불필요 ──────────────────────────────
-
-import { createGunzip } from 'zlib';
-import https from 'https';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const AGENT = new https.Agent({ keepAlive: true });
