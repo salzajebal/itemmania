@@ -156,7 +156,10 @@ async function runOnce() {
           totalSaved += saved;
           if (parsed === 0) {
             const d = result.debug || {};
-            process.stdout.write(`(${page}p:없음 tid=${d.dataTidCount??'?'} next=${d.hasNextData??'?'} len=${d.htmlLen??'?'}) `);
+            process.stdout.write(`\n  [디버그] tid=${d.dataTidCount??'?'} next=${d.hasNextData??'?'} len=${d.htmlLen??'?'}\n`);
+            if (d.apiMatches?.length) process.stdout.write(`  API패턴: ${d.apiMatches.slice(0,3).join(' | ')}\n`);
+            if (d.fetchUrls?.length) process.stdout.write(`  fetch: ${d.fetchUrls.slice(0,3).join(' | ')}\n`);
+            if (d.scriptSrcs?.length) process.stdout.write(`  scripts: ${d.scriptSrcs.join(', ')}\n`);
             break;
           } else {
             process.stdout.write(`${page}p:${saved}개 `);

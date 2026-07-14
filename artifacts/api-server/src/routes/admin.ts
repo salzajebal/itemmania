@@ -1473,6 +1473,11 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
   const dataTidCount = $("[data-tid]").length;
   const hasNextData = $("script#__NEXT_DATA__").length > 0;
   const htmlSnippet = html.slice(0, 300).replace(/\s+/g, " ");
+  // JS 내 API 엔드포인트 패턴 탐색
+  const scriptText = $("script:not([src])").map((_i, el) => $(el).html() || "").get().join("\n");
+  const apiMatches = [...new Set((scriptText.match(/["'`][^"'`]*(?:\/api\/|\/goods\/|\/item\/|\/product\/|\/list\/|\/trade\/)[^"'`]{3,80}["'`]/g) || []))].slice(0, 10);
+  const fetchUrls = [...new Set((scriptText.match(/fetch\s*\(\s*["'`][^"'`]{5,100}["'`]/g) || []))].slice(0, 10);
+  const scriptSrcs = $("script[src]").map((_i, el) => $(el).attr("src") || "").get().filter(s => s.includes("itemmania") || s.includes("list") || s.includes("goods")).slice(0, 5);
 
   const products = parseProductsFromHtml(html, gameId, category);
 
@@ -1513,7 +1518,7 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
     } catch { failed++; }
   }
 
-  res.json({ parsed: products.length, saved, failed, debug: { dataTidCount, hasNextData, htmlLen: html.length, htmlSnippet } });
+  res.json({ parsed: products.length, saved, failed, debug: { dataTidCount, hasNextData, htmlLen: html.length, htmlSnippet, apiMatches, fetchUrls, scriptSrcs } });
 });
 
 // ── 자동 크롤 스케줄러 ──────────────────────────────────────────────────────
