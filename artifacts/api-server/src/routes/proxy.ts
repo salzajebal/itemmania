@@ -8970,6 +8970,21 @@ router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => 
  * 상품 ID로 DB 조회 후 판매자/구매자 실제 nickname·grade를 포함한 product 객체 반환.
  * sellerId가 없을 경우 sellerName(이메일/닉네임)으로 users 테이블 fallback 조회.
  */
+async function resolveProductByRawId(rawId: string): Promise<Record<string, unknown> | null> {
+  // 숫자이면 DB 내부 id로 먼저 조회, 실패하면 itemmaniaid로 재시도
+  const numId = parseInt(rawId, 10);
+  let p: typeof productsTable.$inferSelect | undefined;
+  if (!isNaN(numId) && numId > 0 && numId <= 2147483647) {
+    [p] = await db.select().from(productsTable).where(eq(productsTable.id, numId));
+  }
+  // DB id로 못 찾으면 itemmaniaid(원본 itemmania ID 포함)로 재시도
+  if (!p) {
+    [p] = await db.select().from(productsTable).where(eq(productsTable.itemmaniaid, rawId));
+  }
+  if (!p) return null;
+  return resolveProductWithUser(p.id);
+}
+
 async function resolveProductWithUser(productId: number): Promise<Record<string, unknown> | null> {
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!p) return null;
@@ -9022,10 +9037,9 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
   const user = await getSessionUser(req);
 
   let product: Record<string, unknown> | null = null;
-  const rawId = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
-  const productId = parseInt(String(rawId ?? ""), 10);
-  if (!isNaN(productId) && productId > 0) {
-    product = await resolveProductWithUser(productId);
+  const rawId = String(Array.isArray(req.query.id) ? req.query.id[0] : req.query.id ?? "").trim();
+  if (rawId) {
+    product = await resolveProductByRawId(rawId);
   }
 
   res.send(serveApplication(sellApplicationHtml, user, product));
@@ -9042,10 +9056,9 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
   const user = await getSessionUser(req);
 
   let product: Record<string, unknown> | null = null;
-  const rawIdB = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
-  const productIdB = parseInt(String(rawIdB ?? ""), 10);
-  if (!isNaN(productIdB) && productIdB > 0) {
-    product = await resolveProductWithUser(productIdB);
+  const rawIdB = String(Array.isArray(req.query.id) ? req.query.id[0] : req.query.id ?? "").trim();
+  if (rawIdB) {
+    product = await resolveProductByRawId(rawIdB);
   }
 
   res.send(serveBuyApplication(buyApplicationHtml, user, product));
