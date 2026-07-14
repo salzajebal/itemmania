@@ -5274,9 +5274,8 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
   }
 
   var STATUS_LABEL = { pending:'거래대기', active:'거래중', handover:'인계완료(인수대기)', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
-  // trade_state_text 요소에 줄바꿈 방지 스타일 적용
   var stateTextEl = document.getElementById('trade_state_text');
-  if (stateTextEl) stateTextEl.style.cssText += ';white-space:nowrap';
+  if (stateTextEl) stateTextEl.style.cssText += ';width:auto;min-width:80px;max-width:160px;white-space:normal;line-height:1.3;padding:4px 10px;text-align:center;word-break:keep-all;';
   var roomId = null;
   var myId = null;
   var lastMsgId = 0;
