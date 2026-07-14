@@ -4,8 +4,8 @@ import { join } from "path";
 import bcrypt from "bcryptjs";
 import { logger } from "../lib/logger";
 import { fetchProxyPage } from "../lib/proxy";
-import { db, usersTable, productsTable, ordersTable, walletsTable } from "@workspace/db";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { db, usersTable, productsTable, ordersTable, walletsTable, gamesTable, gameServersTable } from "@workspace/db";
+import { eq, and, inArray, desc, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -209,6 +209,35 @@ const SELL_HTML_MAP: Record<string, string> = {
   "281":  sellDnfHtml,         // 던전앤파이터
   "5990": sellMaplelandHtml,   // 메이플랜드
 };
+
+// ── 게임 서버 목록 캐시 (code → [{id, name}]) ──────────────────────────────
+const _serversByCode: Record<string, {id: number; name: string}[]> = {};
+
+async function getGameServersForCode(code: string): Promise<{id: number; name: string}[]> {
+  if (!code || code === "5913") return [];
+  if (_serversByCode[code]) return _serversByCode[code];
+  const games = await db.select({ id: gamesTable.id }).from(gamesTable).where(eq(gamesTable.code, code)).limit(1);
+  if (!games.length) return [];
+  const servers = await db.select({ id: gameServersTable.id, name: gameServersTable.name })
+    .from(gameServersTable)
+    .where(eq(gameServersTable.gameId, games[0].id))
+    .orderBy(asc(gameServersTable.sortOrder));
+  _serversByCode[code] = servers;
+  return servers;
+}
+
+// search_server_list <ul> 내용을 서버 목록으로 교체 (서버사이드)
+function injectServerTabsHtml(html: string, servers: {id: number; name: string}[]): string {
+  if (!servers.length) return html;
+  const firstLi = `<li>\n <input id=row_server type=checkbox name=row_server value class=g_btn_white2_radio checked>\n <label for=row_server>서버전체</label>\n </li>`;
+  const items = servers.map(sv =>
+    `<li>\n <input id="row_server_dyn_${sv.id}" type=checkbox name=row_server value="${sv.name}" class=g_btn_white2_radio>\n <label for="row_server_dyn_${sv.id}">${sv.name}</label>\n </li>`
+  ).join("\n ");
+  return html.replace(
+    /(<div[^>]*id=["']?search_server_list["']?[^>]*>[\s\S]*?<ul[^>]*>)([\s\S]*?)(<\/ul>)/,
+    (_m, pre, _old, post) => `${pre}\n ${firstLi}\n ${items}\n ${post}`
+  );
+}
 
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
@@ -2072,6 +2101,73 @@ const SELL_INTERCEPT_SCRIPT = `
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _sellListSetup);
   else _sellListSetup();
+})();
+
+// ── search_game으로 서버 탭 동적 교체 (기본 HTML은 리니지클래식) ───────
+(function() {
+  var _gc = new URLSearchParams(location.search).get('search_game') || '5913';
+  if (_gc === '5913') return;
+  fetch('/api/games/bycode/' + encodeURIComponent(_gc), { credentials: 'include' })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(g) {
+      if (!g || !g.name) return;
+      var gn = g.name;
+      function replaceText(node) {
+        if (node.nodeType === 3) {
+          if (node.nodeValue.indexOf('리니지클래식') >= 0)
+            node.nodeValue = node.nodeValue.replace(/리니지클래식/g, gn);
+        } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+          for (var i = 0; i < node.childNodes.length; i++) replaceText(node.childNodes[i]);
+        }
+      }
+      replaceText(document.body);
+      document.title = document.title.replace(/리니지클래식/g, gn);
+      if (!g.id) return;
+      fetch('/api/games/' + g.id + '/servers', { credentials: 'include' })
+        .then(function(rs) { return rs.ok ? rs.json() : []; })
+        .then(function(servers) {
+          if (!servers || !servers.length) return;
+          var serverList = document.getElementById('search_server_list');
+          if (!serverList) return;
+          var currentSv = new URLSearchParams(location.search).get('search_server') || '';
+          var ul = serverList.querySelector('ul');
+          if (ul) {
+            var firstLi = ul.querySelector('li:first-child');
+            ul.innerHTML = '';
+            if (firstLi) {
+              var fi = firstLi.querySelector('input');
+              if (fi) fi.checked = !currentSv;
+              ul.appendChild(firstLi);
+            }
+            servers.forEach(function(sv) {
+              var li = document.createElement('li');
+              var uid = 'row_server_dyn_' + sv.id;
+              li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio' + (currentSv === sv.name ? ' checked' : '') + '><label for="' + uid + '">' + sv.name + '</label>';
+              ul.appendChild(li);
+            });
+          } else {
+            var allInps = Array.from(serverList.querySelectorAll('input[name=row_server]'));
+            var firstInp = allInps[0] || null;
+            var firstLbl = firstInp ? serverList.querySelector('label[for="' + firstInp.id + '"]') : null;
+            serverList.innerHTML = '';
+            if (firstInp) { firstInp.checked = !currentSv; serverList.appendChild(firstInp); }
+            if (firstLbl) serverList.appendChild(firstLbl);
+            servers.forEach(function(sv) {
+              var uid = 'row_server_dyn_' + sv.id;
+              var inp = document.createElement('input');
+              inp.id = uid; inp.type = 'checkbox'; inp.name = 'row_server';
+              inp.value = sv.name; inp.className = 'g_btn_white2_radio';
+              if (currentSv === sv.name) inp.checked = true;
+              var lbl = document.createElement('label');
+              lbl.setAttribute('for', uid); lbl.textContent = sv.name;
+              serverList.appendChild(inp);
+              serverList.appendChild(lbl);
+            });
+          }
+        })
+        .catch(function() {});
+    })
+    .catch(function() {});
 })();
 </script>
 `;
@@ -8427,6 +8523,10 @@ router.get(
     if (LINEAGE_CLASSIC_BASED_GAMES[game]) {
       html = html.replace(/리니지클래식/g, LINEAGE_CLASSIC_BASED_GAMES[game]);
     }
+    // 서버 탭 서버사이드 교체 (스냅샷 하드코딩된 서버 → DB 올바른 서버)
+    const servers = await getGameServersForCode(game).catch(() => []);
+    if (servers.length) html = injectServerTabsHtml(html, servers);
+
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const user = await getSessionUser(req);
@@ -8990,6 +9090,10 @@ router.get("/buy/list.html", async (req, res): Promise<void> => {
   if (LINEAGE_CLASSIC_BASED_GAMES[game]) {
     html = html.replace(/리니지클래식/g, LINEAGE_CLASSIC_BASED_GAMES[game]);
   }
+  // 서버 탭 서버사이드 교체
+  const buyServers = await getGameServersForCode(game).catch(() => []);
+  if (buyServers.length) html = injectServerTabsHtml(html, buyServers);
+
   res.send(serveBuy(html, user));
 });
 
