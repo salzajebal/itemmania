@@ -136,7 +136,7 @@ tbody tr:hover{background:#fafbff}
       <div class="table-wrap">
         <div class="table-toolbar">
           <span class="title">상품 목록</span>
-          <select class="filter-select" id="prodCategoryFilter" onchange="loadProducts()">
+          <select class="filter-select" id="prodCategoryFilter" onchange="loadProducts(1)">
             <option value="">전체 유형</option>
             <option value="sell">팝니다</option>
             <option value="buy">삽니다</option>

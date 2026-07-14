@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc, or, inArray } from "drizzle-orm";
+import { eq, sql, desc, or, inArray, and } from "drizzle-orm";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
@@ -486,19 +486,47 @@ router.delete("/admin/users/:id", async (req, res): Promise<void> => {
 
 // 전체 상품 목록
 router.get("/admin/products", async (req, res): Promise<void> => {
-  const products = await db.select().from(productsTable).orderBy(desc(productsTable.createdAt));
-  res.json(products.map(p => ({
-    id: p.id,
-    itemmaniaid: p.itemmaniaid,
-    title: p.title,
-    price: Number(p.price),
-    category: p.category,
-    gameName: p.gameName,
-    sellerName: p.sellerName,
-    description: p.description,
-    status: p.status,
-    createdAt: p.createdAt,
-  })));
+  const page  = Math.max(1, parseInt(String(req.query.page  ?? "1"),  10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+  const offset = (page - 1) * limit;
+  const category = req.query.category as string | undefined;
+  const status   = req.query.status   as string | undefined;
+
+  const where = and(
+    category ? eq(productsTable.category, category as "sell" | "buy") : undefined,
+    status   ? eq(productsTable.status,   status   as "active" | "sold" | "inactive") : undefined,
+  );
+
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(productsTable)
+    .where(where);
+
+  const rows = await db
+    .select()
+    .from(productsTable)
+    .where(where)
+    .orderBy(desc(productsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json({
+    products: rows.map(p => ({
+      id: p.id,
+      itemmaniaid: p.itemmaniaid,
+      title: p.title,
+      price: Number(p.price),
+      category: p.category,
+      gameName: p.gameName,
+      sellerName: p.sellerName,
+      description: p.description,
+      status: p.status,
+      createdAt: p.createdAt,
+    })),
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  });
 });
 
 // 상품 등록 (어드민)

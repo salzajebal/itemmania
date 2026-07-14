@@ -1,4 +1,6 @@
 var currentTab='products';
+var currentProductsPage=1;
+var totalProductsPages=1;
 
 window.onerror=function(msg,src,line,col,err){
   var d=document.createElement('div');
@@ -568,18 +570,25 @@ async function loadAll(){
 }
 
 // ── 상품 ─────────────────────────────────────────────────
-async function loadProducts(){
+async function loadProducts(page){
+  if(page!==undefined)currentProductsPage=page;
   var tbody=document.getElementById('productsBody');
   tbody.innerHTML='<tr class="empty-row"><td colspan="9">로딩 중...</td></tr>';
   var cat=document.getElementById('prodCategoryFilter').value;
   var st=document.getElementById('prodStatusFilter').value;
-  var url='/api/admin/products'+(cat||st?'?':'')+(cat?'category='+cat:'')+(cat&&st?'&':'')+(st?'status='+st:'');
+  var params='page='+currentProductsPage+'&limit=10';
+  if(cat)params+='&category='+cat;
+  if(st)params+='&status='+st;
+  var url='/api/admin/products?'+params;
   try{
     var r=await fetch(url,{credentials:'include'});
-    var products=await r.json();
-    if(!Array.isArray(products))products=[];
-    document.getElementById('statProducts').textContent=products.length;
-    if(!products.length){tbody.innerHTML='<tr class="empty-row"><td colspan="9">상품이 없습니다</td></tr>';return;}
+    var data=await r.json();
+    var products=Array.isArray(data)?data:(data.products||[]);
+    var total=data.total||products.length;
+    totalProductsPages=data.totalPages||1;
+    currentProductsPage=data.page||currentProductsPage;
+    document.getElementById('statProducts').textContent=total;
+    if(!products.length){tbody.innerHTML='<tr class="empty-row"><td colspan="9">상품이 없습니다</td></tr>';renderProductsPagination(0);return;}
     tbody.innerHTML=products.map(function(p){
       var catLabel=p.category==='buy'?'삽니다':'팝니다';
       var catClass=p.category==='buy'?'buy':'sell';
@@ -599,7 +608,38 @@ async function loadProducts(){
         +'</td>'
         +'</tr>';
     }).join('');
+    renderProductsPagination(total);
   }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="9">오류 발생</td></tr>';}
+}
+
+function renderProductsPagination(total){
+  var existing=document.getElementById('productsPagination');
+  if(existing)existing.remove();
+  if(totalProductsPages<=1)return;
+  var wrap=document.createElement('div');
+  wrap.id='productsPagination';
+  wrap.style='display:flex;align-items:center;gap:4px;justify-content:center;margin-top:14px;flex-wrap:wrap';
+  function btn(label,pg,disabled,active){
+    var b=document.createElement('button');
+    b.textContent=label;
+    b.style='min-width:34px;height:32px;border-radius:6px;border:1px solid '+(active?'#159EFD':'#ddd')+';background:'+(active?'#159EFD':'#fff')+';color:'+(active?'#fff':'#333')+';font-size:13px;font-weight:'+(active?'700':'400')+';cursor:'+(disabled?'default':'pointer')+';opacity:'+(disabled?'0.4':'1');
+    if(!disabled)b.onclick=function(){loadProducts(pg);};
+    return b;
+  }
+  wrap.appendChild(btn('‹',currentProductsPage-1,currentProductsPage<=1,false));
+  var start=Math.max(1,currentProductsPage-2);
+  var end=Math.min(totalProductsPages,start+4);
+  if(end-start<4)start=Math.max(1,end-4);
+  if(start>1){wrap.appendChild(btn('1',1,false,false));if(start>2){var sp=document.createElement('span');sp.textContent='…';sp.style='padding:0 4px;color:#888';wrap.appendChild(sp);}}
+  for(var i=start;i<=end;i++){wrap.appendChild(btn(String(i),i,false,i===currentProductsPage));}
+  if(end<totalProductsPages){if(end<totalProductsPages-1){var sp2=document.createElement('span');sp2.textContent='…';sp2.style='padding:0 4px;color:#888';wrap.appendChild(sp2);}wrap.appendChild(btn(String(totalProductsPages),totalProductsPages,false,false));}
+  wrap.appendChild(btn('›',currentProductsPage+1,currentProductsPage>=totalProductsPages,false));
+  var info=document.createElement('span');
+  info.style='margin-left:8px;font-size:12px;color:#888';
+  info.textContent=currentProductsPage+' / '+totalProductsPages+' 페이지 (총 '+total+'개)';
+  wrap.appendChild(info);
+  var table=document.querySelector('#tab-products .data-table');
+  if(table)table.parentNode.insertBefore(wrap,table.nextSibling);
 }
 
 function openProductModal(){
@@ -661,7 +701,7 @@ async function saveProduct(){
     if(!r.ok){showToast('오류: '+(d.error||'처리 실패'));btn.disabled=false;return;}
     showToast(id?'✅ 상품이 수정되었습니다':'✅ 상품이 등록되었습니다');
     closeProductModal();
-    loadProducts();
+    loadProducts(1);
   }catch(e){showToast('서버 오류');btn.disabled=false;}
 }
 
@@ -671,7 +711,7 @@ async function deleteProduct(id){
     var r=await fetch('/api/admin/products/'+id,{method:'DELETE',credentials:'include'});
     if(!r.ok){var d=await r.json();showToast('오류: '+(d.error||'삭제 실패'));return;}
     showToast('🗑 상품이 삭제되었습니다');
-    loadProducts();
+    loadProducts(currentProductsPage);
   }catch(e){showToast('서버 오류');}
 }
 
@@ -682,7 +722,7 @@ async function deleteNoGradeProducts(){
     var d=await r.json();
     if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
     showToast('🗑 등급없는 상품 '+d.deleted+'개 삭제 완료');
-    loadProducts();
+    loadProducts(1);
     loadStats();
   }catch(e){showToast('서버 오류');}
 }
