@@ -269,10 +269,12 @@ function useAdminVoiceAlerts() {
 }
 
 export default function Admin() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   useAdminVoiceAlerts();
+
+  if (isLoading) return null;
 
   if (!user) {
     setLocation("/");
