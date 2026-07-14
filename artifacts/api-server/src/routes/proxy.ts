@@ -1718,7 +1718,7 @@ const BALANCE_SSE_SCRIPT = `<script>
       +'}'
       +'#chat_notice_layer{'
       +'position:fixed!important;z-index:9999!important;'
-      +'right:20px!important;bottom:50px!important;'
+      +'top:20px!important;right:20px!important;bottom:auto!important;'
       +'display:flex!important;flex-direction:column!important;gap:10px!important;'
       +'pointer-events:none'
       +'}';
@@ -1804,6 +1804,7 @@ const BALANCE_SSE_SCRIPT = `<script>
   };
 
   function init(){
+    ensureLayerStyle();
     window._IM_NOTI.loadInitial();
   }
 
@@ -7878,7 +7879,7 @@ body{margin:0;background:#f0f2f5;font-family:Pretendard,-apple-system,sans-serif
 .icon-wrap span{font-size:11px;color:#888}
 .header-message{position:relative;width:25px;height:20px;cursor:pointer}
 .header-new{font-size:8px;font-weight:800;line-height:12px;position:absolute;top:-2px;right:-2px;width:12px;height:12px;text-align:center;color:#fff;border-radius:6px;background:red}
-#chat_notice_layer{position:fixed;z-index:9999;right:20px;bottom:50px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+#chat_notice_layer{position:fixed;z-index:9999;top:20px;right:20px;bottom:auto;display:flex;flex-direction:column;gap:10px;pointer-events:none}
 .toast{background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.18);padding:13px 18px;min-width:240px;max-width:300px;border-left:3px solid #159EFD;pointer-events:auto;cursor:pointer;font-family:Pretendard,-apple-system,sans-serif}
 .toast.animate{animation:_im_slide_up 4s ease forwards}
 .toast-title{font-size:13px;font-weight:700;color:#222;margin-bottom:3px}
@@ -7916,8 +7917,25 @@ body{margin:0;background:#f0f2f5;font-family:Pretendard,-apple-system,sans-serif
 </div>
 
 <div class="main">
+  <div class="section" style="background:#f5f7fa">
+    <h4>토스트 카드 디자인 (실제 우측 상단에 뜨는 모양)</h4>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:4px">
+      <div class="toast" style="position:static;animation:none;pointer-events:none">
+        <div class="toast-title">실시간테스트닉님의 메시지</div>
+        <div class="toast-body">안녕하세요! 거래 문의드립니다.</div>
+      </div>
+      <div class="toast" style="position:static;animation:none;pointer-events:none">
+        <div class="toast-title">거래 인계 요청</div>
+        <div class="toast-body">판매자가 아이템 인계를 요청했습니다.</div>
+      </div>
+      <div class="toast" style="position:static;animation:none;pointer-events:none">
+        <div class="toast-title">실시간테스트닉님의 메시지</div>
+        <div class="toast-body">📷 사진을 보냈습니다.</div>
+      </div>
+    </div>
+  </div>
   <div class="section">
-    <h4>토스트 알림 미리보기 (버튼 클릭 시 실제 애니메이션)</h4>
+    <h4>알림 발생 상황 & 실제 애니메이션 테스트 (버튼 클릭 → 우측 상단에 팝업)</h4>
     <div class="trigger-list">
       <div class="trigger-item">
         <div>
@@ -7958,7 +7976,12 @@ body{margin:0;background:#f0f2f5;font-family:Pretendard,-apple-system,sans-serif
   </div>
 </div>
 
-<div id="chat_notice_layer"></div>
+<div id="chat_notice_layer">
+  <div class="toast">
+    <div class="toast-title">실시간테스트닉님의 메시지</div>
+    <div class="toast-body">안녕하세요! 거래 문의드립니다.</div>
+  </div>
+</div>
 
 <script>
 function showToast(title, body) {
