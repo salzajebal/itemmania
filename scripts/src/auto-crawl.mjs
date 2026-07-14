@@ -53,12 +53,13 @@ function ts() { return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seou
 function log(msg) { console.log(`[${ts()}] ${msg}`); }
 
 // ─── AJAX POST 직접 호출 ───────────────────────────────────────────────────
-async function fetchAjaxList(gameId, category, tid, retries = 2) {
+// page=1,2,3... 파라미터로 페이지네이션 (pagging_list HTML에서 확인)
+async function fetchAjaxList(gameId, category, page, retries = 2) {
   const url = `https://www.itemmania.com/${category}/ajax_list.php`;
   const body = new URLSearchParams({
     search_game: String(gameId),
     search_goods: 'all',
-    tid: String(tid),
+    page: String(page),
     search_kind: '',
     search_word: '',
   }).toString();
@@ -161,25 +162,15 @@ function parseProducts(data, gameId, gameName, category) {
   }).filter(p => p.itemmaniaid);
 }
 
-// ─── pagging_list에서 다음 tid 추출 ───────────────────────────────────────
-function extractNextTidFromPaggingList(data) {
-  // pagging_list 구조 확인 후 "현재 페이지 다음" tid 반환
+// ─── pagging_list HTML에서 총 페이지 수 추출 ─────────────────────────────
+// pagging_list는 HTML 문자열: <li class="page_nums">...<a href="#" ?page=315#">끝</a></li>
+function extractTotalPages(data) {
   const pl = data.pagging_list;
-  if (!pl) return null;
-  // 배열이면: [{tid:0, active:true}, {tid:123, active:false}, ...]
-  if (Array.isArray(pl)) {
-    const activeIdx = pl.findIndex(p => p.active === true || p.current === true || p.selected === true);
-    if (activeIdx >= 0 && activeIdx + 1 < pl.length) {
-      return pl[activeIdx + 1]?.tid ?? pl[activeIdx + 1]?.page_tid ?? null;
-    }
-    // active 없으면 마지막 tid
-    return pl[pl.length - 1]?.tid ?? null;
-  }
-  // 객체이면: {next_tid: 123} 또는 {tid: 123}
-  if (typeof pl === 'object') {
-    return pl.next_tid ?? pl.tid ?? pl.next ?? null;
-  }
-  return null;
+  if (!pl || typeof pl !== 'string') return 1;
+  // ?page=N# 중 가장 큰 N = 마지막 페이지
+  const nums = [...pl.matchAll(/\?page=([0-9]+)#?/g)].map(m => parseInt(m[1], 10));
+  if (nums.length === 0) return 1;
+  return Math.max(...nums);
 }
 
 // ─── 서버 배치 업로드 ──────────────────────────────────────────────────────
@@ -208,12 +199,12 @@ async function runOnce() {
     for (const game of GAMES) {
       process.stdout.write(`  [${game.name}] `);
       let gameSaved = 0;
-      let tid = 0;
       let pagesDone = 0;
+      let totalPages = PAGES_PER_GAME; // 첫 응답에서 실제 총 페이지 수로 업데이트
 
-      for (let page = 1; page <= PAGES_PER_GAME; page++) {
+      for (let page = 1; page <= Math.min(totalPages, PAGES_PER_GAME); page++) {
         try {
-          const { status, text } = await fetchAjaxList(game.id, cat, tid);
+          const { status, text } = await fetchAjaxList(game.id, cat, page);
 
           if (status !== 200 || !text || text.length < 10) {
             process.stdout.write(`${page}p:❌(${status}) `);
@@ -231,18 +222,21 @@ async function runOnce() {
             break;
           }
 
-          const products = parseProducts(json.data ?? json, game.id, game.name, cat);
+          const data = json.data ?? json;
+
+          // 첫 페이지에서 실제 총 페이지 수 확인
+          if (page === 1) {
+            const actualTotal = extractTotalPages(data);
+            totalPages = actualTotal;
+            if (actualTotal > 1) process.stdout.write(`(총${actualTotal}p) `);
+          }
+
+          const products = parseProducts(data, game.id, game.name, cat);
 
           if (products.length === 0) {
             if (page === 1) {
-              // 첫 페이지 빈 응답: 필드 구조 출력
-              const sampleItem = (json.data?.p ?? json.data?.pp ?? [])[0];
-              if (sampleItem) {
-                process.stdout.write(`\n  [필드구조] ${JSON.stringify(Object.keys(sampleItem))}\n`);
-                process.stdout.write(`  [샘플] ${JSON.stringify(sampleItem)}\n`);
-              } else {
-                process.stdout.write(`\n  [데이터없음] keys=${JSON.stringify(Object.keys(json.data ?? json))}\n`);
-              }
+              const dataKeys = JSON.stringify(Object.keys(data));
+              process.stdout.write(`\n  [데이터없음] keys=${dataKeys}\n`);
             }
             break;
           }
@@ -254,11 +248,6 @@ async function runOnce() {
           totalSaved += saved;
           pagesDone++;
           process.stdout.write(`${page}p:${saved}개 `);
-
-          // 다음 tid: pagging_list 에서 추출
-          const nextTid = extractNextTidFromPaggingList(json.data ?? json);
-          if (nextTid === null || nextTid === tid) break;
-          tid = nextTid;
 
         } catch (e) {
           process.stdout.write(`${page}p:❌ `);
@@ -307,30 +296,17 @@ async function main() {
     process.exit(1);
   }
 
-  // JSON 구조 사전 확인 (리니지클래식 1페이지) — 생략 (이미 검증됨)
-  // pagging_list 구조만 확인
-  log('🔍 pagging_list 구조 확인 중...');
+  // 리니지클래식 1페이지로 총 페이지 수 확인
+  log('🔍 페이지 수 확인 중 (리니지클래식 sell)...');
   try {
-    const { status, text } = await fetchAjaxList(5913, 'sell', 0, 1);
+    const { text } = await fetchAjaxList(5913, 'sell', 1, 1);
     const json = JSON.parse(text);
     const data = json.data ?? json;
     const pLen = (data.p?.length ?? 0) + (data.g?.length ?? 0);
-    log(`   p+g 항목 수: ${pLen}  TradeCount: ${data.TradeCount}`);
-    const pl = data.pagging_list;
-    if (Array.isArray(pl)) {
-      log(`   pagging_list(배열) 길이: ${pl.length}`);
-      log(`   첫 항목: ${JSON.stringify(pl[0])}`);
-      log(`   마지막 항목: ${JSON.stringify(pl[pl.length - 1])}`);
-    } else if (pl && typeof pl === 'object') {
-      log(`   pagging_list(객체) keys: ${JSON.stringify(Object.keys(pl))}`);
-      log(`   내용: ${JSON.stringify(pl)}`);
-    } else {
-      log(`   pagging_list = ${JSON.stringify(pl)}`);
-    }
-    const nextTid = extractNextTidFromPaggingList(data);
-    log(`   → 다음 tid: ${nextTid}`);
+    const total = extractTotalPages(data);
+    log(`   1페이지 항목: ${pLen}개  총 페이지: ${total}  TradeCount: ${data.TradeCount}`);
   } catch (e) {
-    log(`   ⚠️  pagging_list 확인 실패: ${e.message}`);
+    log(`   ⚠️  확인 실패: ${e.message}`);
   }
 
   if (_onceFlag) {
