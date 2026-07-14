@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { useAuth } from "@/lib/AuthContext";
 import { useLocation } from "wouter";
@@ -245,9 +245,34 @@ function ChatRoomsTab() {
   );
 }
 
+function useAdminVoiceAlerts() {
+  useEffect(() => {
+    function speak(text: string) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ko-KR";
+      u.rate = 1.0;
+      u.volume = 1.0;
+      window.speechSynthesis.speak(u);
+    }
+
+    const es = new EventSource("/api/events", { withCredentials: true });
+    es.addEventListener("notification", (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data) as { title?: string };
+        if (d.title) speak(d.title);
+      } catch {}
+    });
+    return () => es.close();
+  }, []);
+}
+
 export default function Admin() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  useAdminVoiceAlerts();
 
   if (!user) {
     setLocation("/");

@@ -1698,8 +1698,15 @@ const BALANCE_SSE_SCRIPT = `<script>
   es.addEventListener('credit_score',function(e){
     try{ var d=JSON.parse(e.data); window.dispatchEvent(new CustomEvent('im:credit_score',{detail:{score:d.score??0}})); }catch(ex){}
   });
+  function _imSpeak(text){
+    if(!window.speechSynthesis||!text)return;
+    window.speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(text);
+    u.lang='ko-KR';u.rate=1.0;u.volume=1.0;
+    window.speechSynthesis.speak(u);
+  }
   es.addEventListener('notification',function(e){
-    try{ var d=JSON.parse(e.data); window._IM_NOTI.showToast(d); window._IM_NOTI.addUnread(); }catch(ex){}
+    try{ var d=JSON.parse(e.data); window._IM_NOTI.showToast(d); window._IM_NOTI.addUnread(); if(d.title)_imSpeak(d.title); }catch(ex){}
   });
 })();
 
