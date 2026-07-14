@@ -530,6 +530,48 @@ tbody tr:hover{background:#fafbff}
 
 <div id="toast"></div>
 
+<!-- 실시간 알림 토스트 레이어 -->
+<div id="admin_notice_layer" style="position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none"></div>
+
+<style>
+@keyframes _adm_slide_down{
+  0%{transform:translateY(-30px);opacity:0}
+  12%,85%{transform:translateY(0);opacity:1}
+  100%{transform:translateY(-20px);opacity:0;visibility:hidden}
+}
+.adm-toast{background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.18);padding:13px 18px;min-width:260px;max-width:320px;border-left:3px solid #159EFD;pointer-events:auto;cursor:pointer;font-family:inherit;animation:_adm_slide_down 5s ease forwards}
+.adm-toast-title{font-size:13px;font-weight:700;color:#222;margin-bottom:3px}
+.adm-toast-body{font-size:12px;color:#666;line-height:1.4}
+</style>
+
+<script>
+(function(){
+  function showAdminToast(title, body) {
+    var layer = document.getElementById('admin_notice_layer');
+    if (!layer) return;
+    var el = document.createElement('div');
+    el.className = 'adm-toast';
+    el.innerHTML = '<div class="adm-toast-title">' + (title||'') + '</div>' +
+                   (body ? '<div class="adm-toast-body">' + body + '</div>' : '');
+    el.onclick = function(){ if(el.parentNode) el.parentNode.removeChild(el); };
+    layer.appendChild(el);
+    setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 5200);
+  }
+
+  if (typeof EventSource === 'undefined') return;
+  var es = new EventSource('/api/events');
+  es.addEventListener('notification', function(e){
+    try {
+      var d = JSON.parse(e.data);
+      showAdminToast(d.title, d.body);
+    } catch(ex){}
+  });
+  es.addEventListener('error', function(){
+    setTimeout(function(){ es.close(); es = new EventSource('/api/events'); }, 3000);
+  });
+})();
+</script>
+
 <!--ADMIN_SCRIPT-->
 </body>
 </html>`;

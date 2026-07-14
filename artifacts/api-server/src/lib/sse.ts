@@ -20,6 +20,10 @@ export function pushToUser(userId: number, event: string, data: object): void {
   if (!set) return;
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of set) {
-    try { res.write(payload); } catch { set.delete(res); }
+    try {
+      res.write(payload);
+      // flush immediately so data is not held in proxy buffers
+      if (typeof (res as any).flush === "function") (res as any).flush();
+    } catch { set.delete(res); }
   }
 }
