@@ -5245,6 +5245,8 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
 const CHAT_NEW_INTERCEPT_SCRIPT = `
 <style>
 /* ── 채팅창 반응형 오버라이드 ── */
+/* popup_content min-width:825px + padding:40px = 865px → 창 너비 초과 방지 (전역 적용) */
+.popup_content{min-width:0!important;box-sizing:border-box!important;width:100%!important;max-width:100%!important;}
 .chat_room{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;}
 /* chat_room이 flex가 되면 chat_content_wrap이 flex 아이템이 되어 내용 크기만큼만 차지 → flex:1로 부모 채우기 */
 .chat_content_wrap{flex:1!important;min-width:0!important;}
