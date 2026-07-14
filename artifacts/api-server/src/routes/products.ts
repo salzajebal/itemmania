@@ -3,6 +3,7 @@ import { eq, ilike, and, sql, desc, asc, count, inArray } from "drizzle-orm";
 import { db, productsTable, gamesTable, ordersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { getAllGamesWithServers } from "./games";
+import { notifyAdmin } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -167,6 +168,11 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
       status: "active",
     })
     .returning();
+
+  notifyAdmin("판매 등록", {
+    body: `${inserted.title}${inserted.gameName ? ` (${inserted.gameName})` : ""} — ${inserted.price.toLocaleString()}원`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
 
   res.status(201).json(formatProduct(inserted));
 });

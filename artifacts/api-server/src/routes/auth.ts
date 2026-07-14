@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { notifyAdmin } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   req.session.userId = user.id;
   req.session.userRole = user.role;
+
+  notifyAdmin("신규 회원가입", {
+    body: `${user.nickname} (${user.email})`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
 
   res.status(201).json({
     id: user.id,
@@ -91,6 +97,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   req.session.userId = user.id;
   req.session.userRole = user.role;
+
+  notifyAdmin("회원 로그인", {
+    body: `${user.nickname} (${user.email})`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
 
   res.json({
     id: user.id,

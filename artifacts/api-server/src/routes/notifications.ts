@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
-import { db, notificationsTable } from "@workspace/db";
+import { db, notificationsTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 
@@ -25,6 +25,18 @@ export async function createNotification(
     link: notif.link,
     createdAt: notif.createdAt,
   });
+}
+
+// 모든 어드민에게 알림 전송 (내부 사용)
+export async function notifyAdmin(
+  title: string,
+  options?: { body?: string; link?: string }
+): Promise<void> {
+  const admins = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.role, "admin"));
+  await Promise.all(admins.map(a => createNotification(a.id, "system", title, options)));
 }
 
 // 내 알림 목록 (최근 30개)
