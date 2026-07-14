@@ -6803,20 +6803,8 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
   }
 
   function showLoginModal() {
-    var overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-    overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:36px 32px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">' +
-      '<div style="font-size:22px;font-weight:700;margin-bottom:8px;color:#2e2e2e">로그인이 필요합니다</div>' +
-      '<div style="font-size:14px;color:#767676;margin-bottom:24px">판매신청/채팅을 이용하려면 로그인해 주세요.</div>' +
-      '<div style="display:flex;gap:10px;justify-content:center">' +
-        '<button id="_im_modal_cancel" style="flex:1;padding:12px 0;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:15px;font-weight:600;cursor:pointer;color:#555">취소</button>' +
-        '<button id="_im_modal_login" style="flex:1;padding:12px 0;border:none;border-radius:8px;background:#159EFD;color:#fff;font-size:15px;font-weight:700;cursor:pointer">로그인</button>' +
-      '</div>' +
-    '</div>';
-    document.body.appendChild(overlay);
-    document.getElementById('_im_modal_cancel').onclick = function(){ document.body.removeChild(overlay); };
-    document.getElementById('_im_modal_login').onclick = function(){ try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; };
-    overlay.addEventListener('click', function(e){ if(e.target === overlay) document.body.removeChild(overlay); });
+    try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+    location.href = '/login';
   }
 
   function showSuccessModal(msg) {
