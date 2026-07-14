@@ -290,8 +290,16 @@ export default function Admin() {
     <div className="min-h-[100dvh] flex flex-col bg-background">
       <Navbar />
       <main className="flex-1 mt-16 max-w-7xl w-full mx-auto p-4 md:p-8">
-        <h1 className="text-3xl font-bold mb-8">관리자 패널</h1>
-        
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold">관리자 패널</h1>
+          <Button
+            variant="outline"
+            onClick={() => { window.location.href = "/api/admin/crawl-script"; }}
+          >
+            🕷️ 크롤 스크립트 다운로드
+          </Button>
+        </div>
+
         <Card>
           <CardContent className="p-6">
             <Tabs defaultValue="withdrawals">

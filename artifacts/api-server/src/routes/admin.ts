@@ -7,6 +7,13 @@ import * as cheerio from "cheerio";
 import { fetchProxyPage } from "../lib/proxy";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+import { createHmac } from "crypto";
+
+// SESSION_SECRET 기반 고정 크롤 키 (재시작해도 동일)
+const CRAWL_KEY = createHmac("sha256", process.env.SESSION_SECRET || "itemmania-default")
+  .update("crawl-key-v1")
+  .digest("hex")
+  .slice(0, 32);
 
 const ADMIN_STATIC_DIR = (() => {
   const candidates = [
@@ -1364,7 +1371,44 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
 
 // ── 로컬 크롤러: HTML 업로드 → 파싱 → DB 저장 ────────────────────────────
 // PC에서 auto-crawl.mjs 스크립트가 직접 itemmania HTML을 가져와 이 엔드포인트로 POST
+// 크롤 키 조회 (어드민 전용)
+router.get("/admin/crawl-key", async (req, res): Promise<void> => {
+  if (req.session?.userRole !== "admin") { res.status(403).json({ error: "권한 없음" }); return; }
+  res.json({ key: CRAWL_KEY });
+});
+
+// 크롤 스크립트 다운로드 (어드민 전용) — SITE_URL·CRAWL_KEY 자동 삽입
+router.get("/admin/crawl-script", async (req, res): Promise<void> => {
+  if (req.session?.userRole !== "admin") { res.status(403).json({ error: "권한 없음" }); return; }
+
+  const scriptPath = join(process.cwd(), "scripts", "src", "auto-crawl.mjs");
+  const altPath = join(process.cwd(), "..", "..", "scripts", "src", "auto-crawl.mjs");
+  const finalPath = existsSync(scriptPath) ? scriptPath : altPath;
+
+  let script = readFileSync(finalPath, "utf8");
+
+  const domains = (process.env.REPLIT_DOMAINS || "").split(",").map(d => d.trim()).filter(Boolean);
+  const siteUrl = domains.length > 0 ? `https://${domains[0]}` : "https://YOUR_SITE.replit.app";
+
+  script = script
+    .replace("'https://YOUR_SITE.replit.app'", `'${siteUrl}'`)
+    .replace("'YOUR_CRAWL_KEY'", `'${CRAWL_KEY}'`);
+
+  res.set({
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="auto-crawl.mjs"`,
+    "Cache-Control": "no-store",
+  });
+  res.send(script);
+});
+
 router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
+  // X-Crawl-Key 헤더 또는 어드민 세션 인증
+  const crawlKey = req.headers["x-crawl-key"] as string | undefined;
+  const isAdmin = req.session?.userRole === "admin";
+  if (!crawlKey && !isAdmin) { res.status(401).json({ error: "인증 필요 (X-Crawl-Key 헤더 또는 어드민 세션)" }); return; }
+  if (crawlKey && crawlKey !== CRAWL_KEY) { res.status(401).json({ error: "CRAWL_KEY가 올바르지 않습니다" }); return; }
+
   const { html, gameId, category = "sell", gameName: overrideName } = req.body as {
     html?: string;
     gameId?: number;
@@ -1376,7 +1420,7 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
     res.status(400).json({ error: "html 필드가 필요합니다" });
     return;
   }
-  if (!gameId || typeof gameId !== "number") {
+  if (typeof gameId !== "number") {
     res.status(400).json({ error: "gameId 필드가 필요합니다" });
     return;
   }

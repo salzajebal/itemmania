@@ -4,19 +4,15 @@
  *
  * ─── 사용법 ───────────────────────────────────────
  *  1. Node.js 18 이상 필요 (https://nodejs.org)
- *  2. 아래 설정 3줄만 채우세요
+ *  2. 아래 설정 2줄만 채우세요 (어드민 패널 > 스크립트 다운로드 시 자동 입력됨)
  *  3. 터미널에서: node auto-crawl.mjs
  *  4. 창 닫지 말고 켜두면 1시간마다 자동 수집
  * ──────────────────────────────────────────────────
- *
- * 이 스크립트는 외부 패키지가 전혀 필요 없습니다.
- * HTML을 그대로 서버에 전송해 서버가 파싱 후 저장합니다.
  */
 
 // ★ 여기만 수정하세요 ★
-const SITE_URL    = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
-const ADMIN_EMAIL = 'admin@admin.com';
-const ADMIN_PW    = 'admin1234';
+const SITE_URL  = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
+const CRAWL_KEY = 'YOUR_CRAWL_KEY';               // 어드민 패널에서 확인
 
 // 수집할 게임 목록 (주석처리하면 제외)
 const GAMES = [
@@ -70,7 +66,6 @@ async function fetchHtml(url, retries = 2) {
           },
           timeout: 25000,
         }, (res) => {
-          // 리다이렉트 처리
           if (res.statusCode >= 301 && res.statusCode <= 302 && res.headers.location) {
             res.resume();
             resolve(fetchHtml(res.headers.location, retries - 1));
@@ -99,30 +94,13 @@ async function fetchHtml(url, retries = 2) {
   }
 }
 
-// 관리자 로그인 → 세션 쿠키 반환
-async function login() {
-  const res = await fetch(`${SITE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PW }),
-    signal: AbortSignal.timeout(15000),
-    redirect: 'manual',
-  });
-  const cookie = (res.headers.get('set-cookie') || '').match(/(connect\.sid=[^;]+)/)?.[1];
-  if (!cookie) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`로그인 실패 (${res.status}) — 이메일/비밀번호 확인: ${body.slice(0, 100)}`);
-  }
-  return cookie;
-}
-
 // HTML을 서버에 업로드 → 서버가 파싱 & 저장
-async function uploadHtml(html, gameId, gameName, category, cookie) {
+async function uploadHtml(html, gameId, gameName, category) {
   const res = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': cookie,
+      'X-Crawl-Key': CRAWL_KEY,
     },
     body: JSON.stringify({ html, gameId, gameName, category }),
     signal: AbortSignal.timeout(30000),
@@ -134,7 +112,7 @@ async function uploadHtml(html, gameId, gameName, category, cookie) {
   return res.json();
 }
 
-async function runOnce(cookie) {
+async function runOnce() {
   let totalSaved = 0, totalFailed = 0;
 
   for (const cat of CATEGORIES) {
@@ -149,14 +127,14 @@ async function runOnce(cookie) {
         const url = `https://www.itemmania.com/${cat}/list.html?search_game=${game.id}&search_goods=all&page=${page}`;
         try {
           const html = await fetchHtml(url);
-          const result = await uploadHtml(html, game.id, game.name, cat, cookie);
+          const result = await uploadHtml(html, game.id, game.name, cat);
           const saved = result.saved ?? 0;
           const parsed = result.parsed ?? 0;
           gameSaved += saved;
           totalSaved += saved;
           if (parsed === 0) {
             process.stdout.write(`(${page}p:없음) `);
-            break; // 상품이 없으면 다음 페이지 불필요
+            break;
           } else {
             process.stdout.write(`${page}p:${saved}개 `);
           }
@@ -185,31 +163,33 @@ async function main() {
   console.log('='.repeat(55));
   console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 계속 켜두세요!\n');
 
-  let cookie;
+  // 연결 테스트
+  process.stdout.write('🔗 서버 연결 확인 중...');
   try {
-    process.stdout.write('🔑 로그인 중...');
-    cookie = await login();
+    const testRes = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
+      body: JSON.stringify({ html: '<test>', gameId: 0, category: 'sell' }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (testRes.status === 401) {
+      console.error(' ❌ CRAWL_KEY가 올바르지 않습니다. 어드민 패널에서 키를 다시 확인하세요.');
+      process.exit(1);
+    }
     console.log(' ✅');
   } catch (e) {
-    console.error(` ❌ ${e.message}`);
+    console.error(` ❌ 서버 연결 실패: ${e.message}`);
+    console.error(`   SITE_URL을 확인하세요: ${SITE_URL}`);
     process.exit(1);
   }
 
   while (true) {
     log('수집 시작');
     try {
-      const { totalSaved, totalFailed } = await runOnce(cookie);
+      const { totalSaved, totalFailed } = await runOnce();
       log(`✅ 완료 — ${totalSaved}개 저장, ${totalFailed}개 실패`);
     } catch (e) {
       log(`❌ 오류: ${e.message}`);
-      // 세션 만료 시 재로그인
-      if (e.message.includes('401') || e.message.includes('로그인')) {
-        try {
-          process.stdout.write('🔄 재로그인...');
-          cookie = await login();
-          console.log(' ✅');
-        } catch { /* next loop will retry */ }
-      }
     }
     log(`💤 ${INTERVAL_MS / 60000}분 후 재수집`);
     await sleep(INTERVAL_MS);
