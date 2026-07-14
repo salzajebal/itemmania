@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, or, inArray, and } from "drizzle-orm";
+import cron from "node-cron";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
+import { logger } from "../lib/logger";
 import * as cheerio from "cheerio";
 import { fetchProxyPage } from "../lib/proxy";
 import { readFileSync, existsSync } from "fs";
@@ -1494,5 +1496,56 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
 
   res.json({ parsed: products.length, saved, failed });
 });
+
+// ── 자동 크롤 스케줄러 ──────────────────────────────────────────────────────
+// SCRAPER_API_KEY 환경변수가 있을 때만 활성화됨.
+// AUTO_CRAWL_SCHEDULE: cron 표현식 (기본 "*/30 * * * *" = 30분마다)
+// AUTO_CRAWL_PAGES   : 페이지 수 (기본 2)
+let _schedulerTask: ReturnType<typeof cron.schedule> | null = null;
+let _schedulerRunning = false;
+
+export function startAutoScheduler(): void {
+  const apiKey = process.env.SCRAPER_API_KEY;
+  if (!apiKey) {
+    logger.info("AUTO_CRAWL: SCRAPER_API_KEY 없음 — 자동 크롤 비활성화");
+    return;
+  }
+
+  const schedule = process.env.AUTO_CRAWL_SCHEDULE ?? "*/30 * * * *";
+  const pages    = Math.max(1, parseInt(process.env.AUTO_CRAWL_PAGES ?? "2", 10));
+
+  if (_schedulerTask) _schedulerTask.stop();
+
+  _schedulerTask = cron.schedule(schedule, async () => {
+    if (_schedulerRunning) {
+      logger.info("AUTO_CRAWL: 이전 크롤이 아직 실행 중 — 스킵");
+      return;
+    }
+    _schedulerRunning = true;
+    logger.info({ schedule, pages }, "AUTO_CRAWL: 크롤 시작");
+
+    const jobId = `auto_${Date.now()}`;
+    const job: CrawlJob = {
+      id: jobId, status: "running",
+      totalGames: 0, totalPages: 0, totalSteps: 1,
+      games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0,
+      logs: [], startedAt: Date.now(),
+    };
+    crawlJobs.set(jobId, job);
+
+    try {
+      await runCrawlJob(job, [], pages, apiKey, false);
+      logger.info({ saved: job.totalSaved, failed: job.totalFailed }, "AUTO_CRAWL: 완료");
+    } catch (err) {
+      logger.error({ err }, "AUTO_CRAWL: 치명적 오류");
+    } finally {
+      _schedulerRunning = false;
+      // 메모리 절약: 완료된 자동 작업 로그 30분 후 삭제
+      setTimeout(() => crawlJobs.delete(jobId), 30 * 60 * 1000);
+    }
+  });
+
+  logger.info({ schedule, pages }, "AUTO_CRAWL: 스케줄러 등록 완료");
+}
 
 export default router;

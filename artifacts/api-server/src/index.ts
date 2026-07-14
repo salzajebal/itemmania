@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startAutoScheduler } from "./routes/admin";
 import { db, usersTable, walletsTable, gamesTable, gameServersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -126,5 +127,6 @@ seedAdmin()
         process.exit(1);
       }
       logger.info({ port }, "Server listening");
+      startAutoScheduler();
     });
   });
