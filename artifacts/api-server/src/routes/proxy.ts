@@ -7860,6 +7860,121 @@ function serveBuyMying(
     : result + MYROOM_BUY_SCRIPT;
 }
 
+// 토스트 데모 페이지 (임시)
+router.get("/toast-demo", (_req, res): void => {
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>알림 토스트 데모</title>
+<style>
+body{margin:0;background:#f0f2f5;font-family:Pretendard,-apple-system,sans-serif;height:100vh}
+@keyframes _im_slide_up{0%{transform:translateY(40px);opacity:0}12%,85%{transform:translateY(0);opacity:1}100%{transform:translateY(-20px);opacity:0;visibility:hidden}}
+.demo-header{background:#fff;border-bottom:1px solid #ddd;padding:0 40px;display:flex;align-items:center;justify-content:space-between;height:70px;position:sticky;top:0}
+.demo-header h3{font-size:15px;color:#333;margin:0}
+.badge-demo{display:flex;align-items:center;gap:30px}
+.icon-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.icon-wrap span{font-size:11px;color:#888}
+.header-message{position:relative;width:25px;height:20px;cursor:pointer}
+.header-new{font-size:8px;font-weight:800;line-height:12px;position:absolute;top:-2px;right:-2px;width:12px;height:12px;text-align:center;color:#fff;border-radius:6px;background:red}
+#chat_notice_layer{position:fixed;z-index:9999;right:20px;bottom:50px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.toast{background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.18);padding:13px 18px;min-width:240px;max-width:300px;border-left:3px solid #159EFD;pointer-events:auto;cursor:pointer;font-family:Pretendard,-apple-system,sans-serif}
+.toast.animate{animation:_im_slide_up 4s ease forwards}
+.toast-title{font-size:13px;font-weight:700;color:#222;margin-bottom:3px}
+.toast-body{font-size:12px;color:#666;line-height:1.4}
+.main{max-width:900px;margin:40px auto;padding:0 20px}
+.section{background:#fff;border-radius:12px;padding:24px 28px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.section h4{margin:0 0 16px;font-size:14px;color:#333;border-bottom:1px solid #f0f0f0;padding-bottom:10px}
+.btn{display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:8px;background:#159EFD;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer;gap:6px}
+.btn:hover{background:#0e7fd4}
+.trigger-list{display:flex;flex-direction:column;gap:10px}
+.trigger-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #eee;border-radius:8px;background:#fafafa}
+.trigger-label{font-size:13px;color:#333}
+.trigger-sub{font-size:11px;color:#999;margin-top:2px}
+</style>
+</head>
+<body>
+
+<div class="demo-header">
+  <h3>알림 토스트 & 뱃지 데모</h3>
+  <div class="badge-demo">
+    <div class="icon-wrap">
+      <div class="header-message">
+        <svg width="25" height="20" viewBox="0 0 28 24" fill="#888"><path d="M2 2h24v16H16l-2 3-2-3H2z"/></svg>
+        <span class="header-new">N</span>
+      </div>
+      <span>미읽음 뱃지</span>
+    </div>
+    <div class="icon-wrap">
+      <div class="header-message">
+        <svg width="25" height="20" viewBox="0 0 28 24" fill="#ccc"><path d="M2 2h24v16H16l-2 3-2-3H2z"/></svg>
+      </div>
+      <span>읽음 완료</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="section">
+    <h4>토스트 알림 미리보기 (버튼 클릭 시 실제 애니메이션)</h4>
+    <div class="trigger-list">
+      <div class="trigger-item">
+        <div>
+          <div class="trigger-label">💬 채팅 메시지 수신</div>
+          <div class="trigger-sub">상대방이 채팅방에 메시지를 보낼 때</div>
+        </div>
+        <button class="btn" onclick="showToast('실시간테스트닉님의 메시지','안녕하세요! 거래 문의드립니다.')">토스트 보기</button>
+      </div>
+      <div class="trigger-item">
+        <div>
+          <div class="trigger-label">📷 사진 전송</div>
+          <div class="trigger-sub">상대방이 채팅방에 사진을 보낼 때</div>
+        </div>
+        <button class="btn" onclick="showToast('실시간테스트닉님의 메시지','📷 사진을 보냈습니다.')">토스트 보기</button>
+      </div>
+      <div class="trigger-item">
+        <div>
+          <div class="trigger-label">📦 아이템 인계 요청</div>
+          <div class="trigger-sub">판매자가 인계하기 버튼을 눌렀을 때 → 구매자에게</div>
+        </div>
+        <button class="btn" onclick="showToast('거래 인계 요청','판매자가 아이템 인계를 요청했습니다.')">토스트 보기</button>
+      </div>
+      <div class="trigger-item">
+        <div>
+          <div class="trigger-label">❌ 거래 취소</div>
+          <div class="trigger-sub">한쪽이 거래를 취소했을 때 → 상대방에게</div>
+        </div>
+        <button class="btn" onclick="showToast('거래가 취소되었습니다','거래가 취소 처리되었습니다.')">토스트 보기</button>
+      </div>
+      <div class="trigger-item">
+        <div>
+          <div class="trigger-label">✅ 거래 완료</div>
+          <div class="trigger-sub">구매자가 인수확인 버튼을 눌렀을 때 → 판매자에게</div>
+        </div>
+        <button class="btn" onclick="showToast('거래가 완료되었습니다','구매자가 인수를 확인했습니다.')">토스트 보기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="chat_notice_layer"></div>
+
+<script>
+function showToast(title, body) {
+  var layer = document.getElementById('chat_notice_layer');
+  var toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = '<div class="toast-title">' + title + '</div><div class="toast-body">' + body + '</div>';
+  layer.appendChild(toast);
+  requestAnimationFrame(function(){ toast.classList.add('animate'); });
+  setTimeout(function(){ if(toast.parentNode) toast.parentNode.removeChild(toast); }, 4200);
+}
+</script>
+</body>
+</html>`);
+});
+
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
 router.get(["/", ""], async (req, res): Promise<void> => {
   if (!staticHtml) {

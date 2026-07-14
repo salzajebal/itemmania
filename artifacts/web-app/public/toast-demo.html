@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+body { background: #f0f0f0; font-family: Pretendard, -apple-system, sans-serif; margin: 0; height: 100vh; }
+@keyframes _im_slide_up {
+  0%   { transform: translateY(40px); opacity: 0; }
+  12%, 85% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-20px); opacity: 0; visibility: hidden; }
+}
+#chat_notice_layer {
+  position: fixed; z-index: 9999;
+  right: 20px; bottom: 50px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.toast {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  padding: 13px 18px;
+  min-width: 240px; max-width: 300px;
+  border-left: 3px solid #159EFD;
+  cursor: pointer;
+  font-family: Pretendard, -apple-system, sans-serif;
+}
+.toast-title { font-size: 13px; font-weight: 700; color: #222; margin-bottom: 3px; }
+.toast-body  { font-size: 12px; color: #666; line-height: 1.4; }
+/* 헤더 뱃지 데모 */
+.demo-header { background: #fff; border-bottom: 1px solid #ddd; padding: 0 40px; display: flex; align-items: center; justify-content: space-between; height: 70px; }
+.header-message { position: relative; width: 25px; height: 20px; }
+.header-message img { display: block; width: 25px; height: 20px; }
+.header-new { font-size: 8px; font-weight: 800; line-height: 12px; position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; text-align: center; color: #fff; border-radius: 6px; background: red; }
+.label { font-size: 12px; color: #888; margin-top: 4px; text-align: center; }
+.section { display: flex; align-items: center; gap: 20px; }
+</style>
+</head>
+<body>
+
+<!-- 헤더 데모 -->
+<div class="demo-header">
+  <span style="font-size:14px;color:#555">← 헤더 채팅 아이콘 미읽음 뱃지</span>
+  <div class="section">
+    <div>
+      <div class="header-message">
+        <svg width="25" height="20" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 2H3C1.9 2 1 2.9 1 4v10c0 1.1.9 2 2 2h4l4 4 4-4h6c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="#888"/>
+        </svg>
+        <span class="header-new">N</span>
+      </div>
+      <div class="label">미읽음 있을 때</div>
+    </div>
+    <div>
+      <div class="header-message">
+        <svg width="25" height="20" viewBox="0 0 24 18" fill="none">
+          <path d="M21 2H3C1.9 2 1 2.9 1 4v10c0 1.1.9 2 2 2h4l4 4 4-4h6c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="#ccc"/>
+        </svg>
+      </div>
+      <div class="label">읽음 완료</div>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 데모 (정적으로 3개 표시) -->
+<div id="chat_notice_layer">
+  <div class="toast">
+    <div class="toast-title">실시간테스트닉님의 메시지</div>
+    <div class="toast-body">안녕하세요! 거래 문의드립니다.</div>
+  </div>
+  <div class="toast">
+    <div class="toast-title">거래 인계 요청</div>
+    <div class="toast-body">구매자가 아이템 인계를 요청했습니다.</div>
+  </div>
+  <div class="toast">
+    <div class="toast-title">실시간테스트닉님의 메시지</div>
+    <div class="toast-body">📷 사진을 보냈습니다.</div>
+  </div>
+</div>
+
+</body>
+</html>
