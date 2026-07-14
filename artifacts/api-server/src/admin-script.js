@@ -9,6 +9,27 @@ window.onerror=function(msg,src,line,col,err){
   document.body.appendChild(d);
 };
 
+async function downloadCrawlScript(){
+  var btn=document.getElementById('autoScriptDownloadBtn');
+  var orig=btn.textContent;
+  btn.disabled=true;btn.textContent='다운로드 중...';
+  try{
+    var r=await fetch('/api/admin/crawl-script',{credentials:'include'});
+    if(!r.ok){
+      var err=await r.json().catch(function(){return{};});
+      alert('오류: '+(err.error||r.status));
+      return;
+    }
+    var blob=await r.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='auto-crawl.mjs';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+  }catch(e){alert('다운로드 오류: '+e.message);}
+  finally{btn.disabled=false;btn.textContent=orig;}
+}
+
 async function doLogin(){
   var email=document.getElementById('loginEmail').value.trim();
   var pw=document.getElementById('loginPw').value;
