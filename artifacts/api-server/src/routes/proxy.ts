@@ -1161,34 +1161,53 @@ const GLOBAL_MOBILE_STYLE = `<style>
 /* ── 전역 모바일 반응형 ── */
 @media(max-width:768px){
   html,body{overflow-x:hidden!important;max-width:100vw!important;}
+
   /* 1. 1080px 고정 컨테이너 → 100% 반응형 */
   .content_center,.content_wrap,.inner_wrap,.wrap,.page_wrap{
     width:100%!important;min-width:0!important;max-width:100%!important;
     box-sizing:border-box!important;
   }
-  /* 2. 헤더 전체 */
+
+  /* 2. 헤더 */
   .g_header{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
-  .g_header .header-inner{
-    width:100%!important;min-width:0!important;box-sizing:border-box!important;
-    padding:0 12px!important;
-  }
-  /* 3. 네비 래퍼 */
-  .g_header .header-nav-wrapper{
-    margin-left:8px!important;height:auto!important;min-height:0!important;
-    flex:1!important;justify-content:flex-end!important;
-  }
-  /* 4. 네비 링크: 모바일에서 숨기고 햄버거만 표시 */
+  .g_header .header-inner{width:100%!important;min-width:0!important;box-sizing:border-box!important;padding:0 12px!important;}
+  .g_header .header-nav-wrapper{margin-left:8px!important;height:auto!important;flex:1!important;justify-content:flex-end!important;}
   .g_header .header-nav{display:none!important;}
-  /* 5. header-actions 우측 아이콘 간격 축소 */
   .g_header .header-actions{gap:6px!important;}
   .g_header .header-logins{gap:8px!important;font-size:13px!important;}
   .g_header .header-message,.g_header .header-fav{display:none!important;}
-  /* 6. 햄버거 버튼 항상 표시 */
   .g_header .header-menu{display:flex!important;flex-direction:column!important;gap:5px!important;padding:8px!important;}
-  /* 7. 실시간 거래 탭 가로 스크롤 */
+
+  /* 3. ★ float 2단 레이아웃 → 세로 스택 (마이룸/판매등록/결제/구매등록 공통) */
+  .content_center{overflow:hidden!important;}
+  .aside{float:none!important;width:100%!important;margin-bottom:16px!important;box-sizing:border-box!important;}
+  .g_content{float:none!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+
+  /* 4. 테이블 → 반응형 */
+  table{width:100%!important;table-layout:fixed!important;}
+  table td,table th{word-break:break-all!important;white-space:normal!important;}
+
+  /* 5. 폼 인풋/셀렉트/버튼 */
+  input[type=text],input[type=number],input[type=password],input[type=email],
+  select,textarea{
+    width:100%!important;max-width:100%!important;box-sizing:border-box!important;
+    min-height:40px!important;font-size:16px!important;
+  }
+  /* 입력 폼 wrapper */
+  .table_form td,.form_row,.input_row{width:100%!important;box-sizing:border-box!important;display:block!important;}
+
+  /* 6. 판매/구매 등록 폼 */
+  #dvPopup,.reg_wrap,.sub_wrap{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+  .menu_know{width:100%!important;box-sizing:border-box!important;}
+
+  /* 7. 마이룸 판매/구매 주문 상세 카드 */
+  .trade_wrap,.order_wrap,.trade_detail,.trade_item{
+    width:100%!important;min-width:0!important;box-sizing:border-box!important;flex-wrap:wrap!important;
+  }
+
+  /* 8. 실시간 거래 탭 가로 스크롤 */
   .real_time_list,.realtime_wrap,.live_tab,.live_list,.top_game_list{
-    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
-    flex-wrap:nowrap!important;
+    overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;flex-wrap:nowrap!important;
   }
 }
 </style>`;
