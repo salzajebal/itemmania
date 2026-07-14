@@ -1896,10 +1896,13 @@ function prepare(html: string, user: Record<string, unknown> | null = null): str
     result = headInject + clean;
   }
   // SSE 마일리지 실시간 업데이트 스크립트 (로그인 유저 전용, </body> 직전)
-  if (result.includes("</body>")) {
-    return result.replace("</body>", BALANCE_SSE_SCRIPT + "</body>");
+  if (user) {
+    if (result.includes("</body>")) {
+      return result.replace("</body>", BALANCE_SSE_SCRIPT + "</body>");
+    }
+    return result + BALANCE_SSE_SCRIPT;
   }
-  return result + BALANCE_SSE_SCRIPT;
+  return result;
 }
 
 function serveItemmania(html: string, user: Record<string, unknown> | null = null): string {
