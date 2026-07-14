@@ -366,7 +366,7 @@ tbody tr:hover{background:#fafbff}
                 <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">1</div>
                 <div>
                   <div style="font-weight:600;font-size:14px;margin-bottom:4px">스크립트 다운로드</div>
-                  <a id="autoScriptDownloadBtn" href="/api/admin/crawl/auto-script" download="auto-crawl.mjs"
+                  <a id="autoScriptDownloadBtn" href="/api/admin/crawl-script" download="auto-crawl.mjs"
                     style="display:inline-block;padding:8px 18px;background:#1a56db;color:#fff;border-radius:7px;font-size:13px;font-weight:600;text-decoration:none">
                     ⬇️ auto-crawl.mjs 다운로드
                   </a>

@@ -98,7 +98,7 @@ async function initCrawlTab(){
     document.getElementById('crawlPages').onchange=updateCrawlCostEstimate;
     document.getElementById('crawlDetailCheck').onchange=updateCrawlCostEstimate;
     var origin=location.origin;
-    document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl/script';
+    document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl-script';
     document.getElementById('crawlApiBaseUrl').textContent=origin;
   }catch(e){console.error(e);}
 }
