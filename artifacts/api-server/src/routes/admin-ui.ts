@@ -33,6 +33,8 @@ body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f4
 .topbar .spacer{flex:1}
 .topbar .logout-btn{font-size:13px;color:#888;background:none;border:none;cursor:pointer;padding:6px 12px;border-radius:6px}
 .topbar .logout-btn:hover{background:#f0f0f0}
+.topbar .voice-btn{font-size:13px;background:none;border:1.5px solid #e0e0e0;border-radius:6px;cursor:pointer;padding:5px 11px;color:#888;transition:all .2s}
+.topbar .voice-btn.on{background:#edf8ff;border-color:#159EFD;color:#0e8de0;font-weight:600}
 .content{padding:28px 32px;max-width:1300px;margin:0 auto}
 .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px}
 .stat-card{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
@@ -111,6 +113,7 @@ tbody tr:hover{background:#fafbff}
     <div class="logo">아이템매니아<span>어드민</span></div>
     <div class="admin-badge" id="adminNickname"></div>
     <div class="spacer"></div>
+    <button class="voice-btn" id="voiceToggleBtn" onclick="toggleAdminVoice()">🔇 음성 OFF</button>
     <button class="logout-btn" onclick="doLogout()">로그아웃</button>
   </div>
   <div class="content">
@@ -545,27 +548,79 @@ tbody tr:hover{background:#fafbff}
 </style>
 
 <script>
+/* ── 어드민 음성·SSE ── */
+var _adminVoiceOn = sessionStorage.getItem('adminVoice') !== 'off';
+var _adminSpeakQueue = [];
+
+function _updateVoiceBtn() {
+  var btn = document.getElementById('voiceToggleBtn');
+  if (!btn) return;
+  if (_adminVoiceOn) {
+    btn.textContent = '🔔 음성 ON';
+    btn.className = 'voice-btn on';
+  } else {
+    btn.textContent = '🔇 음성 OFF';
+    btn.className = 'voice-btn';
+  }
+}
+
+function toggleAdminVoice() {
+  _adminVoiceOn = !_adminVoiceOn;
+  sessionStorage.setItem('adminVoice', _adminVoiceOn ? 'on' : 'off');
+  _updateVoiceBtn();
+  if (_adminVoiceOn && window.speechSynthesis) {
+    /* 첫 클릭으로 브라우저 TTS 잠금 해제 */
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance('음성 알림이 켜졌습니다');
+    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+    window.speechSynthesis.speak(u);
+    /* 큐에 쌓인 알림 재생 */
+    if (_adminSpeakQueue.length) {
+      setTimeout(function(){
+        var txt = _adminSpeakQueue.pop();
+        _adminSpeakQueue = [];
+        if (txt && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          var q = new SpeechSynthesisUtterance(txt);
+          q.lang = 'ko-KR'; q.rate = 1.0; q.volume = 1.0;
+          window.speechSynthesis.speak(q);
+        }
+      }, 1200);
+    }
+  }
+}
+
+function adminSpeak(text) {
+  if (!text) return;
+  if (!_adminVoiceOn) { _adminSpeakQueue = [text]; return; }
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+  window.speechSynthesis.speak(u);
+}
+
+function showAdminToast(title, body) {
+  var layer = document.getElementById('admin_notice_layer');
+  if (!layer) return;
+  var el = document.createElement('div');
+  el.className = 'adm-toast';
+  el.innerHTML = '<div class="adm-toast-title">' + (title||'') + '</div>' +
+                 (body ? '<div class="adm-toast-body">' + body + '</div>' : '');
+  el.onclick = function(){ if(el.parentNode) el.parentNode.removeChild(el); };
+  layer.appendChild(el);
+  setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 5200);
+}
+
 (function(){
-  function showAdminToast(title, body) {
-    var layer = document.getElementById('admin_notice_layer');
-    if (!layer) return;
-    var el = document.createElement('div');
-    el.className = 'adm-toast';
-    el.innerHTML = '<div class="adm-toast-title">' + (title||'') + '</div>' +
-                   (body ? '<div class="adm-toast-body">' + body + '</div>' : '');
-    el.onclick = function(){ if(el.parentNode) el.parentNode.removeChild(el); };
-    layer.appendChild(el);
-    setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 5200);
+  /* 버튼 초기 상태 */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _updateVoiceBtn);
+  } else {
+    _updateVoiceBtn();
   }
 
   if (typeof EventSource === 'undefined') return;
-  function adminSpeak(text) {
-    if (!window.speechSynthesis || !text) return;
-    window.speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-    window.speechSynthesis.speak(u);
-  }
   function connectSSE() {
     var es = new EventSource('/api/events');
     es.addEventListener('notification', function(e){
