@@ -5394,27 +5394,38 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
           if (ul) {
             // 기존 li 모두 제거 후 재구성
             ul.innerHTML = '';
+            // 이름 마스킹: 첫 글자 + * + 마지막 글자 (2자 이하: 첫 글자 + *)
+            function maskName(n) {
+              if (!n || n.length <= 1) return n || '';
+              if (n.length === 2) return n[0] + '*';
+              return n[0] + '*' + n[n.length - 1];
+            }
             if (isBuyer) {
               // 구매자 입장: 판매자 닉네임
               var li0 = document.createElement('li');
               li0.textContent = partnerName;
               ul.appendChild(li0);
             } else {
-              // 판매자 입장: 구매자 실명 + 전화번호 + 캐릭터명
-              var buyerDisplayName = r.buyerName || partnerName;
+              // 판매자 입장: 구매자 마스킹 실명 / 자택번호 / 휴대폰 / 캐릭터명
+              var maskedName = maskName(r.buyerName || partnerName);
               var li0 = document.createElement('li');
-              li0.textContent = buyerDisplayName;
+              li0.textContent = maskedName;
               ul.appendChild(li0);
+              // 자택번호 (DB에 별도 저장 없으면 '자택번호없음')
+              var liHome = document.createElement('li');
+              liHome.textContent = r.buyerHomePhone || '자택번호없음';
+              ul.appendChild(liHome);
+              // 휴대폰
               if (r.buyerPhone) {
                 var liPhone = document.createElement('li');
                 liPhone.textContent = r.buyerPhone;
                 ul.appendChild(liPhone);
               }
-              var showChar = r.characterName && (r.goodsType === '게임머니' || r.goodsType === '아이템');
-              if (showChar) {
+              // 캐릭터명 (있으면 항상 표시)
+              if (r.characterName) {
                 var charLi = document.createElement('li');
                 charLi.className = 'character';
-                charLi.innerHTML = '캐릭터명: ' + esc(r.characterName) + ' <button type="button" class="other_font" style="font-size:12px;padding:2px 7px;border:1px solid #aaa;border-radius:4px;background:#fff;cursor:pointer;margin-left:4px">다른 글꼴로 보기</button>';
+                charLi.innerHTML = '캐릭터명: ' + esc(r.characterName) + ' <button type="button" class="other_font">다른 글꼴로 보기</button>';
                 ul.appendChild(charLi);
               }
             }
