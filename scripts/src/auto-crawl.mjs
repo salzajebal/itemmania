@@ -155,7 +155,8 @@ async function runOnce() {
           gameSaved += saved;
           totalSaved += saved;
           if (parsed === 0) {
-            process.stdout.write(`(${page}p:없음) `);
+            const d = result.debug || {};
+            process.stdout.write(`(${page}p:없음 tid=${d.dataTidCount??'?'} next=${d.hasNextData??'?'} len=${d.htmlLen??'?'}) `);
             break;
           } else {
             process.stdout.write(`${page}p:${saved}개 `);

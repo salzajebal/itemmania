@@ -1469,6 +1469,11 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
     return;
   }
 
+  const $ = cheerio.load(html);
+  const dataTidCount = $("[data-tid]").length;
+  const hasNextData = $("script#__NEXT_DATA__").length > 0;
+  const htmlSnippet = html.slice(0, 300).replace(/\s+/g, " ");
+
   const products = parseProductsFromHtml(html, gameId, category);
 
   // gameName 오버라이드 (클라이언트가 게임명을 명시한 경우)
@@ -1508,7 +1513,7 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
     } catch { failed++; }
   }
 
-  res.json({ parsed: products.length, saved, failed });
+  res.json({ parsed: products.length, saved, failed, debug: { dataTidCount, hasNextData, htmlLen: html.length, htmlSnippet } });
 });
 
 // ── 자동 크롤 스케줄러 ──────────────────────────────────────────────────────
