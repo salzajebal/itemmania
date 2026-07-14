@@ -1304,11 +1304,23 @@ router.get("/admin/crawl/script", (_req, res): void => {
   }
 });
 
-// 자동 수집기 스크립트 다운로드
-router.get("/admin/crawl/auto-script", (_req, res): void => {
+// 자동 수집기 스크립트 다운로드 (SITE_URL / CRAWL_KEY 자동 주입)
+router.get("/admin/crawl/auto-script", (req, res): void => {
   const scriptPath = join(process.cwd(), "../../scripts/src/auto-crawl.mjs");
   try {
-    const content = readFileSync(scriptPath, "utf-8");
+    let content = readFileSync(scriptPath, "utf-8");
+
+    // 배포 도메인 우선, 없으면 요청 host 사용
+    const domains = process.env.REPLIT_DOMAINS ?? "";
+    const firstDomain = domains.split(",")[0]?.trim();
+    const host = firstDomain
+      ? `https://${firstDomain}`
+      : `${req.protocol}://${req.get("host")}`;
+
+    content = content
+      .replace("'https://YOUR_SITE.replit.app'", `'${host}'`)
+      .replace("'YOUR_CRAWL_KEY'", `'${CRAWL_KEY}'`);
+
     res.set("Content-Type", "application/javascript; charset=utf-8");
     res.set("Content-Disposition", 'attachment; filename="auto-crawl.mjs"');
     res.send(content);

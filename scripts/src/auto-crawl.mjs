@@ -14,8 +14,26 @@
 const SITE_URL  = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
 const CRAWL_KEY = 'YOUR_CRAWL_KEY';               // 어드민 패널에서 확인
 
-// 수집할 게임 목록 (주석처리하면 제외)
-const GAMES = [
+// ─── CLI 인수 파싱 ─────────────────────────────────────────────────────────
+// 사용 예시:
+//   node auto-crawl.mjs                      → 전체 게임, 5페이지, 1시간 반복
+//   node auto-crawl.mjs --games 5990         → 메이플랜드만
+//   node auto-crawl.mjs --games 5990,5913    → 여러 게임 (쉼표 구분)
+//   node auto-crawl.mjs --pages 3            → 게임당 3페이지
+//   node auto-crawl.mjs --once               → 1회만 실행 후 종료
+//   node auto-crawl.mjs --games 5990 --pages 3 --once
+// ──────────────────────────────────────────────────────────────────────────
+const _args = process.argv.slice(2);
+function _getArg(name) {
+  const idx = _args.indexOf(name);
+  return idx >= 0 ? _args[idx + 1] : undefined;
+}
+const _gamesArg  = _getArg('--games');
+const _pagesArg  = _getArg('--pages');
+const _onceFlag  = _args.includes('--once');
+
+// 수집할 게임 목록
+const ALL_GAMES = [
   { id: 5913, name: '리니지클래식' },
   { id: 8458, name: '메이플스토리' },
   { id: 5233, name: '메이플스토리월드' },
@@ -29,13 +47,17 @@ const GAMES = [
   { id: 101,  name: '거상' },
 ];
 
+// CLI --games 로 필터 (없으면 전체)
+const _filterIds = _gamesArg ? _gamesArg.split(',').map(s => parseInt(s.trim(), 10)) : null;
+const GAMES = _filterIds ? ALL_GAMES.filter(g => _filterIds.includes(g.id)) : ALL_GAMES;
+
 // 팝니다/삽니다 둘 다 수집 (한쪽만 원하면 제거)
 const CATEGORIES = ['sell', 'buy'];
 
-// 게임당 수집 페이지 수 (1페이지 ≈ 20개 상품)
-const PAGES_PER_GAME = 5;
+// 게임당 수집 페이지 수 (CLI --pages 로 오버라이드 가능)
+const PAGES_PER_GAME = _pagesArg ? Math.max(1, parseInt(_pagesArg, 10)) : 5;
 
-// 자동 반복 주기 (기본 1시간)
+// 자동 반복 주기 (기본 1시간) — --once 이면 무시
 const INTERVAL_MS = 60 * 60 * 1000;
 
 // ─── 이하 수정 불필요 ──────────────────────────────
@@ -157,11 +179,12 @@ async function main() {
   console.log('  🕷️  아이템마니아 로컬 크롤러');
   console.log('='.repeat(55));
   console.log(`  서버:     ${SITE_URL}`);
-  console.log(`  게임:     ${GAMES.length}개`);
+  console.log(`  게임:     ${GAMES.map(g => g.name).join(', ')}`);
   console.log(`  페이지:   게임당 ${PAGES_PER_GAME}페이지`);
   console.log(`  카테고리: ${CATEGORIES.join(', ')}`);
+  console.log(`  반복:     ${_onceFlag ? '1회 실행 후 종료' : `${INTERVAL_MS / 60000}분마다 자동`}`);
   console.log('='.repeat(55));
-  console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 계속 켜두세요!\n');
+  if (!_onceFlag) console.log('\n⚠️  이 창을 닫으면 수집이 멈춥니다. 계속 켜두세요!\n');
 
   // 연결 테스트
   process.stdout.write('🔗 서버 연결 확인 중...');
@@ -181,6 +204,18 @@ async function main() {
     console.error(` ❌ 서버 연결 실패: ${e.message}`);
     console.error(`   SITE_URL을 확인하세요: ${SITE_URL}`);
     process.exit(1);
+  }
+
+  if (_onceFlag) {
+    log('수집 시작 (1회 모드)');
+    try {
+      const { totalSaved, totalFailed } = await runOnce();
+      log(`✅ 완료 — ${totalSaved}개 저장, ${totalFailed}개 실패`);
+    } catch (e) {
+      log(`❌ 오류: ${e.message}`);
+      process.exit(1);
+    }
+    return;
   }
 
   while (true) {
