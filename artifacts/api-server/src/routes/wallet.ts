@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { db, walletsTable, withdrawalsTable } from "@workspace/db";
+import { db, walletsTable, withdrawalsTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
+import { notifyAdmin } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -63,6 +64,12 @@ router.post("/wallet/charge", requireAuth, async (req, res): Promise<void> => {
   const newBalance = Number(updated.balance);
   pushToUser(req.session.userId!, "balance", { balance: newBalance });
 
+  const [chargeUser] = await db.select({ nickname: usersTable.nickname, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, req.session.userId!));
+  notifyAdmin("입금 충전", {
+    body: `${chargeUser?.nickname ?? req.session.userId} — ${net.toLocaleString()}원 (${method})`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
+
   res.json({ id: updated.id, userId: updated.userId, balance: newBalance, updatedAt: updated.updatedAt });
 });
 
@@ -121,6 +128,15 @@ router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => 
   });
 
   pushToUser(req.session.userId!, "balance", { balance: result.newBalance });
+
+  const [withdrawUser] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, req.session.userId!));
+  const withdrawDetail = method === "bank"
+    ? `${bankName} ${accountNumber} (${accountHolder})`
+    : `휴대폰 ${phoneNumber}`;
+  notifyAdmin("출금 신청", {
+    body: `${withdrawUser?.nickname ?? req.session.userId} — ${amountNum.toLocaleString()}원 / ${withdrawDetail}`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
 
   res.status(201).json({
     id: result.withdrawal.id,

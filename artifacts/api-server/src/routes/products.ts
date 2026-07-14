@@ -169,7 +169,8 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
     })
     .returning();
 
-  notifyAdmin("판매 등록", {
+  const postCategory = inserted.category === "buy" ? "구매 등록" : "판매 등록";
+  notifyAdmin(postCategory, {
     body: `${inserted.title}${inserted.gameName ? ` (${inserted.gameName})` : ""} — ${inserted.price.toLocaleString()}원`,
     link: "/tkfwkwpqkf",
   }).catch(() => {});
