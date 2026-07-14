@@ -2250,20 +2250,36 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       });
     }
 
-    // ── 서버 탭 (label/input[radio] 또는 button) ─────────
-    document.querySelectorAll('.detail_search input[type=radio][name*=server], .detail_search input[type=radio][name*=Server]').forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        var serverVal = radio.value || radio.getAttribute('data-value') || '';
-        navigate({ search_server: serverVal || null });
+    // ── 서버 탭: 이벤트 위임으로 checkbox/radio 모두 처리 ─────────
+    (function() {
+      var srvBox = document.getElementById('search_server_list') || document.querySelector('.search_server_row');
+      if (srvBox) {
+        // 초기 checked 상태 (스냅샷 value=숫자ID 또는 이름 모두 대응)
+        srvBox.querySelectorAll('input[name=row_server]').forEach(function(inp) {
+          var lbl = document.querySelector('label[for="' + inp.id + '"]');
+          var sv = (inp.value && !/^\d+$/.test(inp.value)) ? inp.value : (lbl ? lbl.textContent.trim() : '');
+          inp.checked = currentServer ? (sv === currentServer) : !inp.value;
+        });
+        // 이벤트 위임 — 동적 교체 후 새로 삽입된 요소에도 적용
+        srvBox.addEventListener('change', function(e) {
+          var inp = e.target;
+          if (!inp || inp.name !== 'row_server') return;
+          srvBox.querySelectorAll('input[name=row_server]').forEach(function(o) { if (o !== inp) o.checked = false; });
+          var sv = inp.value || '';
+          if (/^\d+$/.test(sv)) {
+            var lbl2 = document.querySelector('label[for="' + inp.id + '"]');
+            sv = lbl2 ? lbl2.textContent.trim() : sv;
+          }
+          navigate({ search_server: sv || null });
+        });
+      }
+      document.querySelectorAll('.search_row button[data-server], .server_filter_btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var sv = btn.getAttribute('data-server') || btn.textContent.trim();
+          navigate({ search_server: sv === '서버전체' ? null : sv });
+        });
       });
-    });
-    // 서버 버튼 직접 클릭
-    document.querySelectorAll('.search_row button[data-server], .server_filter_btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var sv = btn.getAttribute('data-server') || btn.textContent.trim();
-        navigate({ search_server: sv === '서버전체' ? null : sv });
-      });
-    });
+    })();
 
     // ── 초기화 버튼 ──────────────────────────────────────
     document.querySelectorAll('button.reset_btn, a.reset_btn, .filter_reset, button.search_reset').forEach(function(btn) {
@@ -6640,17 +6656,38 @@ const BUY_INTERCEPT_SCRIPT = `
               if (!servers || !servers.length) return;
               var serverList = document.getElementById('search_server_list');
               if (!serverList) return;
+              var currentSv = new URLSearchParams(location.search).get('search_server') || '';
               var ul = serverList.querySelector('ul');
-              if (!ul) return;
-              var firstLi = ul.querySelector('li:first-child');
-              ul.innerHTML = '';
-              if (firstLi) ul.appendChild(firstLi);
-              servers.forEach(function(sv) {
-                var li = document.createElement('li');
-                var uid = 'row_server_dyn_' + sv.id;
-                li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio><label for="' + uid + '">' + sv.name + '</label>';
-                ul.appendChild(li);
-              });
+              if (ul) {
+                var firstLi = ul.querySelector('li:first-child');
+                ul.innerHTML = '';
+                if (firstLi) { var fi = firstLi.querySelector('input'); if (fi) fi.checked = !currentSv; ul.appendChild(firstLi); }
+                servers.forEach(function(sv) {
+                  var li = document.createElement('li');
+                  var uid = 'row_server_dyn_' + sv.id;
+                  li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio' + (currentSv === sv.name ? ' checked' : '') + '><label for="' + uid + '">' + sv.name + '</label>';
+                  ul.appendChild(li);
+                });
+              } else {
+                /* <ul> 없이 input+label 직접 자식 구조 */
+                var allInps = Array.from(serverList.querySelectorAll('input[name=row_server]'));
+                var firstInp = allInps[0] || null;
+                var firstLbl = firstInp ? serverList.querySelector('label[for="' + firstInp.id + '"]') : null;
+                serverList.innerHTML = '';
+                if (firstInp) { firstInp.checked = !currentSv; serverList.appendChild(firstInp); }
+                if (firstLbl) serverList.appendChild(firstLbl);
+                servers.forEach(function(sv) {
+                  var uid = 'row_server_dyn_' + sv.id;
+                  var inp = document.createElement('input');
+                  inp.id = uid; inp.type = 'checkbox'; inp.name = 'row_server';
+                  inp.value = sv.name; inp.className = 'g_btn_white2_radio';
+                  if (currentSv === sv.name) inp.checked = true;
+                  var lbl = document.createElement('label');
+                  lbl.setAttribute('for', uid); lbl.textContent = sv.name;
+                  serverList.appendChild(inp);
+                  serverList.appendChild(lbl);
+                });
+              }
             })
             .catch(function() {});
         }
@@ -6700,17 +6737,37 @@ const BUY_INTERCEPT_SCRIPT = `
                   if (!servers || !servers.length) return;
                   var serverList = document.getElementById('search_server_list');
                   if (!serverList) return;
-                  var ul = serverList.querySelector('ul');
-                  if (!ul) return;
-                  var firstLi = ul.querySelector('li:first-child');
-                  ul.innerHTML = '';
-                  if (firstLi) ul.appendChild(firstLi);
-                  servers.forEach(function(sv) {
-                    var li = document.createElement('li');
-                    var uid = 'row_server_dyn_' + sv.id;
-                    li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio><label for="' + uid + '">' + sv.name + '</label>';
-                    ul.appendChild(li);
-                  });
+                  var currentSv2 = new URLSearchParams(location.search).get('search_server') || '';
+                  var ul2 = serverList.querySelector('ul');
+                  if (ul2) {
+                    var firstLi2 = ul2.querySelector('li:first-child');
+                    ul2.innerHTML = '';
+                    if (firstLi2) { var fi2 = firstLi2.querySelector('input'); if (fi2) fi2.checked = !currentSv2; ul2.appendChild(firstLi2); }
+                    servers.forEach(function(sv) {
+                      var li = document.createElement('li');
+                      var uid = 'row_server_dyn_' + sv.id;
+                      li.innerHTML = '<input id="' + uid + '" type=checkbox name=row_server value="' + sv.name + '" class=g_btn_white2_radio' + (currentSv2 === sv.name ? ' checked' : '') + '><label for="' + uid + '">' + sv.name + '</label>';
+                      ul2.appendChild(li);
+                    });
+                  } else {
+                    var allInps2 = Array.from(serverList.querySelectorAll('input[name=row_server]'));
+                    var firstInp2 = allInps2[0] || null;
+                    var firstLbl2 = firstInp2 ? serverList.querySelector('label[for="' + firstInp2.id + '"]') : null;
+                    serverList.innerHTML = '';
+                    if (firstInp2) { firstInp2.checked = !currentSv2; serverList.appendChild(firstInp2); }
+                    if (firstLbl2) serverList.appendChild(firstLbl2);
+                    servers.forEach(function(sv) {
+                      var uid = 'row_server_dyn_' + sv.id;
+                      var inp = document.createElement('input');
+                      inp.id = uid; inp.type = 'checkbox'; inp.name = 'row_server';
+                      inp.value = sv.name; inp.className = 'g_btn_white2_radio';
+                      if (currentSv2 === sv.name) inp.checked = true;
+                      var lbl = document.createElement('label');
+                      lbl.setAttribute('for', uid); lbl.textContent = sv.name;
+                      serverList.appendChild(inp);
+                      serverList.appendChild(lbl);
+                    });
+                  }
                 })
                 .catch(function() {});
             }
