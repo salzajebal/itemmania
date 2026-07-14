@@ -5227,6 +5227,29 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
 `;
 
 const CHAT_NEW_INTERCEPT_SCRIPT = `
+<style>
+/* ── 채팅창 반응형 오버라이드 ── */
+.chat_room{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;}
+@media(max-width:780px){
+  html,body{overflow-x:hidden!important;}
+  .popup_content{width:100%!important;min-width:0!important;overflow-x:hidden!important;}
+  .chat_room{flex-direction:column!important;height:auto!important;min-height:100vh!important;}
+  .chat_content_wrap{width:100%!important;min-width:0!important;flex:1!important;height:auto!important;min-height:60vh!important;}
+  .chat_area{width:100%!important;min-width:0!important;height:auto!important;}
+  .chat_content{width:100%!important;min-width:0!important;}
+  .chat_content_list{height:40vh!important;min-height:200px!important;}
+  .chat_menu_area{width:100%!important;min-width:0!important;flex-shrink:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;padding:8px!important;box-sizing:border-box!important;}
+  .chat_menu_area .chat_menu{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;}
+  .chat_menu_area .chat_menu button{flex:1!important;min-width:80px!important;white-space:nowrap!important;}
+  .chat_menu_area>div{width:100%!important;}
+  .trade_price_change{width:100%!important;box-sizing:border-box!important;}
+}
+@media(max-width:500px){
+  .chat_info_wrap{flex-wrap:wrap!important;}
+  .chat_info{flex-wrap:wrap!important;}
+  .chat_content_list{height:35vh!important;}
+}
+</style>
 <script>
 (function() {
   function api(method, path, body) {
@@ -5330,7 +5353,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
             var hBtn2 = document.createElement('button');
             hBtn2.id = '_im_handover_btn';
             hBtn2.textContent = '인계하기';
-            hBtn2.style.cssText = 'display:block;width:100%;margin-bottom:8px;padding:10px 0;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:-.02em;text-align:center';
+            hBtn2.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;box-sizing:border-box!important;margin-bottom:8px;padding:0;min-height:44px;background:#159EFD!important;color:#fff!important;border:none!important;border-radius:8px;font-size:16px!important;font-weight:700!important;cursor:pointer;letter-spacing:-.02em;line-height:1.2;';
             tc2.parentNode.insertBefore(hBtn2, tc2);
           }
         }
