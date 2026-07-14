@@ -6982,7 +6982,11 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
           }).then(function(r) { return r.json(); })
           .then(function(room) {
             if (room && room.id) {
-              location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+              var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
+              var w = window.open(chatUrl, 'im_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
+              if (!w || w.closed) { location.href = chatUrl; }
+              btn.disabled = false;
+              btn.textContent = '판매 신청하기';
             } else {
               showSuccessModal('판매신청이 완료되었습니다');
               btn.disabled = false;
