@@ -116,6 +116,44 @@ async function fetchHtml(url, retries = 2) {
   }
 }
 
+// itemmania 리스트 JS에서 API 엔드포인트 추출
+async function discoverApi() {
+  try {
+    const html = await fetchHtml('https://www.itemmania.com/sell/list.html?search_game=5913&search_goods=all&page=1');
+    const jsMatch = html.match(/src=["']([^"']*\/(?:list|goods|trade)[^"']*\.(?:js|min\.js)[^"']*)["']/i);
+    if (!jsMatch) { log('⚠️  리스트 JS URL 탐지 실패'); return null; }
+    const jsUrl = jsMatch[1].startsWith('http') ? jsMatch[1] : 'https://www.itemmania.com' + jsMatch[1].split('?')[0] + (jsMatch[1].includes('?') ? '?' + jsMatch[1].split('?')[1] : '');
+    log(`🔍 리스트 JS: ${jsUrl}`);
+    const jsText = await fetchHtml(jsUrl);
+    // fetch/ajax 호출 패턴 추출
+    const patterns = [];
+    const re = /["'`](\/[a-z][a-z0-9/_-]{2,60}\?[^"'`]{0,120})["'`]/g;
+    let m;
+    while ((m = re.exec(jsText)) !== null) patterns.push(m[1]);
+    const unique = [...new Set(patterns)].filter(p => /list|goods|trade|item|product|search/.test(p)).slice(0, 20);
+    if (unique.length) {
+      log(`📡 발견된 API 패턴 (${unique.length}개):`);
+      unique.forEach(p => log(`   ${p}`));
+    } else {
+      log('⚠️  API 패턴 없음 — 직접 fetch URL 검색');
+      const fe = /fetch\s*\(\s*["'`]([^"'`]{5,120})["'`]/g;
+      while ((m = fe.exec(jsText)) !== null) patterns.push(m[1]);
+      [...new Set(patterns)].slice(0, 10).forEach(p => log(`   fetch: ${p}`));
+    }
+    // 서버에 전송
+    await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
+      body: JSON.stringify({ html: jsText.slice(0, 50000), gameId: 0, category: 'sell', gameName: '__JS_DISCOVERY__' }),
+      signal: AbortSignal.timeout(20000),
+    }).catch(() => {});
+    return unique;
+  } catch (e) {
+    log(`⚠️  API 탐색 실패: ${e.message}`);
+    return null;
+  }
+}
+
 // HTML을 서버에 업로드 → 서버가 파싱 & 저장
 async function uploadHtml(html, gameId, gameName, category) {
   const res = await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
@@ -209,6 +247,10 @@ async function main() {
     console.error(`   SITE_URL을 확인하세요: ${SITE_URL}`);
     process.exit(1);
   }
+
+  // API 엔드포인트 자동 탐색
+  log('🔍 itemmania API 탐색 중...');
+  await discoverApi();
 
   if (_onceFlag) {
     log('수집 시작 (1회 모드)');
