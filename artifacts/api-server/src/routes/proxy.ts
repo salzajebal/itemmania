@@ -5230,6 +5230,9 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
 <style>
 /* ── 채팅창 반응형 오버라이드 ── */
 .chat_room{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;}
+/* ── 사이드바 레이아웃: 상단 버튼5개 / 하단 인계하기+거래취소+거래금액 ── */
+.chat_menu_area{justify-content:flex-start!important;overflow:hidden!important;}
+.chat_menu_area>div:last-child{margin-top:auto!important;}
 @media(max-width:780px){
   html,body{overflow-x:hidden!important;}
   .popup_content{width:100%!important;min-width:0!important;overflow-x:hidden!important;}
