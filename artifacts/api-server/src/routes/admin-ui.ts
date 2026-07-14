@@ -559,16 +559,20 @@ tbody tr:hover{background:#fafbff}
   }
 
   if (typeof EventSource === 'undefined') return;
-  var es = new EventSource('/api/events');
-  es.addEventListener('notification', function(e){
-    try {
-      var d = JSON.parse(e.data);
-      showAdminToast(d.title, d.body);
-    } catch(ex){}
-  });
-  es.addEventListener('error', function(){
-    setTimeout(function(){ es.close(); es = new EventSource('/api/events'); }, 3000);
-  });
+  function connectSSE() {
+    var es = new EventSource('/api/events');
+    es.addEventListener('notification', function(e){
+      try {
+        var d = JSON.parse(e.data);
+        showAdminToast(d.title, d.body);
+      } catch(ex){}
+    });
+    es.addEventListener('error', function(){
+      es.close();
+      setTimeout(connectSSE, 5000);
+    });
+  }
+  connectSSE();
 })();
 </script>
 

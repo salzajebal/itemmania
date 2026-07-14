@@ -34,6 +34,8 @@ function showAdmin(user){
   loadAll();
 }
 
+var loadedTabs={};
+
 async function doLogout(){
   await fetch('/api/admin/logout',{method:'POST',credentials:'include'});
   location.reload();
@@ -45,8 +47,14 @@ function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',tabs[i]===tab);});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
-  if(tab==='crawl')initCrawlTab();
-  if(tab==='chatrooms')loadChatRooms();
+  if(tab==='crawl'){initCrawlTab();return;}
+  if(!loadedTabs[tab]){
+    loadedTabs[tab]=true;
+    if(tab==='users')loadUsers();
+    else if(tab==='orders')loadOrders();
+    else if(tab==='withdrawals')loadWithdrawals();
+    else if(tab==='chatrooms')loadChatRooms();
+  }
 }
 
 var crawlGamesData=[];
@@ -555,7 +563,8 @@ async function loadStats(){
 }
 
 async function loadAll(){
-  await Promise.all([loadStats(),loadProducts(),loadUsers(),loadOrders(),loadWithdrawals()]);
+  loadedTabs['products']=true;
+  await Promise.all([loadStats(),loadProducts()]);
 }
 
 // ── 상품 ─────────────────────────────────────────────────

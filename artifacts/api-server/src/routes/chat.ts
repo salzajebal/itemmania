@@ -7,7 +7,7 @@ import { eq, and, or, ne, lt, desc, sql } from "drizzle-orm";
 import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
-import { createNotification } from "./notifications";
+import { createNotification, notifyAdmin } from "./notifications";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,6 +152,11 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
     })
     .returning();
 
+  notifyAdmin("채팅 거래 시작", {
+    body: `채팅방 #${room.id} 거래가 시작되었습니다.`,
+    link: "/tkfwkwpqkf",
+  }).catch(() => {});
+
   res.status(201).json({ id: room.id, created: true });
 });
 
@@ -193,6 +198,10 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
       body: "판매자가 아이템을 인계했습니다. 인수확인을 진행해 주세요.",
       link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
     });
+    notifyAdmin("인계하기 완료", {
+      body: `채팅방 #${roomId} — 판매자가 아이템을 인계했습니다.`,
+      link: "/tkfwkwpqkf",
+    }).catch(() => {});
   }
 
   // 거래 취소
@@ -202,6 +211,10 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
       body: "상대방이 거래를 취소했습니다.",
       link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
     });
+    notifyAdmin("거래 취소", {
+      body: `채팅방 #${roomId} 거래가 취소되었습니다.`,
+      link: "/tkfwkwpqkf",
+    }).catch(() => {});
   }
 
   // 구매자가 인수하기(ended) 처리 → 판매자에게 거래금액 마일리지 지급
@@ -241,6 +254,10 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
         body: `마일리지 ${Number(prod.price).toLocaleString("ko-KR")}원이 지급되었습니다.`,
         link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
       });
+      notifyAdmin("거래 완료", {
+        body: `채팅방 #${roomId} 거래 완료 — ${Number(prod.price).toLocaleString("ko-KR")}원`,
+        link: "/tkfwkwpqkf",
+      }).catch(() => {});
     }
   }
 
