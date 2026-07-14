@@ -107,28 +107,41 @@ async function fetchAjaxList(gameId, category, tid, retries = 2) {
 }
 
 // ─── JSON 응답 → 상품 배열 변환 ───────────────────────────────────────────
-// trade_id, trade_money, gs_name, str_trade_kind, trade_category 등 매핑
+// 실제 확인된 필드: trade_id, trade_subject, trade_money, credit_name_en,
+//   gs_name("게임[서버]"), str_trade_kind, seller_id, trade_reg_date
 function parseProducts(data, gameId, gameName, category) {
-  // data.p = 일반 상품 배열, data.pp = 프리미엄 상품 배열 (추정)
+  // p = 프리미엄/전체, g = 일반 목록, pp = 추가 프리미엄
   const items = [
     ...(Array.isArray(data.p)  ? data.p  : []),
+    ...(Array.isArray(data.g)  ? data.g  : []),
     ...(Array.isArray(data.pp) ? data.pp : []),
   ];
 
   return items.map(item => {
     const price = parseInt(String(item.trade_money ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
-    // 제목: trade_title > goods_name > str_trade_kind 순 fallback
-    const title = (item.trade_title || item.goods_name || item.str_trade_kind || item.trade_kind_name || '').trim();
-    // 서버명: server_name > gs_name (게임+서버 합산일 수 있음)
-    const serverName = (item.server_name || item.gs_name || '').trim();
-    // 종목: trade_category_name > str_goods_kind > str_trade_kind
-    const itemCategory = (item.trade_category_name || item.str_goods_kind || item.str_trade_kind || '').trim();
-    // 판매자 등급: seller_icon_type 또는 premium 필드
-    const gradeRaw = (item.seller_icon_type || item.seller_grade || '').toLowerCase();
-    const gradeMap = { vip: 'vip', platinum: 'platinum', gold: 'gold', silver: 'silver', bronze: 'bronze', p: 'platinum' };
+
+    // 제목: trade_subject (실제 등록 제목)
+    const title = (item.trade_subject || item.trade_title || item.goods_name || item.str_trade_kind || '').trim();
+
+    // gs_name = "게임명[서버명]" 형태 파싱
+    const gsName = (item.gs_name || '').trim();
+    const gsBracket = gsName.match(/^(.+?)\[(.+?)\]$/);
+    const serverName = gsBracket ? gsBracket[2] : gsName;
+
+    // 종목: str_trade_kind
+    const itemCategory = (item.str_trade_kind || item.str_goods_kind || '').trim();
+
+    // 판매자 등급: credit_name_en (실제 확인된 필드)
+    const gradeRaw = (item.credit_name_en || item.seller_icon_type || '').toLowerCase().trim();
+    const gradeMap = { vip: 'vip', platinum: 'platinum', gold: 'gold', silver: 'silver', bronze: 'bronze' };
     const sellerGrade = gradeMap[gradeRaw] ?? null;
-    // 판매자명
+
+    // 판매자명: seller_id
     const sellerName = (item.seller_id || item.member_id || '').trim() || null;
+
+    // 등록일: trade_reg_date "2026-07-14 20:12:41"
+    const regDateRaw = item.trade_reg_date || item.reg_date || '';
+    const originalCreatedAt = regDateRaw ? new Date(regDateRaw) : null;
 
     return {
       itemmaniaid: String(item.trade_id ?? ''),
@@ -143,8 +156,30 @@ function parseProducts(data, gameId, gameName, category) {
       detailUrl: item.trade_id
         ? `https://www.itemmania.com/${category}/application.html?id=${item.trade_id}`
         : null,
+      ...(originalCreatedAt && !isNaN(originalCreatedAt.getTime()) && { originalCreatedAt: originalCreatedAt.toISOString() }),
     };
   }).filter(p => p.itemmaniaid);
+}
+
+// ─── pagging_list에서 다음 tid 추출 ───────────────────────────────────────
+function extractNextTidFromPaggingList(data) {
+  // pagging_list 구조 확인 후 "현재 페이지 다음" tid 반환
+  const pl = data.pagging_list;
+  if (!pl) return null;
+  // 배열이면: [{tid:0, active:true}, {tid:123, active:false}, ...]
+  if (Array.isArray(pl)) {
+    const activeIdx = pl.findIndex(p => p.active === true || p.current === true || p.selected === true);
+    if (activeIdx >= 0 && activeIdx + 1 < pl.length) {
+      return pl[activeIdx + 1]?.tid ?? pl[activeIdx + 1]?.page_tid ?? null;
+    }
+    // active 없으면 마지막 tid
+    return pl[pl.length - 1]?.tid ?? null;
+  }
+  // 객체이면: {next_tid: 123} 또는 {tid: 123}
+  if (typeof pl === 'object') {
+    return pl.next_tid ?? pl.tid ?? pl.next ?? null;
+  }
+  return null;
 }
 
 // ─── 서버 배치 업로드 ──────────────────────────────────────────────────────
@@ -220,9 +255,9 @@ async function runOnce() {
           pagesDone++;
           process.stdout.write(`${page}p:${saved}개 `);
 
-          // 다음 tid: JSON 응답에서 추출
-          const nextTid = json.data?.tid ?? json.tid ?? json.data?.next_tid ?? null;
-          if (nextTid === null || nextTid === tid || nextTid === 0) break;
+          // 다음 tid: pagging_list 에서 추출
+          const nextTid = extractNextTidFromPaggingList(json.data ?? json);
+          if (nextTid === null || nextTid === tid) break;
           tid = nextTid;
 
         } catch (e) {
@@ -272,24 +307,30 @@ async function main() {
     process.exit(1);
   }
 
-  // JSON 구조 사전 확인 (리니지클래식 1페이지)
-  log('🔍 AJAX JSON 구조 확인 중...');
+  // JSON 구조 사전 확인 (리니지클래식 1페이지) — 생략 (이미 검증됨)
+  // pagging_list 구조만 확인
+  log('🔍 pagging_list 구조 확인 중...');
   try {
     const { status, text } = await fetchAjaxList(5913, 'sell', 0, 1);
-    log(`   status=${status} len=${text?.length ?? 0}`);
     const json = JSON.parse(text);
-    log(`   result=${json.result}`);
-    log(`   data keys: ${JSON.stringify(Object.keys(json.data ?? json))}`);
-    const pArr = json.data?.p ?? [];
-    log(`   p[] 개수: ${pArr.length}`);
-    if (pArr.length > 0) {
-      log(`   첫 번째 항목 keys: ${JSON.stringify(Object.keys(pArr[0]))}`);
-      log(`   첫 번째 항목: ${JSON.stringify(pArr[0])}`);
+    const data = json.data ?? json;
+    const pLen = (data.p?.length ?? 0) + (data.g?.length ?? 0);
+    log(`   p+g 항목 수: ${pLen}  TradeCount: ${data.TradeCount}`);
+    const pl = data.pagging_list;
+    if (Array.isArray(pl)) {
+      log(`   pagging_list(배열) 길이: ${pl.length}`);
+      log(`   첫 항목: ${JSON.stringify(pl[0])}`);
+      log(`   마지막 항목: ${JSON.stringify(pl[pl.length - 1])}`);
+    } else if (pl && typeof pl === 'object') {
+      log(`   pagging_list(객체) keys: ${JSON.stringify(Object.keys(pl))}`);
+      log(`   내용: ${JSON.stringify(pl)}`);
+    } else {
+      log(`   pagging_list = ${JSON.stringify(pl)}`);
     }
-    // tid/pagination 확인
-    log(`   tid/pagination: tid=${json.data?.tid} next_tid=${json.data?.next_tid} total=${json.data?.total}`);
+    const nextTid = extractNextTidFromPaggingList(data);
+    log(`   → 다음 tid: ${nextTid}`);
   } catch (e) {
-    log(`   ⚠️  구조 확인 실패: ${e.message}`);
+    log(`   ⚠️  pagging_list 확인 실패: ${e.message}`);
   }
 
   if (_onceFlag) {

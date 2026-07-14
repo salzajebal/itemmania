@@ -1114,6 +1114,12 @@ router.get("/admin/crawl/games", (_req, res): void => {
 
 // 로컬 크롤러 배치 upsert (itemmaniaid 기준 중복 방지)
 router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
+  // X-Crawl-Key 헤더 또는 어드민 세션 인증
+  const crawlKey = req.headers["x-crawl-key"] as string | undefined;
+  const isAdmin = req.session?.userRole === "admin";
+  if (!crawlKey && !isAdmin) { res.status(401).json({ error: "인증 필요" }); return; }
+  if (crawlKey && crawlKey !== CRAWL_KEY) { res.status(401).json({ error: "CRAWL_KEY가 올바르지 않습니다" }); return; }
+
   const { products } = req.body as {
     products?: Array<{
       itemmaniaid: string;
@@ -1127,11 +1133,13 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
       description?: string;
       thumbnailUrl?: string;
       sellerName?: string;
+      sellerGrade?: string;
+      originalCreatedAt?: string;
     }>;
   };
 
   if (!Array.isArray(products) || products.length === 0) {
-    res.status(400).json({ error: "products 배열이 필요합니다." });
+    res.json({ ok: true, upserted: 0, failed: 0 });
     return;
   }
 
@@ -1140,6 +1148,8 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
 
   for (const p of products) {
     if (!p.itemmaniaid || !p.title) { failed++; continue; }
+    const createdAt = p.originalCreatedAt ? new Date(p.originalCreatedAt) : undefined;
+    const validCreatedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : undefined;
     try {
       await db.insert(productsTable).values({
         itemmaniaid: p.itemmaniaid,
@@ -1153,8 +1163,10 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
         description: p.description || null,
         thumbnailUrl: p.thumbnailUrl || null,
         sellerName: p.sellerName || null,
+        sellerGrade: p.sellerGrade || null,
         status: "active",
         crawledAt: new Date(),
+        ...(validCreatedAt && { createdAt: validCreatedAt }),
       }).onConflictDoUpdate({
         target: productsTable.itemmaniaid,
         set: {
@@ -1164,6 +1176,7 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
           serverName: p.serverName || null,
           itemCategory: p.itemCategory || null,
           detailUrl: p.detailUrl || null,
+          sellerGrade: p.sellerGrade || null,
           ...(p.description !== undefined && { description: p.description }),
           ...(p.thumbnailUrl !== undefined && { thumbnailUrl: p.thumbnailUrl }),
           ...(p.sellerName !== undefined && { sellerName: p.sellerName }),
