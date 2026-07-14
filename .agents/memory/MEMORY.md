@@ -11,3 +11,5 @@
 - [Search category two-step nav](search-category-nav.md) — snapshot JS overrides location.href removing itemCategory; fix: store pending category in sessionStorage, sell/list page reads it on load and location.replace with itemCategory.
 - [Search frame stale gsList ref](search-gsList-stale.md) — snapshot JS may replace .gs_list element; always use frame.querySelector('.gs_list') dynamically, never capture element reference at setup time.
 - [Search frame document-level capture](search-doc-capture.md) — category/game handlers must be document.addEventListener capture=true to run before original JS; element-level capture can lose to earlier-registered document-level handlers.
+- [Product list count display bug](product-count-bug.md) — loadList used ourNormalCount (current page ≤50) not ourTotal for count display; use data.total (ourTotal) for both initial and live phase-2 count updates.
+- [gameName normalization](gamename-normalization.md) — snapshot imports save full names (e.g. 오딘:발할라라이징); crawl saves short names (오딘). Run UPDATE to normalize on conflict. auto-crawl.mjs env-var support: IM_SITE_URL / IM_CRAWL_KEY.

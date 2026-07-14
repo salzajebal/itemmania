@@ -13,9 +13,9 @@
 import { createGunzip } from 'zlib';
 import https from 'https';
 
-// ★ 여기만 수정하세요 ★
-const SITE_URL  = 'https://YOUR_SITE.replit.app'; // 배포 주소 (끝에 / 없이)
-const CRAWL_KEY = 'YOUR_CRAWL_KEY';               // 어드민 패널에서 확인
+// ★ 여기만 수정하세요 ★ (환경변수 IM_SITE_URL / IM_CRAWL_KEY 로 덮어쓸 수 있습니다)
+const SITE_URL  = process.env.IM_SITE_URL  || 'https://YOUR_SITE.replit.app';
+const CRAWL_KEY = process.env.IM_CRAWL_KEY || 'YOUR_CRAWL_KEY';
 
 // ─── CLI 인수 파싱 ─────────────────────────────────────────────────────────
 const _args = process.argv.slice(2);
