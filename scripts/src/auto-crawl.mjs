@@ -125,29 +125,34 @@ async function discoverApi() {
     const jsUrl = jsMatch[1].startsWith('http') ? jsMatch[1] : 'https://www.itemmania.com' + jsMatch[1].split('?')[0] + (jsMatch[1].includes('?') ? '?' + jsMatch[1].split('?')[1] : '');
     log(`🔍 리스트 JS: ${jsUrl}`);
     const jsText = await fetchHtml(jsUrl);
-    // fetch/ajax 호출 패턴 추출
-    const patterns = [];
-    const re = /["'`](\/[a-z][a-z0-9/_-]{2,60}\?[^"'`]{0,120})["'`]/g;
-    let m;
-    while ((m = re.exec(jsText)) !== null) patterns.push(m[1]);
-    const unique = [...new Set(patterns)].filter(p => /list|goods|trade|item|product|search/.test(p)).slice(0, 20);
-    if (unique.length) {
-      log(`📡 발견된 API 패턴 (${unique.length}개):`);
-      unique.forEach(p => log(`   ${p}`));
-    } else {
-      log('⚠️  API 패턴 없음 — 직접 fetch URL 검색');
-      const fe = /fetch\s*\(\s*["'`]([^"'`]{5,120})["'`]/g;
-      while ((m = fe.exec(jsText)) !== null) patterns.push(m[1]);
-      [...new Set(patterns)].slice(0, 10).forEach(p => log(`   fetch: ${p}`));
+    log(`   JS 크기: ${jsText.length}바이트`);
+
+    // 1) 슬래시로 시작하는 모든 경로 문자열 추출
+    const allPaths = [...new Set((jsText.match(/["'`](\/[a-zA-Z][a-zA-Z0-9/_.-]{4,80})["'`]/g) || [])
+      .map(s => s.slice(1, -1)))];
+    const apiPaths = allPaths.filter(p => /sell|buy|list|goods|trade|item|product|search|api/.test(p));
+    if (apiPaths.length) {
+      log(`📡 경로 패턴 (${apiPaths.length}개):`);
+      apiPaths.slice(0, 15).forEach(p => log(`   ${p}`));
     }
-    // 서버에 전송
+
+    // 2) XMLHttpRequest.open 또는 fetch 호출 주변 50자
+    const xhrMatches = (jsText.match(/\.open\s*\(\s*["'][A-Z]+["']\s*,\s*["'`][^"'`]{3,100}["'`]/g) || []).slice(0, 8);
+    if (xhrMatches.length) { log('XHR open:'); xhrMatches.forEach(x => log('   ' + x)); }
+
+    // 3) JS 앞 2000자 출력 (URL 조합 패턴 확인)
+    log('--- JS 시작 2000자 ---');
+    log(jsText.slice(0, 2000));
+    log('--- JS 끝 ---');
+
+    // 서버에 전달
     await fetch(`${SITE_URL}/api/admin/crawl/upload-html`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Crawl-Key': CRAWL_KEY },
-      body: JSON.stringify({ html: jsText.slice(0, 50000), gameId: 0, category: 'sell', gameName: '__JS_DISCOVERY__' }),
-      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({ html: jsText.slice(0, 80000), gameId: 0, category: 'sell', gameName: '__JS_DISCOVERY__' }),
+      signal: AbortSignal.timeout(30000),
     }).catch(() => {});
-    return unique;
+    return apiPaths;
   } catch (e) {
     log(`⚠️  API 탐색 실패: ${e.message}`);
     return null;
