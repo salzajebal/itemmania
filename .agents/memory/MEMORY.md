@@ -13,3 +13,4 @@
 - [Search frame document-level capture](search-doc-capture.md) — category/game handlers must be document.addEventListener capture=true to run before original JS; element-level capture can lose to earlier-registered document-level handlers.
 - [Product list count display bug](product-count-bug.md) — loadList used ourNormalCount (current page ≤50) not ourTotal for count display; use data.total (ourTotal) for both initial and live phase-2 count updates.
 - [gameName normalization](gamename-normalization.md) — snapshot imports save full names (e.g. 오딘:발할라라이징); crawl saves short names (오딘). Run UPDATE to normalize on conflict. auto-crawl.mjs env-var support: IM_SITE_URL / IM_CRAWL_KEY.
+- [Intercept script handler timing](intercept-handler-timing.md) — document.addEventListener inside init() misses clicks if init() is deferred to DOMContentLoaded; put handlers at IIFE top level + server-side onclick attribute for dual protection.

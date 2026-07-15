@@ -7307,43 +7307,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     var _fixInterval = setInterval(fixBuyPagePriceAndQty, 300);
     setTimeout(function() { clearInterval(_fixInterval); }, 10000);
 
-    // 판매신청 버튼 (btn_green) → cloneNode로 스냅샷 리스너 제거 후 우리 핸들러 부착
-    document.querySelectorAll('button.btn_green').forEach(function(btn) {
-      var newBtn = btn.cloneNode(true);
-      if (btn.parentNode) btn.parentNode.replaceChild(newBtn, btn);
-      newBtn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        checkLogin().then(function(ok) {
-          if (!ok) { showLoginModal(); return; }
-          var p = window.__PRODUCT__;
-          if (!p || !p.sellerId) { showSuccessModal('판매신청이 완료되었습니다'); return; }
-          newBtn.disabled = true;
-          newBtn.textContent = '처리 중...';
-          fetch('/api/chat/rooms', {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
-          }).then(function(r) { return r.json(); })
-          .then(function(room) {
-            if (room && room.id) {
-              var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
-              var w = window.open(chatUrl, 'im_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
-              if (!w || w.closed) { location.href = chatUrl; }
-              newBtn.disabled = false;
-              newBtn.textContent = '판매신청';
-            } else {
-              showSuccessModal('판매신청이 완료되었습니다');
-              newBtn.disabled = false;
-              newBtn.textContent = '판매신청';
-            }
-          }).catch(function() {
-            showSuccessModal('판매신청이 완료되었습니다');
-            newBtn.disabled = false;
-            newBtn.textContent = '판매신청';
-          });
-        });
-      });
-    });
+    // (판매신청 버튼 핸들러는 IIFE 최상위 레벨에서 즉시 등록됨 — 아래 참조)
 
     // form submit 차단 (frmSell) — capture로 스냅샷보다 먼저 실행
     var form = document.getElementById('frmSell');
@@ -7429,6 +7393,53 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     });
   }
 
+  // ── 판매신청 버튼 핸들러: IIFE 최상위에서 즉시 등록 (DOMContentLoaded 대기 없음) ──
+  window._im_on_sell_btn = function(btn) {
+    var user = window._IM_USER;
+    if (!user || !user.id) {
+      try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+      location.href = '/login';
+      return false;
+    }
+    var p = window.__PRODUCT__;
+    if (!p || !p.sellerId) { showSuccessModal('판매신청이 완료되었습니다'); return false; }
+    btn.disabled = true;
+    btn.textContent = '처리 중...';
+    fetch('/api/chat/rooms', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
+    }).then(function(r) { return r.json(); })
+    .then(function(room) {
+      if (room && room.id) {
+        location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+      } else {
+        showSuccessModal('판매신청이 완료되었습니다');
+        btn.disabled = false;
+        btn.textContent = '판매신청';
+      }
+    }).catch(function() {
+      showSuccessModal('판매신청이 완료되었습니다');
+      btn.disabled = false;
+      btn.textContent = '판매신청';
+    });
+    return false;
+  };
+
+  // document 레벨 capture 위임: DOMContentLoaded 전에도 즉시 활성
+  document.addEventListener('click', function(e) {
+    var tgt = e.target;
+    if (!tgt) return;
+    var btn = tgt.classList && tgt.classList.contains('btn_green')
+      ? tgt
+      : (tgt.closest ? tgt.closest('button.btn_green') : null);
+    if (!btn) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+    window._im_on_sell_btn(btn);
+  }, true);
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -7448,6 +7459,11 @@ function serveBuyApplication(html: string, user: Record<string, unknown> | null 
       ? result.replace("<head>", "<head>" + ps)
       : result.replace("<body", ps + "<body");
   }
+  // btn_green에 onclick 직접 주입 (document 위임 핸들러와 이중 보호)
+  result = result.replace(
+    '<button type=button class=btn_green>판매신청</button>',
+    '<button type=button class=btn_green onclick="window._im_on_sell_btn&&window._im_on_sell_btn(this);return false;">판매신청</button>'
+  );
   const combined = BUY_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   return result.includes("</body>")
     ? result.replace("</body>", combined + "</body>")
