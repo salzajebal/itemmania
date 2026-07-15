@@ -45,12 +45,30 @@ async function doLogin(){
     if(!r.ok){errEl.textContent=d.error||'로그인 실패';errEl.style.display='block';return;}
     if(d.role!=='admin'){errEl.textContent='관리자 계정이 아닙니다.';errEl.style.display='block';return;}
     showAdmin(d);
+    if(typeof window._adminConnectSSE==='function')window._adminConnectSSE();
   }catch(e){errEl.textContent='서버 연결 오류';errEl.style.display='block';}
 }
 document.getElementById('loginPw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 
 async function checkSession(){
-  showAdmin({nickname:'관리자',role:'admin'});
+  try{
+    var r=await fetch('/api/auth/me',{credentials:'include'});
+    if(!r.ok){
+      document.getElementById('login-screen').style.display='flex';
+      document.getElementById('admin-screen').style.display='none';
+      return;
+    }
+    var d=await r.json();
+    if(d.role!=='admin'){
+      document.getElementById('login-screen').style.display='flex';
+      document.getElementById('admin-screen').style.display='none';
+      return;
+    }
+    showAdmin(d);
+  }catch(e){
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('admin-screen').style.display='none';
+  }
 }
 
 function showAdmin(user){

@@ -621,7 +621,10 @@ function showAdminToast(title, body) {
   }
 
   if (typeof EventSource === 'undefined') return;
+  var _sseActive = false;
   function connectSSE() {
+    if (_sseActive) return;
+    _sseActive = true;
     var es = new EventSource('/api/events');
     es.addEventListener('notification', function(e){
       try {
@@ -632,9 +635,11 @@ function showAdminToast(title, body) {
     });
     es.addEventListener('error', function(){
       es.close();
+      _sseActive = false;
       setTimeout(connectSSE, 5000);
     });
   }
+  window._adminConnectSSE = connectSSE;
   connectSSE();
 })();
 </script>
@@ -710,7 +715,7 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
     req.session.adminId = user.id;
     req.session.adminRole = user.role;
     await new Promise<void>((resolve) => req.session.save(() => resolve()));
-    res.redirect("/admin");
+    res.redirect("/tkfwkwpqkf");
   } catch {
     res.send(ADMIN_LOGIN_PAGE("서버 오류가 발생했습니다."));
   }
