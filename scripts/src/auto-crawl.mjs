@@ -14,8 +14,8 @@ import { createGunzip } from 'zlib';
 import https from 'https';
 
 // ★ 여기만 수정하세요 ★ (환경변수 IM_SITE_URL / IM_CRAWL_KEY 로 덮어쓸 수 있습니다)
-const SITE_URL  = process.env.IM_SITE_URL  || 'https://YOUR_SITE.replit.app';
-const CRAWL_KEY = process.env.IM_CRAWL_KEY || 'YOUR_CRAWL_KEY';
+const SITE_URL  = process.env.IM_SITE_URL  || 'https://18b522b1-97fb-447c-b2c8-30f2cf615f10-00-idagoati6ccv.sisko.replit.dev';
+const CRAWL_KEY = process.env.IM_CRAWL_KEY || '05292af827eb36c03d05711f7f685bfd7488e8080eb821287d063b0318cffb54';
 
 // ─── CLI 인수 파싱 ─────────────────────────────────────────────────────────
 const _args = process.argv.slice(2);
