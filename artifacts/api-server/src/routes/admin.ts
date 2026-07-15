@@ -1549,7 +1549,7 @@ export function startAutoScheduler(): void {
   }
 
   const schedule = process.env.AUTO_CRAWL_SCHEDULE ?? "*/30 * * * *";
-  const pages    = Math.max(1, parseInt(process.env.AUTO_CRAWL_PAGES ?? "2", 10));
+  const pages    = Math.max(1, parseInt(process.env.AUTO_CRAWL_PAGES ?? "10", 10));
 
   if (_schedulerTask) _schedulerTask.stop();
 
