@@ -7517,6 +7517,36 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // add_pay price_font (결제 해야할 금액)
   r = r.replace(/(<span\b[^>]*class="add_pay price_font"[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
 
+  // 8. 거래번호 교체 (.trade_id 내 #20260...) → 우리 DB id로
+  r = r.replace(/(<div class=trade_id>\s*)#\d+(\s*)/, `$1#${p.id}$2`);
+
+  // 9. btn_fav data-id (찜하기 버튼) → 우리 DB id로
+  r = r.replace(/(data-id=)\d{10,}/g, `$1${p.id}`);
+
+  // 10. 판매자 등급 배지 교체 (credit_mark 클래스·텍스트)
+  const GRADE_LETTERS_S: Record<string, string> = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
+  const GRADE_NAMES_S: Record<string, string>   = { vip:'VIP', platinum:'PLATINUM', gold:'GOLD', silver:'SILVER', bronze:'BRONZE' };
+  const gKey  = (p.sellerGrade && GRADE_LETTERS_S[p.sellerGrade as string]) ? (p.sellerGrade as string) : null;
+  const gLtr  = gKey ? GRADE_LETTERS_S[gKey] : '';
+  const gCls  = gKey ? `credit_mark ${gKey}` : 'credit_mark regular';
+  const gName = gKey ? GRADE_NAMES_S[gKey] : '';
+  const cScore = (p.sellerCreditScore !== null && p.sellerCreditScore !== undefined)
+    ? Number(p.sellerCreditScore).toLocaleString('ko-KR') + '점'
+    : '0점';
+  r = r.replace(/<span class="credit_mark [^"]*">[^<]*<\/span>/, `<span class="${gCls}">${gLtr}</span>`);
+
+  // 11. vip_txt 텍스트 + 바로 뒤 신용점수 텍스트 교체
+  r = r.replace(
+    /(<strong class=vip_txt>)[^<]*(<\/strong>\s*)[\d,]+점/,
+    `$1${gName}$2${cScore}`
+  );
+
+  // 12. 거래성사율 progress bar 초기화 (우리 DB에 없음)
+  r = r.replace(
+    /<progress class=g_progress max=100 value=\d+ data-value=\d+>/,
+    `<progress class=g_progress max=100 value=0 data-value=0>`
+  );
+
   return r;
 }
 
@@ -9074,6 +9104,11 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
     product = await resolveProductByRawId(rawId);
   }
 
+  if (!product) {
+    res.redirect(302, "/sell/list.html");
+    return;
+  }
+
   res.send(serveApplication(sellApplicationHtml, user, product));
 });
 
@@ -9091,6 +9126,11 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
   const rawIdB = String(Array.isArray(req.query.id) ? req.query.id[0] : req.query.id ?? "").trim();
   if (rawIdB) {
     product = await resolveProductByRawId(rawIdB);
+  }
+
+  if (!product) {
+    res.redirect(302, "/buy/list.html");
+    return;
   }
 
   res.send(serveBuyApplication(buyApplicationHtml, user, product));
