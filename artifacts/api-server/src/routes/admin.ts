@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq, sql, desc, or, inArray, and } from "drizzle-orm";
 import cron from "node-cron";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
@@ -40,6 +40,20 @@ const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string 
 ];
 
 const router: IRouter = Router();
+
+// ── 어드민 전역 인증 미들웨어 ─────────────────────────────────────────────
+// 어드민 세션 OR 유효한 x-crawl-key 헤더 중 하나가 있어야 통과
+router.use((req: Request, res: Response, next: NextFunction): void => {
+  const hasAdminSession =
+    (!!req.session?.adminId && req.session.adminRole === "admin") ||
+    (!!req.session?.userId && req.session.userRole === "admin");
+  if (hasAdminSession) { next(); return; }
+
+  const crawlKey = req.headers["x-crawl-key"] as string | undefined;
+  if (crawlKey && crawlKey === CRAWL_KEY) { next(); return; }
+
+  res.status(401).json({ error: "관리자 로그인이 필요합니다." });
+});
 
 // ── 백그라운드 크롤 작업 상태 저장소 ─────────────────────────────────────
 interface CrawlLog {

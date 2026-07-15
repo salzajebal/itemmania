@@ -554,6 +554,16 @@ var _adminVoiceOn = sessionStorage.getItem('adminVoice') !== 'off'; /* 기본값
 var _adminSpeakQueue = [];
 var _adminAudioCtx = null;
 
+/* 첫 번째 클릭/터치로 AudioContext 잠금 자동 해제 (브라우저 정책 대응) */
+function _adminUnlockAudio() {
+  try {
+    if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume();
+  } catch(e) {}
+}
+document.addEventListener('click', _adminUnlockAudio, { once: true, capture: true });
+document.addEventListener('touchstart', _adminUnlockAudio, { once: true, capture: true });
+
 /* AudioContext 비프음 — TTS 미지원 환경에서도 반드시 소리 남 */
 function _adminBeep(freq, dur) {
   try {
