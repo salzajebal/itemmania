@@ -1341,9 +1341,12 @@ function proxyImFetch(url,init){
     if(parts.length) apiUrl+='?'+parts.join('&');
     return fetch(apiUrl,{credentials:'include'});
   }
-  /* 로그인 상태 확인 */
+  /* 로그인 상태 확인 — itemmania 원본 JS가 비로그인으로 판단해 /login으로 리다이렉트하는 것 방지.
+     상품 상세(application) 페이지는 누구나 볼 수 있어야 하므로 가짜 "로그인됨" 응답을 반환.
+     실제 구매/채팅 액션은 우리 스크립트에서 window._IM_auth()로 별도 체크. */
   if(/[/](session|auth|login|member|user)/.test(path)){
-    return window._IM_auth();
+    var _fakeGuest={result:'ok',isLogin:true,memberID:'guest',data:[{memberID:'guest',isLogin:true,grade:''}]};
+    return Promise.resolve(new Response(JSON.stringify(_fakeGuest),{status:200,headers:{'Content-Type':'application/json'}}));
   }
   /* 나머지 → 빈 JSON */
   return Promise.resolve(new Response(JSON.stringify({result:'ok',data:[]}),{status:200,headers:{'Content-Type':'application/json'}}));
