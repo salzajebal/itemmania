@@ -7307,16 +7307,18 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     var _fixInterval = setInterval(fixBuyPagePriceAndQty, 300);
     setTimeout(function() { clearInterval(_fixInterval); }, 10000);
 
-    // 판매신청 버튼 (btn_green) → 채팅방 생성 후 바로 이동
+    // 판매신청 버튼 (btn_green) → cloneNode로 스냅샷 리스너 제거 후 우리 핸들러 부착
     document.querySelectorAll('button.btn_green').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+      var newBtn = btn.cloneNode(true);
+      if (btn.parentNode) btn.parentNode.replaceChild(newBtn, btn);
+      newBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
         checkLogin().then(function(ok) {
           if (!ok) { showLoginModal(); return; }
           var p = window.__PRODUCT__;
           if (!p || !p.sellerId) { showSuccessModal('판매신청이 완료되었습니다'); return; }
-          btn.disabled = true;
-          btn.textContent = '처리 중...';
+          newBtn.disabled = true;
+          newBtn.textContent = '처리 중...';
           fetch('/api/chat/rooms', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -7327,23 +7329,23 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
               var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
               var w = window.open(chatUrl, 'im_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
               if (!w || w.closed) { location.href = chatUrl; }
-              btn.disabled = false;
-              btn.textContent = '판매 신청하기';
+              newBtn.disabled = false;
+              newBtn.textContent = '판매신청';
             } else {
               showSuccessModal('판매신청이 완료되었습니다');
-              btn.disabled = false;
-              btn.textContent = '판매 신청하기';
+              newBtn.disabled = false;
+              newBtn.textContent = '판매신청';
             }
           }).catch(function() {
             showSuccessModal('판매신청이 완료되었습니다');
-            btn.disabled = false;
-            btn.textContent = '판매 신청하기';
+            newBtn.disabled = false;
+            newBtn.textContent = '판매신청';
           });
         });
-      }, true);
+      });
     });
 
-    // form submit 차단 (frmSell)
+    // form submit 차단 (frmSell) — capture로 스냅샷보다 먼저 실행
     var form = document.getElementById('frmSell');
     if (form) {
       form.addEventListener('submit', function(e){ e.preventDefault(); e.stopImmediatePropagation(); }, true);
