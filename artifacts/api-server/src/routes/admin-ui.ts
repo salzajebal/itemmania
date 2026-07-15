@@ -550,7 +550,7 @@ tbody tr:hover{background:#fafbff}
 
 <script>
 /* ── 어드민 음성·SSE ── */
-var _adminVoiceOn = sessionStorage.getItem('adminVoice') === 'on';
+var _adminVoiceOn = sessionStorage.getItem('adminVoice') !== 'off'; /* 기본값 ON */
 var _adminSpeakQueue = [];
 var _adminAudioCtx = null;
 
@@ -685,13 +685,25 @@ function showAdminToast(title, body) {
     if ('Notification' in window && Notification.permission === 'default') {
       try { Notification.requestPermission(); } catch(e) {}
     }
+    /* AudioContext 미리 잠금 해제 (connectSSE는 반드시 사용자 제스처 후 호출) */
+    try {
+      if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || (window as unknown as {webkitAudioContext: typeof AudioContext}).webkitAudioContext)();
+      if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume();
+    } catch(e) {}
+
     var es = new EventSource('/api/events');
     es.addEventListener('notification', function(e){
       try {
         var d = JSON.parse(e.data);
         showAdminToast(d.title, d.body);
-        adminSpeak(d.title);
-        /* 탭이 비활성이거나 화면을 보지 않을 때도 울리는 OS 알림 */
+        /* 비프음: 음성 ON/OFF 무관, 항상 재생 */
+        _adminBeep(880, 0.18);
+        setTimeout(function(){ _adminBeep(1100, 0.18); }, 200);
+        /* TTS 음성: 음성 ON 상태에서만 추가 */
+        if (_adminVoiceOn) {
+          setTimeout(function(){ _adminTTS(d.title); }, 350);
+        }
+        /* OS 시스템 알림 (탭 백그라운드여도 표시) */
         _adminBrowserNotif(d.title, d.body);
       } catch(ex){}
     });
