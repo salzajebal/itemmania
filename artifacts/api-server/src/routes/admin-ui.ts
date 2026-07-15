@@ -369,40 +369,34 @@ tbody tr:hover{background:#fafbff}
             </p>
 
             <div style="background:#f0f7ff;border:1px solid #bee3f8;border-radius:10px;padding:20px;margin-bottom:16px">
-              <div style="font-weight:700;margin-bottom:14px;font-size:14px;color:#1a56db">📋 사용 방법 (3단계)</div>
+              <div style="font-weight:700;margin-bottom:14px;font-size:14px;color:#1a56db">📋 사용 방법 (2단계)</div>
 
-              <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">
+              <div style="display:flex;gap:12px;margin-bottom:16px;align-items:flex-start">
                 <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">1</div>
                 <div>
-                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">스크립트 다운로드</div>
+                  <div style="font-weight:600;font-size:14px;margin-bottom:6px">스크립트 다운로드</div>
                   <button id="autoScriptDownloadBtn" onclick="downloadCrawlScript()"
                     style="padding:8px 18px;background:#1a56db;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">
                     ⬇️ auto-crawl.mjs 다운로드
                   </button>
-                </div>
-              </div>
-
-              <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">
-                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">2</div>
-                <div style="flex:1">
-                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">파일 열어서 3줄 수정</div>
-                  <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;padding:12px;font-family:monospace;font-size:12px;line-height:1.8">
-                    <span style="color:#6a9955">// ★ 여기만 수정하세요 ★</span><br>
-                    <span style="color:#9cdcfe">const</span> API_URL &nbsp;&nbsp;&nbsp;&nbsp; = <span style="color:#ce9178" id="autoScriptApiUrl">'https://itenmania.com'</span>;<br>
-                    <span style="color:#9cdcfe">const</span> ADMIN_EMAIL = <span style="color:#ce9178">'<b style="color:#ff9999">내 이메일</b>'</span>;<br>
-                    <span style="color:#9cdcfe">const</span> ADMIN_PW &nbsp;&nbsp; = <span style="color:#ce9178">'<b style="color:#ff9999">내 비밀번호</b>'</span>;
+                  <div style="font-size:12px;color:#1a56db;margin-top:8px;font-weight:500">
+                    ✅ 서버 주소·인증 키가 자동으로 입력됩니다. 수정 불필요!
                   </div>
                 </div>
               </div>
 
               <div style="display:flex;gap:12px;align-items:flex-start">
-                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">3</div>
+                <div style="background:#1a56db;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">2</div>
                 <div style="flex:1">
-                  <div style="font-weight:600;font-size:14px;margin-bottom:4px">터미널에서 실행 후 창 유지</div>
-                  <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;padding:12px;font-family:monospace;font-size:13px">
-                    node auto-crawl.mjs
+                  <div style="font-weight:600;font-size:14px;margin-bottom:6px">터미널에서 실행 후 창 유지</div>
+                  <div style="background:#1e1e1e;color:#d4d4d4;border-radius:7px;padding:12px;font-family:monospace;font-size:12px;line-height:2">
+                    <span style="color:#6a9955"># 상시 자동 수집 (1시간마다, 전체 게임)</span><br>
+                    node auto-crawl.mjs<br>
+                    <br>
+                    <span style="color:#6a9955"># 특정 게임만 대량 수집 후 종료 (예: 메이플랜드 50페이지)</span><br>
+                    node auto-crawl.mjs --games 5990 --pages 50 --once
                   </div>
-                  <div style="font-size:12px;color:#555;margin-top:6px">
+                  <div style="font-size:12px;color:#555;margin-top:8px">
                     ⚠️ Node.js 없으면 → <a href="https://nodejs.org" target="_blank" style="color:#1a56db">nodejs.org</a> 에서 LTS 버전 설치
                   </div>
                 </div>
@@ -410,7 +404,7 @@ tbody tr:hover{background:#fafbff}
             </div>
 
             <div style="background:#f6fff8;border:1px solid #9be6b0;border-radius:8px;padding:14px;font-size:13px;color:#276749">
-              ✅ 실행하면 1시간마다 자동으로 10개 게임 × 3페이지 = <b>약 1,500개</b>씩 수집됩니다.<br>
+              ✅ 상시 실행 시 1시간마다 11개 게임 × 5페이지씩 수집됩니다.<br>
               이미 있는 상품은 건너뛰고 새 상품만 추가되어 계속 쌓입니다.
             </div>
           </div>
