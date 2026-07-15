@@ -549,7 +549,7 @@ tbody tr:hover{background:#fafbff}
 
 <script>
 /* ── 어드민 음성·SSE ── */
-var _adminVoiceOn = sessionStorage.getItem('adminVoice') !== 'off';
+var _adminVoiceOn = sessionStorage.getItem('adminVoice') === 'on';
 var _adminSpeakQueue = [];
 
 function _updateVoiceBtn() {
