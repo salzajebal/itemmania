@@ -6269,6 +6269,17 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
   function init() {
     loadUserTradeInfo();
 
+    // 검색창 게임명 교체 (스냅샷 하드코딩 "리니지클래식" → 실제 상품 게임명)
+    (function() {
+      var _prod = window.__PRODUCT__;
+      if (_prod && _prod.gameName) {
+        var _gsInp = document.getElementById('searchGameServer');
+        if (_gsInp) _gsInp.value = _prod.gameName;
+        var _gsInp2 = document.querySelector('input.search_gs_name[id!=searchGameServer]');
+        if (_gsInp2) _gsInp2.value = _prod.gameName;
+      }
+    })();
+
     // ── 구매수량 컨트롤 (document 레벨 위임, 초기화) ────────
     (function() {
       function fmtKr(n) { return Number(n||0).toLocaleString('ko-KR'); }
@@ -7277,6 +7288,17 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
   function init() {
     updateBuyerInfo();
 
+    // 검색창 게임명 교체 (스냅샷 하드코딩 "리니지클래식" → 실제 상품 게임명)
+    (function() {
+      var _prod = window.__PRODUCT__;
+      if (_prod && _prod.gameName) {
+        var _gsInp = document.getElementById('searchGameServer');
+        if (_gsInp) _gsInp.value = _prod.gameName;
+        var _gsInp2 = document.querySelector('input.search_gs_name[id!=searchGameServer]');
+        if (_gsInp2) _gsInp2.value = _prod.gameName;
+      }
+    })();
+
     // buy 페이지 전용: 가격·수량 컨트롤 고정 (스냅샷 JS 덮어쓰기 방지)
     fixBuyPagePriceAndQty();
     var _fixInterval = setInterval(fixBuyPagePriceAndQty, 300);
@@ -7549,6 +7571,20 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
     /<progress class=g_progress max=100 value=\d+ data-value=\d+>/,
     `<progress class=g_progress max=100 value=0 data-value=0>`
   );
+
+  // 13. 헤더 검색창 게임명 교체 (value=리니지클래식 → 실제 게임명)
+  const searchGameName = escHtml(String(p.gameName || ''));
+  if (searchGameName) {
+    r = r.replace(
+      /(data-gameserver=true\s+value=)[^\s>]+/,
+      `$1${searchGameName}`
+    );
+    // 역순 속성 배치 대응
+    r = r.replace(
+      /(id=searchGameServer[^>]*\bvalue=)[^\s>]+/,
+      `$1${searchGameName}`
+    );
+  }
 
   return r;
 }
