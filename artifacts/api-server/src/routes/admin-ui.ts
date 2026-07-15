@@ -31,7 +31,7 @@ body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f4
 .login-box button{width:100%;padding:13px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer}
 .login-box button:hover{background:#0e8de0}
 .login-box .err{color:#e53e3e;font-size:13px;margin-top:8px;display:none}
-#admin-screen{display:block;min-height:100vh}
+#admin-screen{display:none;min-height:100vh}
 .topbar{background:#fff;border-bottom:1px solid #e8ecf0;padding:0 32px;display:flex;align-items:center;gap:16px;height:60px;position:sticky;top:0;z-index:100}
 .topbar .logo{font-size:18px;font-weight:800;color:#159EFD;letter-spacing:-.03em}
 .topbar .logo span{color:#222}
@@ -640,7 +640,7 @@ function showAdminToast(title, body) {
     });
   }
   window._adminConnectSSE = connectSSE;
-  connectSSE();
+  /* connectSSE는 checkSession() 또는 doLogin() 성공 시에만 호출 */
 })();
 </script>
 

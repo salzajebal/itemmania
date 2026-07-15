@@ -75,6 +75,7 @@ function showAdmin(user){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('admin-screen').style.display='block';
   document.getElementById('adminNickname').textContent=(user.nickname||user.email)+' (관리자)';
+  if(typeof window._adminConnectSSE==='function')window._adminConnectSSE();
   loadAll();
 }
 
