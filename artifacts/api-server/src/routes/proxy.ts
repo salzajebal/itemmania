@@ -7479,6 +7479,19 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // 2. 숨겨진 h1.g_hidden 제목 교체
   r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
 
+  // og:image / twitter:image 교체 — 게임 코드로 실제 게임 이미지 사용
+  if (p.gameCode) {
+    const gameImgUrl = `https://img.itemmania.com/new_images/og/${p.gameCode}.jpg`;
+    r = r.replace(
+      /(<meta[^>]*property=og:image[^>]*content=)[^\s>]+/g,
+      `$1${gameImgUrl}`
+    );
+    r = r.replace(
+      /(<meta[^>]*name=twitter:image[^>]*content=)[^\s>]+/g,
+      `$1${gameImgUrl}`
+    );
+  }
+
   // og:title / twitter:title 메타태그 교체
   r = r.replace(
     /(<meta[^>]*property=og:title[^>]*content=")OOOO+[^"]*OOOO+([^"]*")/,
@@ -9139,6 +9152,14 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
     }
   }
 
+  // 게임 코드 조회 (OG 이미지 URL 생성용)
+  let gameCode: string | null = null;
+  if (p.gameName) {
+    const [g] = await db.select({ code: gamesTable.code }).from(gamesTable)
+      .where(eq(gamesTable.name, p.gameName)).limit(1);
+    gameCode = g?.code ?? null;
+  }
+
   return {
     id: p.id, title: p.title, price: Number(p.price),
     gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
@@ -9146,7 +9167,7 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
     sellerId: resolvedSellerId, sellerGrade: resolvedGrade,
     sellerCreditScore: resolvedCreditScore,
     sellerAuthStates: resolvedAuthStates,
-    status: p.status,
+    status: p.status, gameCode,
   };
 }
 
