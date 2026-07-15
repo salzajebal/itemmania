@@ -657,15 +657,42 @@ function showAdminToast(title, body) {
 
   if (typeof EventSource === 'undefined') return;
   var _sseActive = false;
+
+  /* OS 레벨 브라우저 알림 — 탭이 백그라운드여도 울림 */
+  function _adminBrowserNotif(title, body) {
+    if (!('Notification' in window)) return;
+    function _send() {
+      try {
+        new Notification('\uD83D\uDD14 ' + (title || '\uC5B4\uB4DC\uBBFC \uC54C\uB9BC'), {
+          body: body || '',
+          icon: '/favicon.ico',
+          tag: 'admin-' + Date.now()
+        });
+      } catch(e) {}
+    }
+    if (Notification.permission === 'granted') { _send(); }
+    else if (Notification.permission !== 'denied') {
+      Promise.resolve(Notification.requestPermission()).then(function(p) {
+        if (p === 'granted') _send();
+      });
+    }
+  }
+
   function connectSSE() {
     if (_sseActive) return;
     _sseActive = true;
+    /* SSE 연결 시 알림 권한 미리 요청 */
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch(e) {}
+    }
     var es = new EventSource('/api/events');
     es.addEventListener('notification', function(e){
       try {
         var d = JSON.parse(e.data);
         showAdminToast(d.title, d.body);
         adminSpeak(d.title);
+        /* 탭이 비활성이거나 화면을 보지 않을 때도 울리는 OS 알림 */
+        _adminBrowserNotif(d.title, d.body);
       } catch(ex){}
     });
     es.addEventListener('error', function(){
