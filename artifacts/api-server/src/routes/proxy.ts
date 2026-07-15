@@ -7272,17 +7272,20 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
   function fixBuyPagePriceAndQty() {
     var p = window.__PRODUCT__;
     if (!p) return;
-    var price = Number(p.price || 0).toLocaleString('ko-KR');
+    var unitPrice = Number(p.price || 0);
+    var price = unitPrice.toLocaleString('ko-KR');
 
-    // 판매수량 컨트롤 숨기기 (.buy_info dl)
-    var dl = document.querySelector('.buy_info dl');
-    if (dl) dl.style.setProperty('display', 'none', 'important');
+    // sell_quantity 값 읽어 총 판매금액 계산 (기본값 1)
+    var qtyInp = document.getElementById('sell_quantity');
+    var qty = qtyInp ? Math.max(1, parseInt(qtyInp.value, 10) || 1) : 1;
+    var total = (unitPrice * qty).toLocaleString('ko-KR');
 
-    // 판매금액·총판매금액 고정
+    // 판매금액 = 단가 (항상 덮어쓰기)
     var tm = document.getElementById('trade_money');
-    if (tm && tm.textContent !== price) tm.textContent = price;
+    if (tm) tm.textContent = price;
+    // 총 판매금액 = qty × 단가 (항상 덮어쓰기)
     var pm = document.getElementById('pay_mileage');
-    if (pm && pm.textContent !== price) pm.textContent = price;
+    if (pm) pm.textContent = total;
   }
 
   function init() {
@@ -7537,8 +7540,9 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // 7. 구매수량 컨트롤 초기값 리셋 (서버사이드)
   const priceNum = Number(p.price || 0);
   const priceFmt = priceNum.toLocaleString('ko-KR');
-  // minus 버튼: 수량 1 초기값이므로 disabled 유지 (클라이언트 JS가 수량 변경 시 관리)
-  // buy_quantity: value 속성 → 1
+  // sell_quantity (buy-application 판매수량 input) → 1 로 리셋
+  r = r.replace(/(<input\b[^>]*\bid=sell_quantity\b[^>]*?\bvalue=)(\d+)/i, '$11');
+  // buy_quantity (sell-application 구매수량 input) → 1 로 리셋 (혹시 있을 경우)
   r = r.replace(/(<input\b[^>]*\bid=buy_quantity\b[^>]*?\bvalue=)(\d+)/i, '$11');
   // spnQuantity_Unit: "1만" 등 → "1"
   r = r.replace(/(<span\b[^>]*\bid=spnQuantity_Unit\b[^>]*>)[^<]*(<\/span>)/i, '$11$2');
@@ -7549,7 +7553,11 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // unit_info: "아데나" 등 게임화폐 텍스트 → "개"
   r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*[가-힣]{2,6}/g, '$1 개');
   r = r.replace(/(id=spnQuantity_total[^>]*>[^<]*<\/span>)\s*아데나/g, '$1 개');
-  // pay_mileage (총 구매금액) — 본문+하단 바 모두 교체
+  // trade_money (판매금액 단가) — id 직접 교체
+  r = r.replace(/<span\b[^>]*\bid=trade_money\b[^>]*>[^<]*<\/span>/i, `<span id=trade_money>${priceFmt}</span>`);
+  // pay_mileage (총 판매금액) — id 직접 교체 (class=f_red1, class=pay_mileage regex 미스)
+  r = r.replace(/<span\b[^>]*\bid=pay_mileage\b[^>]*>[^<]*<\/span>/i, `<span id=pay_mileage class=f_red1>${priceFmt}</span>`);
+  // pay_mileage (class 기반) — 하단 바 등 추가 교체
   r = r.replace(/(<span\b[^>]*\bclass=pay_mileage\b[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
   // settle_amount / final_amount — 모두 교체
   r = r.replace(/(<span\b[^>]*\bclass=settle_amount\b[^>]*>)[^<]*(<\/span>)/gi, `$1${priceFmt}$2`);
