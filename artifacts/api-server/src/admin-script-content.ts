@@ -83,7 +83,12 @@ var loadedTabs={};
 
 async function doLogout(){
   await fetch('/api/admin/logout',{method:'POST',credentials:'include'});
-  location.reload();
+  document.getElementById('admin-screen').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  var emailEl=document.getElementById('loginEmail') as HTMLInputElement|null;
+  var pwEl=document.getElementById('loginPw') as HTMLInputElement|null;
+  if(emailEl)emailEl.value='';
+  if(pwEl)pwEl.value='';
 }
 
 function switchTab(tab){

@@ -120,6 +120,7 @@ tbody tr:hover{background:#fafbff}
     <div class="admin-badge" id="adminNickname"></div>
     <div class="spacer"></div>
     <button class="voice-btn" id="voiceToggleBtn" onclick="toggleAdminVoice()">🔇 음성 OFF</button>
+    <button class="voice-btn" id="voiceTestBtn" onclick="adminSpeakTest()" style="font-size:12px;padding:4px 9px">테스트🔊</button>
     <button class="logout-btn" onclick="doLogout()">로그아웃</button>
   </div>
   <div class="content">
@@ -551,6 +552,40 @@ tbody tr:hover{background:#fafbff}
 /* ── 어드민 음성·SSE ── */
 var _adminVoiceOn = sessionStorage.getItem('adminVoice') === 'on';
 var _adminSpeakQueue = [];
+var _adminAudioCtx = null;
+
+/* AudioContext 비프음 — TTS 미지원 환경에서도 반드시 소리 남 */
+function _adminBeep(freq, dur) {
+  try {
+    if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var ctx = _adminAudioCtx;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine'; osc.frequency.value = freq || 880;
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (dur || 0.3));
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + (dur || 0.3));
+  } catch(e) {}
+}
+
+/* 한국어 TTS — voices 로딩 완료 후 최적 voice 선택 */
+function _adminTTS(text) {
+  if (!window.speechSynthesis) return;
+  var synth = window.speechSynthesis;
+  synth.cancel();
+  function _speak() {
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+    var voices = synth.getVoices();
+    var koVoice = voices.find(function(v){ return v.lang && v.lang.startsWith('ko'); });
+    if (koVoice) u.voice = koVoice;
+    synth.speak(u);
+  }
+  var voices = synth.getVoices();
+  if (voices.length) { _speak(); }
+  else { synth.onvoiceschanged = function(){ synth.onvoiceschanged = null; _speak(); }; }
+}
 
 function _updateVoiceBtn() {
   var btn = document.getElementById('voiceToggleBtn');
@@ -564,28 +599,31 @@ function _updateVoiceBtn() {
   }
 }
 
+function adminSpeakTest() {
+  /* 테스트 버튼 — AudioContext 잠금 해제 + TTS + 비프 동시 확인 */
+  try { if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume(); } catch(e) {}
+  _adminBeep(880, 0.15);
+  setTimeout(function(){ _adminBeep(1100, 0.15); }, 160);
+  _adminTTS('테스트 알림입니다');
+}
+
 function toggleAdminVoice() {
   _adminVoiceOn = !_adminVoiceOn;
   sessionStorage.setItem('adminVoice', _adminVoiceOn ? 'on' : 'off');
   _updateVoiceBtn();
-  if (_adminVoiceOn && window.speechSynthesis) {
-    /* 첫 클릭으로 브라우저 TTS 잠금 해제 */
-    window.speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance('음성 알림이 켜졌습니다');
-    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-    window.speechSynthesis.speak(u);
+  if (_adminVoiceOn) {
+    /* 첫 클릭으로 AudioContext + TTS 잠금 동시 해제 */
+    try { if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume(); } catch(e) {}
+    _adminBeep(880, 0.12);
+    setTimeout(function(){ _adminBeep(1100, 0.12); }, 130);
+    _adminTTS('음성 알림이 켜졌습니다');
     /* 큐에 쌓인 알림 재생 */
     if (_adminSpeakQueue.length) {
       setTimeout(function(){
         var txt = _adminSpeakQueue.pop();
         _adminSpeakQueue = [];
-        if (txt && window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-          var q = new SpeechSynthesisUtterance(txt);
-          q.lang = 'ko-KR'; q.rate = 1.0; q.volume = 1.0;
-          window.speechSynthesis.speak(q);
-        }
-      }, 1200);
+        if (txt) { _adminBeep(880, 0.15); _adminTTS(txt); }
+      }, 1500);
     }
   }
 }
@@ -593,11 +631,8 @@ function toggleAdminVoice() {
 function adminSpeak(text) {
   if (!text) return;
   if (!_adminVoiceOn) { _adminSpeakQueue = [text]; return; }
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  var u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-  window.speechSynthesis.speak(u);
+  _adminBeep(880, 0.15);
+  setTimeout(function(){ _adminTTS(text); }, 100);
 }
 
 function showAdminToast(title, body) {

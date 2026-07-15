@@ -163,9 +163,7 @@ router.post("/admin/login", async (req, res): Promise<void> => {
 });
 
 router.post("/admin/logout", (req, res): void => {
-  req.session.adminId = undefined;
-  req.session.adminRole = undefined;
-  req.session.save(() => {
+  req.session.destroy(() => {
     res.json({ ok: true });
   });
 });
