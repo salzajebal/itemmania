@@ -697,7 +697,7 @@ function showAdminToast(title, body) {
     }
     /* AudioContext 미리 잠금 해제 (connectSSE는 반드시 사용자 제스처 후 호출) */
     try {
-      if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || (window as unknown as {webkitAudioContext: typeof AudioContext}).webkitAudioContext)();
+      if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume();
     } catch(e) {}
 
