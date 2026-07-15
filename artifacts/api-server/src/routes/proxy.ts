@@ -7486,6 +7486,20 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
     `$1${title}$2`
   );
 
+  // og:description / twitter:description 교체 (스냅샷 하드코딩 → 실제 상품 설명)
+  const rawDesc = String(p.description || p.title || '');
+  const ogDesc = escHtml(rawDesc.replace(/\s+/g, ' ').trim().slice(0, 160));
+  if (ogDesc) {
+    r = r.replace(
+      /(<meta[^>]*property=og:description[^>]*content=")[^"]*(")/,
+      `$1${ogDesc}$2`
+    );
+    r = r.replace(
+      /(<meta[^>]*name=twitter:description[^>]*content=")[^"]*(")/,
+      `$1${ogDesc}$2`
+    );
+  }
+
   // JSON-LD "name" 필드 교체
   r = r.replace(/"name":"OOOO+[^"]*OOOO+"/, `"name":${JSON.stringify(title)}`);
 
