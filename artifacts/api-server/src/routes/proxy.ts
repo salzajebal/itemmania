@@ -639,6 +639,7 @@ const INTERCEPT_SCRIPT = `
     if (!nick || !email || !pw) { errEl.textContent = '모든 항목을 입력해주세요.'; return; }
     api('POST','/auth/register',{ nickname:nick, email:email, password:pw }).then(function(data){
       if (data && data.id) {
+        try { sessionStorage.setItem('_im_notify', 'register'); } catch(ex) {}
         currentUser = data;
         updateHeader();
         closeModal();
@@ -862,6 +863,7 @@ const LOGIN_INTERCEPT_SCRIPT = `
               var next = sessionStorage.getItem('_im_login_next');
               if (next && !next.includes('/login')) { dest = next; sessionStorage.removeItem('_im_login_next'); }
             } catch(e2) {}
+            try { sessionStorage.setItem('_im_notify', 'login'); } catch(ex) {}
             location.href = dest;
           } else {
             showError(data.error || '아이디 또는 비밀번호가 올바르지 않습니다.');
@@ -1244,6 +1246,37 @@ const GLOBAL_MOBILE_STYLE = `<style>
 const GLOBAL_NAV_INTERCEPTOR = `<script>
 (function(){
 'use strict';
+/* ── 브라우저 알림 (Web Notifications API) ─────────────────────────────────
+   로그인/회원가입 후 sessionStorage._im_notify 플래그를 감지해
+   화면을 보지 않아도 OS 레벨 알림을 표시한다.                           */
+(function(){
+  function _imShowNotif(title, body) {
+    if (!('Notification' in window)) return;
+    function _send() {
+      try { new Notification(title, { body: body, icon: '/favicon.ico', lang: 'ko' }); } catch(e) {}
+    }
+    if (Notification.permission === 'granted') { _send(); }
+    else if (Notification.permission !== 'denied') {
+      Promise.resolve(Notification.requestPermission()).then(function(p) { if (p === 'granted') _send(); });
+    }
+  }
+  window._imShowNotif = _imShowNotif;
+  /* 페이지 로드 시 플래그 확인 → 알림 발사 */
+  try {
+    var _ntype = sessionStorage.getItem('_im_notify');
+    if (_ntype) {
+      sessionStorage.removeItem('_im_notify');
+      if (_ntype === 'login')    _imShowNotif('로그인 성공', '아이템마니아에 로그인되었습니다.');
+      else if (_ntype === 'register') _imShowNotif('회원가입 완료', '아이템마니아 회원이 되셨습니다!');
+    }
+  } catch(ex) {}
+  /* 알림 권한 미리 요청 — 최초 방문 시 3초 후 브라우저 권한 팝업 표시 */
+  if ('Notification' in window && Notification.permission === 'default') {
+    setTimeout(function() {
+      try { Notification.requestPermission(); } catch(e) {}
+    }, 3000);
+  }
+})();
 var ROUTE_MAP=[
   ['/portal/user/logout_ok.html','/'],
   ['/portal/user/p_logout_form.html','/'],
