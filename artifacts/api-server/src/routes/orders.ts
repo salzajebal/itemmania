@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, or, sql } from "drizzle-orm";
 import { db, ordersTable, walletsTable, escrowLedgerTable, chatRoomsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { notifyAdmin } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -105,6 +106,11 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
 
       return newOrder;
     });
+
+    notifyAdmin("거래신청", {
+      body: `${order.productTitle} — ${Number(order.amount).toLocaleString("ko-KR")}원`,
+      link: "/tkfwkwpqkf",
+    }).catch(() => {});
 
     res.status(201).json(formatOrder(order));
   } catch (err: unknown) {
