@@ -42,8 +42,14 @@ const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string 
 const router: IRouter = Router();
 
 // ── 어드민 전역 인증 미들웨어 ─────────────────────────────────────────────
-// 어드민 세션 OR 유효한 x-crawl-key 헤더 중 하나가 있어야 통과
+// /admin/ 경로에만 적용 — 다른 라우터 경로(events, games 등)는 즉시 통과
 router.use((req: Request, res: Response, next: NextFunction): void => {
+  // 이 라우터를 경유하는 비어드민 경로는 인증 없이 통과
+  if (!req.path.startsWith("/admin/") && req.path !== "/admin") {
+    next();
+    return;
+  }
+
   const hasAdminSession =
     (!!req.session?.adminId && req.session.adminRole === "admin") ||
     (!!req.session?.userId && req.session.userRole === "admin");
