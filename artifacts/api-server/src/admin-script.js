@@ -70,6 +70,46 @@ function showAdmin(user){
   document.getElementById('adminNickname').textContent=(user.nickname||user.email)+' (관리자)';
   loadAll();
   if(typeof window._adminConnectSSE==='function') window._adminConnectSSE();
+  startNotifPolling();
+}
+
+/* ── 알림 폴링 (SSE가 인스턴스 간 공유 안 될 경우 대비, DB 직접 조회) ── */
+var _notifPollTimer=null;
+var _notifBaseline=-1; /* -1: 아직 baseline 미설정 */
+
+async function _pollAdminNotifs(){
+  try{
+    var r=await fetch('/api/notifications',{credentials:'include',cache:'no-store'});
+    if(!r.ok)return;
+    var d=await r.json();
+    var rows=d.notifications||[];
+    if(_notifBaseline===-1){
+      /* 첫 호출: 현재 최신 ID를 baseline으로 기록 (기존 알림 토스트 방지) */
+      _notifBaseline=rows.length?rows[0].id:0;
+      return;
+    }
+    var newRows=rows.filter(function(n){return n.id>_notifBaseline;});
+    if(newRows.length){
+      _notifBaseline=rows[0].id;
+      newRows.forEach(function(n){
+        if(typeof showAdminToast==='function') showAdminToast(n.title,n.body||'');
+        if(typeof _adminBeep==='function'){
+          _adminBeep(880,0.18);
+          setTimeout(function(){_adminBeep(1100,0.18);},200);
+        }
+        if(typeof _adminVoiceOn!=='undefined'&&_adminVoiceOn&&typeof _adminTTS==='function'){
+          setTimeout(function(){_adminTTS(n.title);},350);
+        }
+        if(typeof window._adminBrowserNotif==='function') window._adminBrowserNotif(n.title,n.body||'');
+      });
+    }
+  }catch(e){}
+}
+
+function startNotifPolling(){
+  if(_notifPollTimer)return;
+  _pollAdminNotifs(); /* baseline 설정 */
+  _notifPollTimer=setInterval(_pollAdminNotifs,10000); /* 10초마다 체크 */
 }
 
 var loadedTabs={};

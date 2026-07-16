@@ -726,6 +726,7 @@ function showAdminToast(title, body) {
     });
   }
   window._adminConnectSSE = connectSSE;
+  window._adminBrowserNotif = _adminBrowserNotif;
   /* connectSSE는 checkSession() 또는 doLogin() 성공 시에만 호출 */
 })();
 </script>
