@@ -69,6 +69,7 @@ function showAdmin(user){
   document.getElementById('admin-screen').style.display='block';
   document.getElementById('adminNickname').textContent=(user.nickname||user.email)+' (관리자)';
   loadAll();
+  if(typeof window._adminConnectSSE==='function') window._adminConnectSSE();
 }
 
 var loadedTabs={};
