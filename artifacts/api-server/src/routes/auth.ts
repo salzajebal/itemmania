@@ -169,15 +169,22 @@ router.post("/admin/logout", (req, res): void => {
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
   if (!user) {
     res.status(401).json({ error: "사용자를 찾을 수 없습니다." });
     return;
   }
-  // 세션 userRole이 DB 실제 role과 다를 경우 동기화
-  // (서버 재시작 후 구 세션에 userRole 없는 경우, 권한 변경 후 기존 세션 등 대비)
-  if (req.session.userRole !== user.role) {
+  // 세션 role 동기화 (admin이면 adminId/adminRole도 함께 설정)
+  const needsSync = req.session.userRole !== user.role
+    || (user.role === "admin" && !req.session.adminId);
+  if (needsSync) {
     req.session.userRole = user.role;
+    if (user.role === "admin") {
+      req.session.adminId = user.id;
+      req.session.adminRole = "admin";
+    }
     await new Promise<void>((resolve) => req.session.save(() => resolve()));
   }
   res.json({

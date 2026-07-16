@@ -50,7 +50,18 @@ async function doLogin(){
 document.getElementById('loginPw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 
 async function checkSession(){
-  showAdmin({nickname:'관리자',role:'admin'});
+  try{
+    var r=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
+    if(!r.ok){showLogin();return;}
+    var d=await r.json();
+    if(d.role!=='admin'){showLogin();return;}
+    showAdmin(d);
+  }catch(e){showLogin();}
+}
+
+function showLogin(){
+  document.getElementById('login-screen').style.display='block';
+  document.getElementById('admin-screen').style.display='none';
 }
 
 function showAdmin(user){
@@ -579,7 +590,7 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 async function loadStats(){
   try{
-    var r=await fetch('/api/admin/stats',{credentials:'include'});
+    var r=await fetch('/api/admin/stats',{credentials:'include',cache:'no-store'});
     if(!r.ok)return;
     var s=await r.json();
     document.getElementById('statUsers').textContent=s.users;
@@ -605,7 +616,7 @@ async function loadProducts(page){
   if(st)params+='&status='+st;
   var url='/api/admin/products?'+params;
   try{
-    var r=await fetch(url,{credentials:'include'});
+    var r=await fetch(url,{credentials:'include',cache:'no-store'});
     var data=await r.json();
     var products=Array.isArray(data)?data:(data.products||[]);
     var total=data.total||products.length;
