@@ -18,7 +18,8 @@ const __dirname = path.dirname(__filename);
 const app: Express = express();
 
 // Replit 역방향 프록시(HTTPS 종료) 신뢰: secure 쿠키가 프록시 뒤에서도 정상 발급되도록 필수
-app.set("trust proxy", 1);
+// 외부 브라우저 접근 시 CDN→LB→서버 등 다중 홉이 생기므로 true로 설정 (1이면 일부 경로에서 req.secure=false)
+app.set("trust proxy", true);
 
 const PgSession = ConnectPgSimple(session);
 
