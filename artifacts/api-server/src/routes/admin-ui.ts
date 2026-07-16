@@ -107,9 +107,11 @@ tbody tr:hover{background:#fafbff}
   <div class="login-box">
     <h1>어드민 로그인</h1>
     <p>아이템매니아 관리자 계정으로 로그인하세요</p>
-    <input type="text" id="loginEmail" placeholder="이메일 또는 아이디" autocomplete="username">
-    <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password">
-    <button onclick="doLogin()">로그인</button>
+    <form id="loginForm" method="POST" action="/admin-login">
+      <input type="text" id="loginEmail" name="email" placeholder="이메일 또는 아이디" autocomplete="username">
+      <input type="password" id="loginPw" name="password" placeholder="비밀번호" autocomplete="current-password">
+      <button type="submit">로그인</button>
+    </form>
     <div class="err" id="loginErr"></div>
   </div>
 </div>
@@ -782,7 +784,7 @@ router.get("/admin-login", (_req, res): void => {
 router.post("/admin-login", express.urlencoded({ extended: false }), async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
-    res.send(ADMIN_LOGIN_PAGE("아이디와 비밀번호를 입력하세요."));
+    res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("아이디와 비밀번호를 입력하세요."));
     return;
   }
   try {
@@ -791,17 +793,17 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
     const bcrypt = await import("bcryptjs");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.trim()));
     if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.role !== "admin") {
-      res.send(ADMIN_LOGIN_PAGE("아이디 또는 비밀번호가 올바르지 않습니다."));
+      res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("아이디 또는 비밀번호가 올바르지 않습니다."));
       return;
     }
     req.session.userId = user.id;
     req.session.userRole = user.role;
     req.session.adminId = user.id;
     req.session.adminRole = user.role;
-    await new Promise<void>((resolve) => req.session.save(() => resolve()));
+    await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));
     res.redirect("/tkfwkwpqkf");
   } catch {
-    res.send(ADMIN_LOGIN_PAGE("서버 오류가 발생했습니다."));
+    res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("서버 오류가 발생했습니다."));
   }
 });
 
