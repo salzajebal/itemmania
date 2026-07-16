@@ -43,20 +43,42 @@ const router: IRouter = Router();
 
 // ── 어드민 전역 인증 미들웨어 ─────────────────────────────────────────────
 // /admin/ 경로에만 적용 — 다른 라우터 경로(events, games 등)는 즉시 통과
-router.use((req: Request, res: Response, next: NextFunction): void => {
+router.use(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   // 이 라우터를 경유하는 비어드민 경로는 인증 없이 통과
   if (!req.path.startsWith("/admin/") && req.path !== "/admin") {
     next();
     return;
   }
 
+  // 크롤 키 체크
+  const crawlKey = req.headers["x-crawl-key"] as string | undefined;
+  if (crawlKey && crawlKey === CRAWL_KEY) { next(); return; }
+
+  // 세션 기반 체크: adminId/adminRole 또는 userRole 있으면 바로 통과
   const hasAdminSession =
     (!!req.session?.adminId && req.session.adminRole === "admin") ||
     (!!req.session?.userId && req.session.userRole === "admin");
   if (hasAdminSession) { next(); return; }
 
-  const crawlKey = req.headers["x-crawl-key"] as string | undefined;
-  if (crawlKey && crawlKey === CRAWL_KEY) { next(); return; }
+  // userId만 있는 경우 DB에서 role 직접 확인 (세션에 role 필드가 누락된 경우 대비)
+  if (req.session?.userId) {
+    try {
+      const { usersTable: ut } = await import("@workspace/db");
+      const { eq: eqFn } = await import("drizzle-orm");
+      const [u] = await db.select({ role: ut.role }).from(ut).where(eqFn(ut.id, req.session.userId!));
+      if (u?.role === "admin") {
+        // 세션에 role 필드 채워서 다음 요청은 DB 조회 없이 통과
+        req.session.userRole = "admin";
+        req.session.adminId = req.session.userId;
+        req.session.adminRole = "admin";
+        req.session.save(() => {});
+        next();
+        return;
+      }
+    } catch {
+      // DB 오류 시 아래 401로 떨어짐
+    }
+  }
 
   res.status(401).json({ error: "관리자 로그인이 필요합니다." });
 });
