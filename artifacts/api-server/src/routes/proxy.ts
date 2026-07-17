@@ -7613,14 +7613,16 @@ function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 
     );
   }
 
-  // og:url — www.itemmania.com → 우리 도메인으로 교체
+  // og:url — 절대 URL로 교체 (itemmania.com 도메인 또는 상대경로 모두 처리)
+  const productPath = `/sell/application.html?id=${p.id}`;
+  const absoluteOgUrl = `${siteUrl}${productPath}`;
   r = r.replace(
-    /(<meta[^>]*property=og:url[^>]*content=")https?:\/\/(?:www\.)?itemmania\.com([^"]*")/,
-    `$1https://itenmania.com$2`
+    /(<meta[^>]*property=og:url[^>]*content=")(?:https?:\/\/(?:www\.)?itemmania\.com)?[^"]*(")/,
+    `$1${absoluteOgUrl}$2`
   );
   r = r.replace(
-    /(<meta[^>]*name=twitter:url[^>]*content=")https?:\/\/(?:www\.)?itemmania\.com([^"]*")/,
-    `$1https://itenmania.com$2`
+    /(<meta[^>]*name=twitter:url[^>]*content=")(?:https?:\/\/(?:www\.)?itemmania\.com)?[^"]*(")/,
+    `$1${absoluteOgUrl}$2`
   );
 
   // JSON-LD "name" 필드 교체
@@ -9376,7 +9378,8 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
     return;
   }
 
-  const siteUrl = `${req.protocol}://${req.get('host') || 'itenmania.com'}`;
+  const publicHost = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
+  const siteUrl = `https://${publicHost}`;
   res.send(serveApplication(sellApplicationHtml, user, product, siteUrl));
 });
 
@@ -9401,7 +9404,8 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
     return;
   }
 
-  const siteUrlB = `${req.protocol}://${req.get('host') || 'itenmania.com'}`;
+  const publicHostB = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
+  const siteUrlB = `https://${publicHostB}`;
   res.send(serveBuyApplication(buyApplicationHtml, user, product, siteUrlB));
 });
 
