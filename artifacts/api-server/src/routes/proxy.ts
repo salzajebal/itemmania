@@ -2735,7 +2735,14 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       });
   }
 
-  function init() { loadList(); initFilters(); }
+  function injectGradeStyles() {
+    if (document.getElementById('im-grade-bronze-style')) return;
+    var s = document.createElement('style');
+    s.id = 'im-grade-bronze-style';
+    s.textContent = '.credit_mark_new.bronze{background-image:none!important;font-size:12px!important;display:inline-flex!important;align-items:center;justify-content:center;width:35px;height:37px;background-color:#cd7f32;color:#fff;font-weight:bold;border-radius:4px;vertical-align:middle;}';
+    document.head.appendChild(s);
+  }
+  function init() { injectGradeStyles(); loadList(); initFilters(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
