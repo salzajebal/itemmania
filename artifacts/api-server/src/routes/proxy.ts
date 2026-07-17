@@ -7482,11 +7482,11 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
 </script>
 `;
 
-function serveBuyApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null): string {
+function serveBuyApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null, siteUrl = 'https://itenmania.com'): string {
   let result = prepare(html, user);
   if (product) {
     // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체 (serveApplication과 동일)
-    result = applyProductToHtml(result, product);
+    result = applyProductToHtml(result, product, siteUrl);
     const ps = buildProductScript(product);
     result = result.includes("<head>")
       ? result.replace("<head>", "<head>" + ps)
@@ -7519,7 +7519,7 @@ function escHtml(s: string): string {
  * 스냅샷 HTML에 하드코딩된 상품 데이터를 DB 상품 데이터로 서버 사이드 교체.
  * JavaScript 실행 타이밍 경쟁 없이 HTML 자체가 올바른 데이터를 갖게 됨.
  */
-function applyProductToHtml(html: string, p: Record<string, unknown>): string {
+function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 'https://itenmania.com'): string {
   let r = html;
   const title = escHtml(String(p.title || ''));
   const gameName = escHtml(String(p.gameName || ''));
@@ -7544,9 +7544,9 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   // 2. 숨겨진 h1.g_hidden 제목 교체
   r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
 
-  // og:image / twitter:image 교체 — 게임 코드로 실제 게임 이미지 사용
+  // og:image / twitter:image — 우리 서버 프록시 URL 사용 (디스코드 봇이 외부 CDN 직접 접근 시 차단될 수 있음)
   if (p.gameCode) {
-    const gameImgUrl = `https://img.itemmania.com/new_images/og/${p.gameCode}.jpg`;
+    const gameImgUrl = `${siteUrl}/og-image/${p.gameCode}.jpg`;
     r = r.replace(
       /(<meta[^>]*property=og:image[^>]*content=)[^\s>]+/g,
       `$1${gameImgUrl}`
@@ -7701,11 +7701,11 @@ function buildProductScript(product: Record<string, unknown>): string {
   return `<script>window.__PRODUCT__ = ${JSON.stringify(product)};</script>`;
 }
 
-function serveApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null): string {
+function serveApplication(html: string, user: Record<string, unknown> | null = null, product: Record<string, unknown> | null = null, siteUrl = 'https://itenmania.com'): string {
   let result = prepare(html, user);
   if (product) {
     // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체
-    result = applyProductToHtml(result, product);
+    result = applyProductToHtml(result, product, siteUrl);
     // window.__PRODUCT__ 주입 (클라이언트 JS 구매 박스용)
     const ps = buildProductScript(product);
     result = result.includes("<head>")
@@ -8398,6 +8398,40 @@ function serveBuyMying(
     ? result.replace("</body>", MYROOM_BUY_SCRIPT + "</body>")
     : result + MYROOM_BUY_SCRIPT;
 }
+
+// OG 이미지 프록시 — /og-image/:gameCode.jpg
+// 디스코드 등 SNS 봇이 img.itemmania.com CDN에 직접 접근 시 차단될 수 있으므로
+// 우리 서버가 가져다 클라이언트(봇)에게 서빙
+router.get("/og-image/:gameCode.jpg", async (req, res): Promise<void> => {
+  const { gameCode } = req.params as { gameCode: string };
+  if (!/^\d+$/.test(gameCode)) {
+    res.status(400).end();
+    return;
+  }
+  const upstream = `https://img.itemmania.com/new_images/og/${gameCode}.jpg`;
+  try {
+    const imgRes = await fetch(upstream, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+        "Referer": "https://www.itemmania.com/",
+        "Accept": "image/jpeg,image/*;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!imgRes.ok) {
+      res.status(imgRes.status).end();
+      return;
+    }
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    res.set("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+    res.set("Content-Length", String(buf.length));
+    res.end(buf);
+  } catch (err) {
+    req.log.warn({ err, gameCode }, "og-image proxy error");
+    res.status(502).end();
+  }
+});
 
 // 토스트 데모 페이지 (임시)
 router.get("/toast-demo", (_req, res): void => {
@@ -9264,7 +9298,8 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
     return;
   }
 
-  res.send(serveApplication(sellApplicationHtml, user, product));
+  const siteUrl = `${req.protocol}://${req.get('host') || 'itenmania.com'}`;
+  res.send(serveApplication(sellApplicationHtml, user, product, siteUrl));
 });
 
 // 삽니다 상세 페이지 (/buy/application.html?id=...)
@@ -9288,7 +9323,8 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
     return;
   }
 
-  res.send(serveBuyApplication(buyApplicationHtml, user, product));
+  const siteUrlB = `${req.protocol}://${req.get('host') || 'itenmania.com'}`;
+  res.send(serveBuyApplication(buyApplicationHtml, user, product, siteUrlB));
 });
 
 
