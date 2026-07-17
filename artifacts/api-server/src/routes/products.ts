@@ -111,7 +111,7 @@ router.get("/products", async (req, res): Promise<void> => {
       status: productsTable.status,
       crawledAt: productsTable.crawledAt,
       createdAt: productsTable.createdAt,
-      sellerGrade: sql<string | null>`coalesce(${usersTable.grade}, ${productsTable.sellerGrade})`,
+      sellerGrade: sql<string | null>`coalesce(${usersTable.grade}, ${productsTable.sellerGrade}, case when ${productsTable.sellerId} is not null then 'bronze' end)`,
     })
     .from(productsTable)
     .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))

@@ -9249,7 +9249,7 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
   async function applyUser(u: typeof usersTable.$inferSelect) {
     resolvedSellerId = u.id;
     resolvedName = u.nickname || u.email || p.sellerName;
-    resolvedGrade = u.grade || p.sellerGrade;
+    resolvedGrade = u.grade || p.sellerGrade || 'bronze';
     resolvedCreditScore = u.creditScore ?? null;
     resolvedAuthStates = (u.authStates as Record<string, boolean>) ?? null;
   }
