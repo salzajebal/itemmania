@@ -242,6 +242,21 @@ function injectServerTabsHtml(html: string, servers: {id: number; name: string}[
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
+/* ── 회원 브론즈 등급 배지 (아이템마니아 CSS에 bronze 클래스 없음) ─────────── */
+.credit_mark_new.bronze {
+  background-image: none !important;
+  font-size: 12px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 37px;
+  background-color: #cd7f32;
+  color: #fff;
+  font-weight: bold;
+  border-radius: 4px;
+  vertical-align: middle;
+}
 /* ── 메인 배너 Swiper 스냅샷 height:100% 오버라이드 ──────────────────────────
    스냅샷에 height:100%로 고정된 컨테이너/슬라이드/이미지를 콘텐츠 기반 높이로 복원.
    CSS !important는 JS가 나중에 set하는 inline style도 오버라이드함. */
