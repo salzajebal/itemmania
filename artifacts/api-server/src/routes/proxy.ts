@@ -7522,10 +7522,24 @@ function escHtml(s: string): string {
 function applyProductToHtml(html: string, p: Record<string, unknown>): string {
   let r = html;
   const title = escHtml(String(p.title || ''));
+  const gameName = escHtml(String(p.gameName || ''));
   const price = Number(p.price || 0).toLocaleString('ko-KR');
+  const sellerName = escHtml(String(p.sellerName || ''));
+
+  // OG 전용 풍부한 타이틀: [게임명] 제목 | 아이템매니아
+  const ogTitle = gameName ? `${gameName} | ${title}` : title;
+
+  // OG 전용 설명: 가격 + 판매자 + 상품 설명
+  const rawDesc = String(p.description || '').replace(/\s+/g, ' ').trim();
+  const descParts: string[] = [];
+  if (price && price !== '0') descParts.push(`💰 ${price}원`);
+  if (gameName) descParts.push(`🎮 ${gameName}`);
+  if (sellerName) descParts.push(`판매자: ${sellerName}`);
+  if (rawDesc) descParts.push(rawDesc.slice(0, 80));
+  const ogDesc = escHtml(descParts.join(' | ').slice(0, 200));
 
   // 1. <title> 태그
-  r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
+  r = r.replace(/<title>[^<]*<\/title>/, `<title>${ogTitle} | 아이템매니아</title>`);
 
   // 2. 숨겨진 h1.g_hidden 제목 교체
   r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
@@ -7543,19 +7557,17 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
     );
   }
 
-  // og:title / twitter:title 메타태그 교체
+  // og:title / twitter:title 교체 — OOOO 패턴 또는 임의 기존 값 모두 교체
   r = r.replace(
-    /(<meta[^>]*property=og:title[^>]*content=")OOOO+[^"]*OOOO+([^"]*")/,
-    `$1${title}$2`
+    /(<meta[^>]*property=og:title[^>]*content=")[^"]*(" *[/]?>)/,
+    `$1${ogTitle} | 아이템매니아$2`
   );
   r = r.replace(
-    /(<meta[^>]*name=twitter:title[^>]*content=")OOOO+[^"]*OOOO+([^"]*")/,
-    `$1${title}$2`
+    /(<meta[^>]*name=twitter:title[^>]*content=")[^"]*(" *[/]?>)/,
+    `$1${ogTitle} | 아이템매니아$2`
   );
 
-  // og:description / twitter:description 교체 (스냅샷 하드코딩 → 실제 상품 설명)
-  const rawDesc = String(p.description || p.title || '');
-  const ogDesc = escHtml(rawDesc.replace(/\s+/g, ' ').trim().slice(0, 160));
+  // og:description / twitter:description 교체
   if (ogDesc) {
     r = r.replace(
       /(<meta[^>]*property=og:description[^>]*content=")[^"]*(")/,
@@ -7566,6 +7578,16 @@ function applyProductToHtml(html: string, p: Record<string, unknown>): string {
       `$1${ogDesc}$2`
     );
   }
+
+  // og:url — www.itemmania.com → 우리 도메인으로 교체
+  r = r.replace(
+    /(<meta[^>]*property=og:url[^>]*content=")https?:\/\/(?:www\.)?itemmania\.com([^"]*")/,
+    `$1https://itenmania.com$2`
+  );
+  r = r.replace(
+    /(<meta[^>]*name=twitter:url[^>]*content=")https?:\/\/(?:www\.)?itemmania\.com([^"]*")/,
+    `$1https://itenmania.com$2`
+  );
 
   // JSON-LD "name" 필드 교체
   r = r.replace(/"name":"OOOO+[^"]*OOOO+"/, `"name":${JSON.stringify(title)}`);
