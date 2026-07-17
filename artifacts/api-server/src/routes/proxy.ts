@@ -239,22 +239,21 @@ function injectServerTabsHtml(html: string, servers: {id: number; name: string}[
   );
 }
 
+// 브론즈 등급 배지 이미지 (아이템마니아 등급 시스템과 동일한 방패형 PNG)
+const GRADE_IMG_BRONZE_EARLY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAA4CAYAAAC7UXvqAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAA2ZpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMy1jMDExIDY2LjE0NTY2MSwgMjAxMi8wMi8wNi0xNDo1NjoyNyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDo3NzExNjY2NENCRDlFOTExODEzRkUxOTg1MTQ3MzI3NiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDpDQkExQUEwQUQ5RDIxMUU5QjM1REUyRDMwNjMyMjY5NSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDpDQkExQUEwOUQ5RDIxMUU5QjM1REUyRDMwNjMyMjY5NSIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgQ1M2IChXaW5kb3dzKSI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOjJBMEU0NzJCRDFEOUU5MTE4MTNGRTE5ODUxNDczMjc2IiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOjc3MTE2NjY0Q0JEOUU5MTE4MTNGRTE5ODUxNDczMjc2Ii8+IDwvcmRmOkRlc2NyaXB0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";
+
 // 주입할 인터셉트 스크립트 (순수 JS/CSS, React 없음)
 const INTERCEPT_SCRIPT = `
 <style>
-/* ── 회원 브론즈 등급 배지 (아이템마니아 CSS에 bronze 클래스 없음) ─────────── */
+/* ── 회원 브론즈 등급 배지 — 등급 시스템 아이콘 (마이룸 credit_mark2와 동일 PNG) ── */
 .credit_mark_new.bronze {
-  background-image: none !important;
-  font-size: 12px !important;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
+  background-image: url("${GRADE_IMG_BRONZE_EARLY}") !important;
+  background-repeat: no-repeat !important;
+  background-size: 100% auto !important;
+  font-size: 0 !important;
+  display: inline-block !important;
   width: 35px;
   height: 37px;
-  background-color: #cd7f32;
-  color: #fff;
-  font-weight: bold;
-  border-radius: 4px;
   vertical-align: middle;
 }
 /* ── 메인 배너 Swiper 스냅샷 height:100% 오버라이드 ──────────────────────────
@@ -2754,7 +2753,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     if (document.getElementById('im-grade-bronze-style')) return;
     var s = document.createElement('style');
     s.id = 'im-grade-bronze-style';
-    s.textContent = '.credit_mark_new.bronze{background-image:none!important;font-size:12px!important;display:inline-flex!important;align-items:center;justify-content:center;width:35px;height:37px;background-color:#cd7f32;color:#fff;font-weight:bold;border-radius:4px;vertical-align:middle;}';
+    s.textContent = '.credit_mark_new.bronze{background-image:url("${GRADE_IMG_BRONZE_EARLY}")!important;background-repeat:no-repeat!important;background-size:100% auto!important;font-size:0!important;display:inline-block!important;width:35px;height:37px;vertical-align:middle;}';
     document.head.appendChild(s);
   }
   function init() { injectGradeStyles(); loadList(); initFilters(); }
