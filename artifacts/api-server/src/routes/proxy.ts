@@ -7522,52 +7522,35 @@ function escHtml(s: string): string {
 function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 'https://itenmania.com'): string {
   let r = html;
   const title = escHtml(String(p.title || ''));
-  const gameName = escHtml(String(p.gameName || ''));
-  const price = Number(p.price || 0).toLocaleString('ko-KR');
-  const sellerName = escHtml(String(p.sellerName || ''));
-
-  // OG 전용 풍부한 타이틀: [게임명] 제목 | 아이템매니아
-  const ogTitle = gameName ? `${gameName} | ${title}` : title;
-
-  // OG 전용 설명: 가격 + 판매자 + 상품 설명
-  const rawDesc = String(p.description || '').replace(/\s+/g, ' ').trim();
-  const descParts: string[] = [];
-  if (price && price !== '0') descParts.push(`💰 ${price}원`);
-  if (gameName) descParts.push(`🎮 ${gameName}`);
-  if (sellerName) descParts.push(`판매자: ${sellerName}`);
-  if (rawDesc) descParts.push(rawDesc.slice(0, 80));
-  const ogDesc = escHtml(descParts.join(' | ').slice(0, 200));
-
-  // 1. <title> 태그
-  r = r.replace(/<title>[^<]*<\/title>/, `<title>${ogTitle} | 아이템매니아</title>`);
+  // 1. <title> 태그 — 사용자가 등록한 제목 그대로
+  r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
 
   // 2. 숨겨진 h1.g_hidden 제목 교체
   r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
 
-  // og:image / twitter:image — 우리 서버 프록시 URL 사용 (디스코드 봇이 외부 CDN 직접 접근 시 차단될 수 있음)
-  if (p.gameCode) {
-    const gameImgUrl = `${siteUrl}/og-image/${p.gameCode}.jpg`;
-    r = r.replace(
-      /(<meta[^>]*property=og:image[^>]*content=)[^\s>]+/g,
-      `$1${gameImgUrl}`
-    );
-    r = r.replace(
-      /(<meta[^>]*name=twitter:image[^>]*content=)[^\s>]+/g,
-      `$1${gameImgUrl}`
-    );
-  }
+  // og:image / twitter:image — 아이템매니아 고정 대표 이미지 (게임마다 다르지 않음)
+  const defaultImgUrl = `${siteUrl}/og-image/default`;
+  r = r.replace(
+    /(<meta[^>]*property=og:image[^>]*content=)[^\s>]+/g,
+    `$1${defaultImgUrl}`
+  );
+  r = r.replace(
+    /(<meta[^>]*name=twitter:image[^>]*content=)[^\s>]+/g,
+    `$1${defaultImgUrl}`
+  );
 
-  // og:title / twitter:title 교체 — OOOO 패턴 또는 임의 기존 값 모두 교체
+  // og:title / twitter:title — 사용자가 등록한 제목 그대로
   r = r.replace(
     /(<meta[^>]*property=og:title[^>]*content=")[^"]*(" *[/]?>)/,
-    `$1${ogTitle} | 아이템매니아$2`
+    `$1${title} | 아이템매니아$2`
   );
   r = r.replace(
     /(<meta[^>]*name=twitter:title[^>]*content=")[^"]*(" *[/]?>)/,
-    `$1${ogTitle} | 아이템매니아$2`
+    `$1${title} | 아이템매니아$2`
   );
 
-  // og:description / twitter:description 교체
+  // og:description / twitter:description — 사용자가 작성한 내용 그대로
+  const ogDesc = escHtml(String(p.description || p.title || '').replace(/\s+/g, ' ').trim().slice(0, 200));
   if (ogDesc) {
     r = r.replace(
       /(<meta[^>]*property=og:description[^>]*content=")[^"]*(")/,
@@ -8399,16 +8382,40 @@ function serveBuyMying(
     : result + MYROOM_BUY_SCRIPT;
 }
 
-// OG 이미지 프록시 — /og-image/:gameCode.jpg
+// OG 이미지 프록시 — /og-image/default : 아이템매니아 고정 대표 이미지
+router.get("/og-image/default", async (_req, res): Promise<void> => {
+  const upstream = "https://img.itemmania.com/new_images/og/5913.jpg";
+  try {
+    const imgRes = await fetch(upstream, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+        "Referer": "https://www.itemmania.com/",
+        "Accept": "image/jpeg,image/*;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!imgRes.ok) { res.status(imgRes.status).end(); return; }
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+    res.set("Content-Length", String(buf.length));
+    res.end(buf);
+  } catch {
+    res.status(502).end();
+  }
+});
+
+// OG 이미지 프록시 — /og-image/:gameCode
 // 디스코드 등 SNS 봇이 img.itemmania.com CDN에 직접 접근 시 차단될 수 있으므로
 // 우리 서버가 가져다 클라이언트(봇)에게 서빙
-router.get("/og-image/:gameCode.jpg", async (req, res): Promise<void> => {
+router.get("/og-image/:gameCode", async (req, res): Promise<void> => {
   const { gameCode } = req.params as { gameCode: string };
-  if (!/^\d+$/.test(gameCode)) {
+  const pureCode = gameCode.replace(/\.jpg$/i, '');
+  if (!/^\d+$/.test(pureCode)) {
     res.status(400).end();
     return;
   }
-  const upstream = `https://img.itemmania.com/new_images/og/${gameCode}.jpg`;
+  const upstream = `https://img.itemmania.com/new_images/og/${pureCode}.jpg`;
   try {
     const imgRes = await fetch(upstream, {
       headers: {
