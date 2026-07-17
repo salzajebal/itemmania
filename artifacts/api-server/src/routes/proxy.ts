@@ -2750,10 +2750,15 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
   }
 
   function injectGradeStyles() {
-    if (document.getElementById('im-grade-bronze-style')) return;
+    if (document.getElementById('im-grade-all-style')) return;
     var s = document.createElement('style');
-    s.id = 'im-grade-bronze-style';
-    s.textContent = '.credit_mark_new.bronze{background-image:url("${GRADE_IMG_BRONZE_EARLY}")!important;background-repeat:no-repeat!important;background-size:100% auto!important;font-size:0!important;display:inline-block!important;width:35px;height:37px;vertical-align:middle;}';
+    s.id = 'im-grade-all-style';
+    var base = '.credit_mark_new{font-size:0!important;display:inline-block!important;width:35px;height:37px;vertical-align:middle;background-repeat:no-repeat!important;background-size:100% auto!important;}';
+    var grades = ['vip','platinum','gold','silver','bronze'];
+    for (var i = 0; i < grades.length; i++) {
+      base += '.credit_mark_new.' + grades[i] + '{background-image:url("/grade-icon/' + grades[i] + '")!important;}';
+    }
+    s.textContent = base;
     document.head.appendChild(s);
   }
   function init() { injectGradeStyles(); loadList(); initFilters(); }
@@ -8480,6 +8485,26 @@ router.get("/og-image/:gameCode", async (req, res): Promise<void> => {
     req.log.warn({ err, gameCode }, "og-image proxy error");
     res.status(502).end();
   }
+});
+
+// 등급 아이콘 이미지 — /grade-icon/:grade  (sell/list 페이지 CSS에서 참조)
+router.get("/grade-icon/:grade", (req, res): void => {
+  const grade = (req.params as { grade: string }).grade.toLowerCase();
+  const MAP: Record<string, string> = {
+    vip: GRADE_IMG_VIP,
+    platinum: GRADE_IMG_PLATINUM,
+    gold: GRADE_IMG_GOLD,
+    silver: GRADE_IMG_SILVER,
+    bronze: GRADE_IMG_BRONZE,
+  };
+  const dataUri = MAP[grade];
+  if (!dataUri) { res.status(404).end(); return; }
+  const b64 = dataUri.replace(/^data:image\/png;base64,/, '');
+  const buf = Buffer.from(b64, 'base64');
+  res.set("Content-Type", "image/png");
+  res.set("Cache-Control", "public, max-age=86400");
+  res.set("Content-Length", String(buf.length));
+  res.end(buf);
 });
 
 // 토스트 데모 페이지 (임시)
