@@ -7522,6 +7522,7 @@ function escHtml(s: string): string {
 function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 'https://itenmania.com'): string {
   let r = html;
   const title = escHtml(String(p.title || ''));
+  const price = Number(p.price || 0).toLocaleString('ko-KR');
   // 1. <title> 태그 — 사용자가 등록한 제목 그대로
   r = r.replace(/<title>[^<]*<\/title>/, `<title>${title} | 아이템매니아</title>`);
 
