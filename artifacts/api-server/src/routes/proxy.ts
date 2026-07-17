@@ -7543,8 +7543,11 @@ function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 
   const gameName = String(p.gameName || p.game_name || '');
   const thumbnailUrl = String(p.thumbnailUrl || p.thumbnail_url || '');
   const gameCode = GAME_OG_CODE[gameName];
-  const ogImgUrl = thumbnailUrl
-    ? thumbnailUrl
+  const proxyThumb = thumbnailUrl && /itemmania\.com/i.test(thumbnailUrl)
+    ? `${siteUrl}/og-image/proxy?url=${encodeURIComponent(thumbnailUrl)}`
+    : thumbnailUrl;
+  const ogImgUrl = proxyThumb
+    ? proxyThumb
     : gameCode
     ? `${siteUrl}/og-image/${gameCode}`
     : `${siteUrl}/og-image/default`;
@@ -8421,6 +8424,35 @@ router.get("/og-image/default", async (_req, res): Promise<void> => {
     res.set("Content-Length", String(buf.length));
     res.end(buf);
   } catch {
+    res.status(502).end();
+  }
+});
+
+// OG 이미지 프록시 — /og-image/proxy?url=... : 상품 thumbnailUrl(itemmania.com CDN) 프록시
+// ※ 반드시 /og-image/:gameCode 보다 먼저 등록해야 Express가 "proxy"를 gameCode로 오해하지 않는다
+router.get("/og-image/proxy", async (req, res): Promise<void> => {
+  const raw = String(Array.isArray(req.query.url) ? req.query.url[0] : req.query.url ?? '').trim();
+  if (!raw || !/^https?:\/\/[^/]*itemmania\.com\//i.test(raw)) {
+    res.status(400).end();
+    return;
+  }
+  try {
+    const imgRes = await fetch(raw, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+        "Referer": "https://www.itemmania.com/",
+        "Accept": "image/jpeg,image/webp,image/*;q=0.9,*/*;q=0.8",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!imgRes.ok) { res.status(imgRes.status).end(); return; }
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    res.set("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+    res.set("Content-Length", String(buf.length));
+    res.end(buf);
+  } catch (err) {
+    req.log.warn({ err, url: raw }, "og-image/proxy error");
     res.status(502).end();
   }
 });
