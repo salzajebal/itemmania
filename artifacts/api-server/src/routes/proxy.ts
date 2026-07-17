@@ -8385,7 +8385,7 @@ function serveBuyMying(
 
 // OG 이미지 프록시 — /og-image/default : 아이템매니아 고정 대표 이미지
 router.get("/og-image/default", async (_req, res): Promise<void> => {
-  const upstream = "https://img.itemmania.com/new_images/og/5913.jpg";
+  const upstream = "https://img1.itemmania.com/new_images/common/251215_og_1200x630.jpg";
   try {
     const imgRes = await fetch(upstream, {
       headers: {
