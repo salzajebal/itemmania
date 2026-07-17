@@ -637,7 +637,9 @@ const INTERCEPT_SCRIPT = `
     api('POST','/auth/login',{ email:email, password:pw }).then(function(data){
       if (data && data.id) {
         currentUser = data;
+        window._IM_USER = data;
         updateHeader();
+        if (typeof _imApplyHeader === 'function') _imApplyHeader(data);
         closeModal();
       } else {
         errEl.textContent = (data && data.error) || '로그인에 실패했습니다.';
@@ -655,7 +657,9 @@ const INTERCEPT_SCRIPT = `
       if (data && data.id) {
         try { sessionStorage.setItem('_im_notify', 'register'); } catch(ex) {}
         currentUser = data;
+        window._IM_USER = data;
         updateHeader();
+        if (typeof _imApplyHeader === 'function') _imApplyHeader(data);
         closeModal();
       } else {
         errEl.textContent = (data && data.error) || '가입에 실패했습니다.';
