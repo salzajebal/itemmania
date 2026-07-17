@@ -7550,15 +7550,35 @@ function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 
   // 2. 숨겨진 h1.g_hidden 제목 교체
   r = r.replace(/<h1[^>]*class="[^"]*g_hidden[^"]*"[^>]*>OOOO+[^<]*OOOO+<\/h1>/, `<h1 class="g_hidden sf-hidden">${title}</h1>`);
 
-  // og:image / twitter:image — 아이템매니아 고정 대표 이미지 (게임마다 다르지 않음)
-  const defaultImgUrl = `${siteUrl}/og-image/default`;
+  // og:image / twitter:image — 상품의 썸네일 > 게임별 OG 이미지 > 기본 이미지 순으로 사용
+  const GAME_OG_CODE: Record<string, string> = {
+    '리니지클래식': '5913', '리니지 클래식': '5913',
+    '메이플스토리': '8458', '메이플스토리M': '8458',
+    '메이플스토리월드': '5233', '메이플스토리 월드': '5233',
+    '마비노기': '155',
+    '로스트아크': '2696', '로스트 아크': '2696',
+    '던전앤파이터': '281', '던전 앤 파이터': '281',
+    '오딘': '4696', '오딘:발할라라이징': '4696',
+    '리니지M': '3449', '리니지 M': '3449',
+    '거상': '101',
+    '아이온2': '5799',
+    '메이플랜드': '5990',
+  };
+  const gameName = String(p.gameName || p.game_name || '');
+  const thumbnailUrl = String(p.thumbnailUrl || p.thumbnail_url || '');
+  const gameCode = GAME_OG_CODE[gameName];
+  const ogImgUrl = thumbnailUrl
+    ? thumbnailUrl
+    : gameCode
+    ? `${siteUrl}/og-image/${gameCode}`
+    : `${siteUrl}/og-image/default`;
   r = r.replace(
     /(<meta[^>]*property=og:image[^>]*content=)[^\s>]+/g,
-    `$1${defaultImgUrl}`
+    `$1${ogImgUrl}`
   );
   r = r.replace(
     /(<meta[^>]*name=twitter:image[^>]*content=)[^\s>]+/g,
-    `$1${defaultImgUrl}`
+    `$1${ogImgUrl}`
   );
 
   // og:title / twitter:title — 사용자가 등록한 제목 그대로
