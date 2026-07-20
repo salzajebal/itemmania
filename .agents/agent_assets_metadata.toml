@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "0TWRKeri3ewXifp_vU4w1"
+uri = "file://artifacts/api-server/src/static/og-default.jpg"
+type = "image"
+title = "현재 og:image에 표시되는 이미지"
