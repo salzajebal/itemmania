@@ -735,12 +735,22 @@ function showAdminToast(title, body) {
 </body>
 </html>`;
 
-router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (_req, res): void => {
-  const keyScript = `<script>window._CK=${JSON.stringify(CRAWL_KEY)};</script>`;
-  const html = ADMIN_HTML.replace("<!--ADMIN_SCRIPT-->", keyScript + "\n<script>\n" + loadAdminScript() + "\n</script>");
+router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
+
+  // 세션 인증 체크 — 미인증이면 로그인 페이지 직접 서빙 (JS redirect 없이)
+  const hasAdminSession = !!req.session?.adminId && req.session.adminRole === "admin";
+  const hasUserAdminSession = !!req.session?.userId && req.session.userRole === "admin";
+  if (!hasAdminSession && !hasUserAdminSession) {
+    const loginError = typeof req.query.loginerror === "string" ? req.query.loginerror : undefined;
+    res.send(ADMIN_LOGIN_PAGE(loginError));
+    return;
+  }
+
+  const keyScript = `<script>window._CK=${JSON.stringify(CRAWL_KEY)};</script>`;
+  const html = ADMIN_HTML.replace("<!--ADMIN_SCRIPT-->", keyScript + "\n<script>\n" + loadAdminScript() + "\n</script>");
   res.send(html);
 });
 
