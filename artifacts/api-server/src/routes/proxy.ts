@@ -2355,9 +2355,10 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
   function makeLiveCard(p, type) {
     var li = document.createElement('li');
     li.className = 'list_item';
-    li.setAttribute('data-tid', String(p.tid));
+    var linkId = p.dbId ? String(p.dbId) : encodeURIComponent(p.tid);
+    li.setAttribute('data-tid', linkId);
     li.setAttribute('data-ts', String(p.timestamp || 0));
-    var href = '/' + type + '/application.html?id=' + encodeURIComponent(p.tid);
+    var href = '/' + type + '/application.html?id=' + linkId;
     var GRADE_LETTERS = { vip:'V', platinum:'P', gold:'G', silver:'S', bronze:'B' };
     var gradeKey = p.sellerGrade && GRADE_LETTERS[p.sellerGrade] ? p.sellerGrade : null;
     var gradeHtml = gradeKey
@@ -7500,6 +7501,32 @@ function serveBuyApplication(html: string, user: Record<string, unknown> | null 
     : result + combined;
 }
 
+// product가 DB에 없을 때 — Discord 봇은 OG 태그로 이미지를 읽고, 사람은 목록 페이지로 이동
+function serveOgFallback(html: string, siteUrl: string, type: "sell" | "buy", rawId: string): string {
+  const listPath = `/${type}/list.html`;
+  const ogImgUrl = `${siteUrl}/og-image/default`;
+  const ogTitle = '아이템매니아 — 안전한 아이템 거래';
+  const ogDesc  = '아이템매니아에서 안전하게 게임 아이템을 거래하세요.';
+  const ogUrl   = `${siteUrl}/${type}/application.html${rawId ? '?id=' + encodeURIComponent(rawId) : ''}`;
+
+  let r = html;
+  // OG 태그 교체
+  r = r.replace(/<title>[^<]*<\/title>/, `<title>${ogTitle}</title>`);
+  r = r.replace(/(<meta[^>]*property=og:image[^>]*content=)[^\s"'>]+/g,  `$1${ogImgUrl}`);
+  r = r.replace(/(<meta[^>]*name=twitter:image[^>]*content=)[^\s"'>]+/g, `$1${ogImgUrl}`);
+  r = r.replace(/(<meta[^>]*property=og:title[^>]*content=")[^"]*(")/,   `$1${ogTitle}$2`);
+  r = r.replace(/(<meta[^>]*property=og:description[^>]*content=")[^"]*(")/,`$1${ogDesc}$2`);
+  r = r.replace(
+    /(<meta[^>]*property=og:url[^>]*content=")(?:https?:\/\/[^"]*)?("[^>]*>)/,
+    `$1${ogUrl}$2`
+  );
+  // 사람 방문자는 목록으로 즉시 이동
+  const redirect = `<script>location.replace(${JSON.stringify(listPath)});</script>`;
+  return r.includes('</head>')
+    ? r.replace('</head>', redirect + '</head>')
+    : redirect + r;
+}
+
 function serveBuy(html: string, user: Record<string, unknown> | null = null): string {
   const result = prepare(html, user);
   const combined = BUY_INTERCEPT_SCRIPT + SELL_LIST_INTERCEPT_SCRIPT;
@@ -9372,13 +9399,14 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
     product = await resolveProductByRawId(rawId);
   }
 
+  const publicHost = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
+  const siteUrl = `https://${publicHost}`;
+
   if (!product) {
-    res.redirect(302, "/sell/list.html");
+    res.send(serveOgFallback(sellApplicationHtml, siteUrl, "sell", rawId));
     return;
   }
 
-  const publicHost = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
-  const siteUrl = `https://${publicHost}`;
   res.send(serveApplication(sellApplicationHtml, user, product, siteUrl));
 });
 
@@ -9398,13 +9426,14 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
     product = await resolveProductByRawId(rawIdB);
   }
 
+  const publicHostB = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
+  const siteUrlB = `https://${publicHostB}`;
+
   if (!product) {
-    res.redirect(302, "/buy/list.html");
+    res.send(serveOgFallback(buyApplicationHtml, siteUrlB, "buy", rawIdB));
     return;
   }
 
-  const publicHostB = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
-  const siteUrlB = `https://${publicHostB}`;
   res.send(serveBuyApplication(buyApplicationHtml, user, product, siteUrlB));
 });
 

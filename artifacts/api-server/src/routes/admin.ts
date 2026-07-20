@@ -1238,6 +1238,7 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
 // ── 실시간 아이템매니아 상품 목록 (5분 인메모리 캐시) ────────────────────────
 interface LiveListItem {
   tid: string;
+  dbId?: number;
   title: string;
   price: number;
   gameName: string;
@@ -1334,9 +1335,40 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
   const total = parseInt(countText.replace(/[^0-9]/g, ""), 10) || 0;
 
   const parsed = parseLiveItemsFromHtml(html, gameId);
+
+  // live-list 항목을 DB에 upsert → dbId 매핑 확보
+  const tidToDbId = new Map<string, number>();
+  for (const p of parsed) {
+    try {
+      const [row] = await db.insert(productsTable).values({
+        itemmaniaid: p.tid,
+        title: p.title,
+        price: p.price,
+        category: type,
+        gameName: p.gameName,
+        serverName: p.serverName,
+        itemCategory: p.itemCategory,
+        sellerGrade: p.sellerGrade ?? null,
+        description: p.description ?? null,
+        status: "active",
+        crawledAt: new Date(),
+        ...(p.timestamp > 0 && { createdAt: new Date(p.timestamp) }),
+      }).onConflictDoUpdate({
+        target: productsTable.itemmaniaid,
+        set: {
+          title: p.title, price: p.price, gameName: p.gameName,
+          serverName: p.serverName, itemCategory: p.itemCategory,
+          sellerGrade: p.sellerGrade ?? null, status: "active", crawledAt: new Date(),
+        },
+      }).returning({ id: productsTable.id });
+      if (row) tidToDbId.set(p.tid, row.id);
+    } catch { /* 저장 실패해도 계속 */ }
+  }
+
+  const withDbId = parsed.map(p => ({ ...p, dbId: tidToDbId.get(p.tid) }));
   const PREMIUM_GRADES = new Set(["vip", "platinum"]);
-  const premiumItems = parsed.filter(p => p.sellerGrade !== null && PREMIUM_GRADES.has(p.sellerGrade));
-  const normalItems  = parsed.filter(p => p.sellerGrade === null || !PREMIUM_GRADES.has(p.sellerGrade));
+  const premiumItems = withDbId.filter(p => p.sellerGrade !== null && PREMIUM_GRADES.has(p.sellerGrade!));
+  const normalItems  = withDbId.filter(p => p.sellerGrade === null || !PREMIUM_GRADES.has(p.sellerGrade!));
 
   const entry: LiveListCacheEntry = { items: normalItems, premiumItems, total, expireAt: Date.now() + 5 * 60 * 1000 };
   liveListCache.set(cacheKey, entry);
