@@ -807,8 +807,8 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
       res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("아이디 또는 비밀번호가 올바르지 않습니다."));
       return;
     }
-    req.session.userId = user.id;
-    req.session.userRole = user.role;
+    // 기존 세션(회원 포함)을 완전히 파기하고 새 세션 발급 — 회원 세션 덮어쓰기 방지
+    await new Promise<void>((resolve, reject) => req.session.regenerate((err) => err ? reject(err) : resolve()));
     req.session.adminId = user.id;
     req.session.adminRole = user.role;
     await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));
