@@ -153,8 +153,7 @@ router.post("/admin/login", async (req, res): Promise<void> => {
     res.status(403).json({ error: "관리자 권한이 없습니다." });
     return;
   }
-  // 기존 세션 완전 파기 후 새 세션 발급 — 회원 세션 덮어쓰기 방지
-  await new Promise<void>((resolve, reject) => req.session.regenerate((err) => err ? reject(err) : resolve()));
+  // 어드민 전용 세션(admin.sid)에만 기록 — 회원 세션(connect.sid)과 완전 분리됨
   req.session.adminId = user.id;
   req.session.adminRole = user.role;
   await new Promise<void>((resolve) => req.session.save(() => resolve()));
