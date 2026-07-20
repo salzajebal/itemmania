@@ -153,9 +153,7 @@ router.post("/admin/login", async (req, res): Promise<void> => {
     res.status(403).json({ error: "관리자 권한이 없습니다." });
     return;
   }
-  // userId/userRole도 함께 설정 — 프로덕션에서 세션 쿠키가 발급되도록 보장
-  req.session.userId = user.id;
-  req.session.userRole = user.role;
+  // adminId/adminRole만 설정 — userId는 설정하지 않아 회원사이트 세션과 분리
   req.session.adminId = user.id;
   req.session.adminRole = user.role;
   await new Promise<void>((resolve) => req.session.save(() => resolve()));
@@ -171,7 +169,9 @@ router.post("/admin/logout", (req, res): void => {
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!));
+  // userId(회원 세션) 우선, 없으면 adminId(어드민 전용 세션) 사용
+  const lookupId = req.session.userId ?? req.session.adminId;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, lookupId!));
   if (!user) {
     res.status(401).json({ error: "사용자를 찾을 수 없습니다." });
     return;
