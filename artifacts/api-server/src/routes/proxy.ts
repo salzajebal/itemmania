@@ -7514,6 +7514,16 @@ function serveBuyApplication(html: string, user: Record<string, unknown> | null 
       ? result.replace("<head>", "<head>" + ps)
       : result.replace("<body", ps + "<body");
   }
+  // 내 거래정보 이름: 스냅샷 하드코딩 "기우혁" → 실제 로그인 유저 닉네임으로 교체
+  if (user) {
+    const _nick = escHtml(String((user.nickname as string) || (user.email as string) || ''));
+    if (_nick) {
+      result = result.replace(
+        /(<li class=user_name>[\s\S]*?)기우혁([\s]*<a)/,
+        `$1${_nick}$2`,
+      );
+    }
+  }
   // btn_green에 onclick 직접 주입 (document 위임 핸들러와 이중 보호)
   result = result.replace(
     '<button type=button class=btn_green>판매신청</button>',
@@ -7687,6 +7697,26 @@ function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 
   // 8. 거래번호 교체 (.trade_id 내 #20260...) → 우리 DB id로
   r = r.replace(/(<div class=trade_id>\s*)#\d+(\s*)/, `$1#${p.id}$2`);
 
+  // 8-a. 날짜 교체 (trade_view_info 내 스냅샷 하드코딩 날짜 → 우리 DB createdAt)
+  if (p.createdAt) {
+    const _d = new Date(p.createdAt as string | number | Date);
+    if (!isNaN(_d.getTime())) {
+      const _dateStr = _d.getFullYear() + '-'
+        + String(_d.getMonth() + 1).padStart(2, '0') + '-'
+        + String(_d.getDate()).padStart(2, '0') + ' '
+        + String(_d.getHours()).padStart(2, '0') + ':'
+        + String(_d.getMinutes()).padStart(2, '0') + ':'
+        + String(_d.getSeconds()).padStart(2, '0');
+      r = r.replace(
+        /(<span class=trade_view_info><span>)\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(<\/span>)/,
+        `$1${_dateStr}$2`,
+      );
+    }
+  }
+
+  // 8-b. 조회수 초기화 (스냅샷 하드코딩 조회수 → 0)
+  r = r.replace(/(<span class=trade_view_cnt>)\d+(<\/span>)/, '$10$2');
+
   // 9. btn_fav data-id (찜하기 버튼) → 우리 DB id로
   r = r.replace(/(data-id=)\d{10,}/g, `$1${p.id}`);
 
@@ -7745,6 +7775,16 @@ function serveApplication(html: string, user: Record<string, unknown> | null = n
     result = result.includes("<head>")
       ? result.replace("<head>", "<head>" + ps)
       : result.replace("<body", ps + "<body");
+  }
+  // 내 거래정보 이름: 스냅샷 하드코딩 "기우혁" → 실제 로그인 유저 닉네임으로 교체
+  if (user) {
+    const _nick = escHtml(String((user.nickname as string) || (user.email as string) || ''));
+    if (_nick) {
+      result = result.replace(
+        /(<li class=user_name>[\s\S]*?)기우혁([\s]*<a)/,
+        `$1${_nick}$2`,
+      );
+    }
   }
   const combined = SELL_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   if (result.includes("</body>")) {
@@ -9384,6 +9424,7 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
     sellerCreditScore: resolvedCreditScore,
     sellerAuthStates: resolvedAuthStates,
     status: p.status, gameCode,
+    createdAt: p.createdAt,
   };
 }
 
