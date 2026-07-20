@@ -3295,6 +3295,12 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
             if (!game) { showToast('게임을 선택해주세요.', false); return; }
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
             if (!title) { showToast('상품명을 입력해주세요.', false); return; }
+            var qlEl = form.querySelector('.ql-editor');
+            var description = '';
+            if (qlEl) {
+              var raw = qlEl.innerText || qlEl.textContent || '';
+              description = raw.trim();
+            }
             fetch('/api/products', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -3306,7 +3312,8 @@ const SELL_REGISTER_INTERCEPT_SCRIPT = `
                 serverName: server,
                 category: 'sell',
                 itemCategory: window._IM_sel_category || '기타',
-                sellerName: d.nickname || d.email
+                sellerName: d.nickname || d.email,
+                description: description
               })
             })
             .then(function(r) {
@@ -4021,6 +4028,12 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
             if (!game2) { showToast('게임을 선택해주세요.', false); return; }
             if (!price) { showToast('가격을 입력해주세요.', false); return; }
             if (!title2) { showToast('구매 희망 아이템명을 입력해주세요.', false); return; }
+            var qlEl2 = form.querySelector('.ql-editor');
+            var description2 = '';
+            if (qlEl2) {
+              var raw2 = qlEl2.innerText || qlEl2.textContent || '';
+              description2 = raw2.trim();
+            }
             fetch('/api/products', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -4032,7 +4045,8 @@ const BUY_REGISTER_INTERCEPT_SCRIPT = `
                 serverName: server2,
                 category: 'buy',
                 itemCategory: window._IM_sel_category || '기타',
-                sellerName: d.nickname || d.email
+                sellerName: d.nickname || d.email,
+                description: description2
               })
             })
             .then(function(r) {
