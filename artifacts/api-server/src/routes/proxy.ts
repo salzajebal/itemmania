@@ -9,6 +9,16 @@ import { eq, and, inArray, desc, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+// OG 기본 이미지 — 외부 CDN 의존 없이 정적 파일에서 바로 서빙
+const OG_DEFAULT_IMAGE_PATHS = [
+  join(process.cwd(), "src", "static", "og-default.jpg"),
+  join(process.cwd(), "artifacts", "api-server", "src", "static", "og-default.jpg"),
+];
+let ogDefaultImageBuf: Buffer | null = null;
+for (const p of OG_DEFAULT_IMAGE_PATHS) {
+  if (existsSync(p)) { ogDefaultImageBuf = readFileSync(p); break; }
+}
+
 // production: cwd = /home/runner/workspace, dev: cwd = artifacts/api-server
 // 실제 static 폴더를 자동 탐지
 const STATIC_DIR = (() => {
@@ -8432,27 +8442,13 @@ function serveBuyMying(
     : result + MYROOM_BUY_SCRIPT;
 }
 
-// OG 이미지 프록시 — /og-image/default : 아이템매니아 고정 대표 이미지
-router.get("/og-image/default", async (_req, res): Promise<void> => {
-  const upstream = "https://img1.itemmania.com/new_images/common/251215_og_1200x630.jpg";
-  try {
-    const imgRes = await fetch(upstream, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
-        "Referer": "https://www.itemmania.com/",
-        "Accept": "image/jpeg,image/*;q=0.9,*/*;q=0.8",
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!imgRes.ok) { res.status(imgRes.status).end(); return; }
-    const buf = Buffer.from(await imgRes.arrayBuffer());
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
-    res.set("Content-Length", String(buf.length));
-    res.end(buf);
-  } catch {
-    res.status(502).end();
-  }
+// OG 이미지 — /og-image/default : 외부 CDN 없이 정적 파일에서 직접 서빙
+router.get("/og-image/default", (_req, res): void => {
+  if (!ogDefaultImageBuf) { res.status(404).end(); return; }
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+  res.set("Content-Length", String(ogDefaultImageBuf.length));
+  res.end(ogDefaultImageBuf);
 });
 
 // OG 이미지 프록시 — /og-image/proxy?url=... : 상품 thumbnailUrl(itemmania.com CDN) 프록시
@@ -8505,7 +8501,15 @@ router.get("/og-image/:gameCode", async (req, res): Promise<void> => {
       signal: AbortSignal.timeout(8000),
     });
     if (!imgRes.ok) {
-      res.status(imgRes.status).end();
+      // 게임별 이미지 없으면 기본 이미지로 fallback
+      if (ogDefaultImageBuf) {
+        res.set("Content-Type", "image/jpeg");
+        res.set("Cache-Control", "public, max-age=86400");
+        res.set("Content-Length", String(ogDefaultImageBuf.length));
+        res.end(ogDefaultImageBuf);
+      } else {
+        res.status(imgRes.status).end();
+      }
       return;
     }
     const buf = Buffer.from(await imgRes.arrayBuffer());
@@ -8515,7 +8519,15 @@ router.get("/og-image/:gameCode", async (req, res): Promise<void> => {
     res.end(buf);
   } catch (err) {
     req.log.warn({ err, gameCode }, "og-image proxy error");
-    res.status(502).end();
+    // 네트워크 오류 시에도 기본 이미지로 fallback
+    if (ogDefaultImageBuf) {
+      res.set("Content-Type", "image/jpeg");
+      res.set("Cache-Control", "public, max-age=86400");
+      res.set("Content-Length", String(ogDefaultImageBuf.length));
+      res.end(ogDefaultImageBuf);
+    } else {
+      res.status(502).end();
+    }
   }
 });
 
