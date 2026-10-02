@@ -3,9 +3,23 @@ import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import bcrypt from "bcryptjs";
 import { logger } from "../lib/logger";
+import { externalizeSnapshotFonts } from "../lib/snapshot-fonts";
+import { stripSnapshotChatMessages } from "../lib/snapshot-chat";
+import { renderMobileHome } from "./mobile-home";
+import { renderMobileLogin } from "./mobile-login";
+import { renderMobileProductList } from "./mobile-product-list";
+import { renderMobileSellDetail } from "./mobile-sell-detail";
+import { renderMobileChat } from "./mobile-chat";
+import { renderMobileChatRoom } from "./mobile-chat-room";
+import { renderMobileMyroom } from "./mobile-myroom";
+import { renderMobileGameSearch } from "./mobile-game-search";
+import { renderMobileBuyRegister, renderMobileSellRegister } from "./mobile-sell-register";
+import { findGameByCode } from "./games";
 import { fetchProxyPage } from "../lib/proxy";
-import { db, usersTable, productsTable, ordersTable, walletsTable, gamesTable, gameServersTable } from "@workspace/db";
-import { eq, and, inArray, desc, asc } from "drizzle-orm";
+import { db, usersTable, productsTable, ordersTable, chatRoomsTable, walletsTable, gamesTable, gameServersTable } from "@workspace/db";
+import { eq, and, or, inArray, desc, asc } from "drizzle-orm";
+import { localProductSellerId } from "./product-ownership";
+import { createMemberAccount, getRegistrationPolicy, RegistrationBlockedError } from "../lib/registration-policy";
 
 const router: IRouter = Router();
 
@@ -33,11 +47,15 @@ const STATIC_DIR = (() => {
 })();
 logger.info({ STATIC_DIR }, "static HTML 디렉토리");
 
+function loadSnapshotHtml(path: string): string {
+  return externalizeSnapshotFonts(readFileSync(path, "utf-8"));
+}
+
 // receipt_layer 캡처 파일 경로
 const CAPTURED_RECEIPT_PATH = join(STATIC_DIR, "receipt-layer-captured.html");
 let capturedReceiptHtml = "";
 try {
-  capturedReceiptHtml = readFileSync(CAPTURED_RECEIPT_PATH, "utf-8");
+  capturedReceiptHtml = loadSnapshotHtml(CAPTURED_RECEIPT_PATH);
   logger.info("receipt-layer-captured.html 로드 완료 (캡처된 원본 사용)");
 } catch {
   logger.info("receipt-layer-captured.html 없음 → MutationObserver로 자동 캡처 예정");
@@ -48,17 +66,25 @@ const STATIC_HTML_PATH = join(STATIC_DIR, "itemmania.html");
 let staticHtml = "";
 
 try {
-  staticHtml = readFileSync(STATIC_HTML_PATH, "utf-8");
+  staticHtml = loadSnapshotHtml(STATIC_HTML_PATH);
   logger.info("itemmania.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "itemmania.html 로드 실패");
 }
+const mobileHomeHtml = staticHtml ? renderMobileHome(staticHtml) : "";
+const mobileGameSearchHtml = staticHtml
+  ? renderMobileGameSearch(staticHtml, join(STATIC_DIR, "mobile-game-icons"))
+  : "";
+const mobileFooterBadges = {
+  isms: mobileHomeHtml.match(/<img[^>]*src="(data:image\/(?:png|jpeg|webp);base64,[^"]+)"[^>]*alt="ISMS 인증"/)?.[1] ?? "",
+  danal: mobileHomeHtml.match(/<img[^>]*src="(data:image\/(?:png|jpeg|webp);base64,[^"]+)"[^>]*alt="다날 결제 인증"/)?.[1] ?? "",
+};
 
 const LOGIN_HTML_PATH = join(STATIC_DIR, "login.html");
 let loginHtml = "";
 
 try {
-  loginHtml = readFileSync(LOGIN_HTML_PATH, "utf-8");
+  loginHtml = loadSnapshotHtml(LOGIN_HTML_PATH);
   logger.info("login.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "login.html 로드 실패");
@@ -68,7 +94,7 @@ const JOIN_HTML_PATH = join(STATIC_DIR, "join.html");
 let joinHtml = "";
 
 try {
-  joinHtml = readFileSync(JOIN_HTML_PATH, "utf-8");
+  joinHtml = loadSnapshotHtml(JOIN_HTML_PATH);
   logger.info("join.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "join.html 로드 실패");
@@ -78,7 +104,7 @@ const JOIN_AGREE_HTML_PATH = join(STATIC_DIR, "join-agree.html");
 let joinAgreeHtml = "";
 
 try {
-  joinAgreeHtml = readFileSync(JOIN_AGREE_HTML_PATH, "utf-8");
+  joinAgreeHtml = loadSnapshotHtml(JOIN_AGREE_HTML_PATH);
   logger.info("join-agree.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "join-agree.html 로드 실패");
@@ -88,7 +114,7 @@ const JOIN_FORM_HTML_PATH = join(STATIC_DIR, "join-form.html");
 let joinFormHtml = "";
 
 try {
-  joinFormHtml = readFileSync(JOIN_FORM_HTML_PATH, "utf-8")
+  joinFormHtml = loadSnapshotHtml(JOIN_FORM_HTML_PATH)
     .replace(/<meta[^>]*content-security-policy[^>]*>/gi, "");
   logger.info("join-form.html 로드 완료");
 } catch (e) {
@@ -99,7 +125,7 @@ const GIFTCARD_HTML_PATH = join(STATIC_DIR, "giftcard.html");
 let giftcardHtml = "";
 
 try {
-  giftcardHtml = readFileSync(GIFTCARD_HTML_PATH, "utf-8");
+  giftcardHtml = loadSnapshotHtml(GIFTCARD_HTML_PATH);
   logger.info("giftcard.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "giftcard.html 로드 실패");
@@ -109,7 +135,7 @@ const GAMEMANIA_HTML_PATH = join(STATIC_DIR, "gamemania.html");
 let gamemanaHtml = "";
 
 try {
-  gamemanaHtml = readFileSync(GAMEMANIA_HTML_PATH, "utf-8");
+  gamemanaHtml = loadSnapshotHtml(GAMEMANIA_HTML_PATH);
   logger.info("gamemania.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "gamemania.html 로드 실패");
@@ -119,7 +145,7 @@ const GAMECHARGE_HTML_PATH = join(STATIC_DIR, "game-charge.html");
 let gamechargeHtml = "";
 
 try {
-  gamechargeHtml = readFileSync(GAMECHARGE_HTML_PATH, "utf-8");
+  gamechargeHtml = loadSnapshotHtml(GAMECHARGE_HTML_PATH);
   logger.info("game-charge.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "game-charge.html 로드 실패");
@@ -129,7 +155,7 @@ const SELL_LINEAGE_CLASSIC_HTML_PATH = join(STATIC_DIR, "sell-lineage-classic.ht
 let sellLineageClassicHtml = "";
 
 try {
-  sellLineageClassicHtml = readFileSync(SELL_LINEAGE_CLASSIC_HTML_PATH, "utf-8");
+  sellLineageClassicHtml = loadSnapshotHtml(SELL_LINEAGE_CLASSIC_HTML_PATH);
   logger.info("sell-lineage-classic.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "sell-lineage-classic.html 로드 실패");
@@ -139,7 +165,7 @@ const SELL_MAPLESTORY_WORLD_HTML_PATH = join(STATIC_DIR, "sell-maplestory-world.
 let sellMaplestoryWorldHtml = "";
 
 try {
-  sellMaplestoryWorldHtml = readFileSync(SELL_MAPLESTORY_WORLD_HTML_PATH, "utf-8");
+  sellMaplestoryWorldHtml = loadSnapshotHtml(SELL_MAPLESTORY_WORLD_HTML_PATH);
   logger.info("sell-maplestory-world.html 로드 완료");
 } catch (e) {
   logger.error({ err: e }, "sell-maplestory-world.html 로드 실패");
@@ -147,7 +173,7 @@ try {
 
 function loadSellHtml(filename: string): string {
   try {
-    const html = readFileSync(join(STATIC_DIR, filename), "utf-8");
+    const html = loadSnapshotHtml(join(STATIC_DIR, filename));
     logger.info(`${filename} 로드 완료`);
     return html;
   } catch (e) {
@@ -160,7 +186,7 @@ const buyLineageClassicHtml   = loadSellHtml("buy-lineage-classic.html");
 const buyApplicationHtml      = loadSellHtml("buy-application-1.html");
 const chatHtml                = loadSellHtml("chat.html");
 const chatOrderedHtml         = loadSellHtml("chat-ordered.html");
-const chatNewHtml             = loadSellHtml("chat-new.html");
+const chatNewHtml             = stripSnapshotChatMessages(loadSellHtml("chat-new.html"));
 const chatNewBuycheckHtml     = loadSellHtml("chat-new-buycheck.html");
 const sellRegisterHtml        = loadSellHtml("sell-register.html");
 const sellIndexViewHtml       = loadSellHtml("sell/index_view.html");
@@ -203,6 +229,9 @@ const buyMyroomIngHtml        = loadSellHtml("buy/buy_ing.html");
 // 리니지클래식 스냅샷 기반 게임: 서버 사이드에서 게임명 치환 필요
 const LINEAGE_CLASSIC_BASED_GAMES: Record<string, string> = {
   "5990": "메이플랜드",
+  "5491": "옛날바람",
+  "6027": "제우스:오만의신",
+  "6028": "이클립스:더어웨이크닝",
 };
 
 // game_id → html 매핑 (TOP 10)
@@ -402,6 +431,7 @@ const INTERCEPT_SCRIPT = `
 }
 #_im_modal .close-btn:hover { color: #333; }
 /* ── 전체서비스 패널 (원본 CSS) ──────────────────────────────────── */
+.header-menu{position:relative;z-index:401}
 .header-panel{position:absolute;z-index:400;top:80px;left:0;width:100%}
 .header-panel.is-open{display:block}
 .header-panel .header-panel-backdrop{position:fixed;background:0 0;inset:0}
@@ -875,22 +905,67 @@ const LOGIN_INTERCEPT_SCRIPT = `
         var userPw = document.getElementById('user_password').value;
         var btn = loginForm.querySelector('button[type=submit]');
         if (btn) btn.disabled = true;
-
         try {
           var res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ email: userId, password: userPw })
+             body: JSON.stringify({
+               email: userId, password: userPw,
+               ...(document.getElementById('im-mobile-login') ? { autoLogin: document.getElementById('auto_login').checked } : {})
+             })
           });
           var data = await res.json();
           if (res.ok) {
+             if (document.getElementById('im-mobile-login')) {
+               try {
+                 if (document.getElementById('id_save').checked) localStorage.setItem('im-login-saved-id', userId);
+                 else localStorage.removeItem('im-login-saved-id');
+               } catch(e2) {}
+             }
             var dest = '/myroom/index.html';
             try {
+              var requested = new URLSearchParams(location.search).get('returnUrl');
               var next = sessionStorage.getItem('_im_login_next');
-              if (next && !next.includes('/login')) { dest = next; sessionStorage.removeItem('_im_login_next'); }
+              var candidate = requested || next;
+              if (candidate) {
+                var target = new URL(candidate, location.origin);
+                if (target.origin === location.origin && !target.pathname.startsWith('/login')) {
+                  dest = target.pathname + target.search + target.hash;
+                }
+              }
+              sessionStorage.removeItem('_im_login_next');
             } catch(e2) {}
-            location.href = dest;
+            // 이 팝업 안에서 방을 준비해 곧바로 채팅 URL로 이동한다.
+            // 상품 상세 페이지(전체 사이트)를 잠깐 띄우거나 원래 구매글 창을 이동시키지 않는다.
+            var pendingChat = sessionStorage.getItem('_im_product_chat_after_login');
+            if (pendingChat && window.opener && window.name.indexOf('im_product_chat_') === 0) {
+              var pending;
+              try { pending = JSON.parse(pendingChat); } catch(ex) {}
+              if (pending && pending.returnPath === dest &&
+                  Number.isSafeInteger(pending.productId) && pending.productId > 0 &&
+                  Number.isSafeInteger(pending.buyerId) && pending.buyerId > 0) {
+                var roomRes = await fetch('/api/chat/rooms', {
+                  method: 'POST', credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ buyerId: pending.buyerId, productId: pending.productId })
+                });
+                var room = await roomRes.json();
+                if (!roomRes.ok || !room.id) {
+                  showError(room.error || '채팅방을 준비하지 못했습니다. 다시 시도해 주세요.');
+                  if (btn) btn.disabled = false;
+                  return;
+                }
+                sessionStorage.removeItem('_im_product_chat_after_login');
+                if (pending.intent === 'sale' && window.opener && !window.opener.closed && window.opener._im_notify_sale_application) {
+                  window.opener._im_notify_sale_application('판매신청이 되었습니다', false);
+                }
+                location.replace('/myroom/chat/new_chat.html?roomId=' + room.id);
+                return;
+              }
+              sessionStorage.removeItem('_im_product_chat_after_login');
+            }
+            location.replace(dest);
           } else {
             showError(data.error || '아이디 또는 비밀번호가 올바르지 않습니다.');
             if (btn) btn.disabled = false;
@@ -1967,9 +2042,111 @@ function fixMyroomNavLinks(html: string): string {
   return result;
 }
 
-function prepare(html: string, user: Record<string, unknown> | null = null): string {
+// The home snapshot wires its own service menu. Other captured pages contain
+// the same header/button but no working toggle, so install it on those pages.
+const SHARED_HEADER_MENU = `
+<style>
+.header-menu{position:relative;z-index:401}
+.header-panel{position:absolute;z-index:400;top:80px;left:0;width:100%}
+.header-panel.is-open{display:block}
+.header-panel .header-panel-backdrop{position:fixed;background:transparent;inset:0}
+.header-panel .header-panel-inner{position:relative;z-index:2}
+.header-panel .header-panel-card{width:584px;margin-left:auto;padding:18px 20px 24px;border-radius:15px;background:#fff;box-shadow:0 1px 10px rgba(0,0,0,.25)}
+.header-panel .header-panel-title{font-weight:600;padding:4px 5px 14px;color:#000}
+.header-panel .header-panel-title h2{font-size:18px}
+.header-panel .header-panel-divider{height:1px;margin:0 5px 20px;background:#d9d9d9}
+.header-panel .header-service-grid{display:grid;margin:0;padding:0 14px 35px;list-style:none;grid-template-columns:repeat(5,83px);gap:25px 25px}
+.header-panel .header-service-item{text-align:center}
+.header-panel .header-service-item a{display:block;text-decoration:none;color:#2e2e2e}
+.header-panel .header-service-icon{display:flex;align-items:center;justify-content:center;width:63px;height:63px;margin:0 auto;border-radius:20px;background:#e8f2ff}
+.header-panel .header-service-icon img{display:block;width:50px;height:50px}
+.header-panel .header-service-label{font-size:16px;font-weight:500;display:block;margin-top:8px;text-align:center}
+.header-panel .header-box{overflow:hidden;margin:0 20px 20px;border:1px solid var(--color-gray3);border-radius:15px;background:#fff}
+.header-panel .header-box-title{font-size:16px;font-weight:600;display:flex;align-items:center;height:40px;padding:0 20px;color:#2e2e2e;background:#e8f2ff}
+.header-panel .header-box-grid{font-size:16px;font-weight:500;display:grid;margin:0;padding:20px 25px 24px;list-style:none;color:#2e2e2e;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px 5px}
+.header-panel .header-box-grid li:last-child{width:100px}
+.header-panel .header-box-grid a{color:inherit;text-decoration:none}
+.header-panel .header-box-grid a:hover{color:#159EFD}
+</style>
+<script>
+(function(){
+  var previousOverflow = '';
+  function elements() {
+    return { panel: document.getElementById('headerMainPanel'), menu: document.querySelector('.header-menu') };
+  }
+  function closePanel() {
+    var refs = elements();
+    if (!refs.panel) return;
+    refs.panel.classList.remove('is-open');
+    refs.panel.style.display = 'none';
+    refs.panel.setAttribute('aria-hidden', 'true');
+    if (refs.menu) refs.menu.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = previousOverflow;
+  }
+  function initPanel() {
+    var refs = elements();
+    if (!refs.panel || !refs.menu || refs.panel.dataset.imMenuReady) return refs;
+    refs.panel.dataset.imMenuReady = '1';
+    refs.panel.classList.remove('sf-hidden');
+    refs.panel.classList.remove('is-open');
+    refs.panel.style.display = 'none';
+    refs.panel.setAttribute('aria-hidden', 'true');
+    refs.menu.setAttribute('aria-expanded', 'false');
+    if (!refs.panel.querySelector('.header-panel-inner')) {
+      fetch('/api/panel-inner').then(function(response) {
+        if (!response.ok) throw new Error('menu');
+        return response.text();
+      }).then(function(html) {
+        refs.panel.innerHTML = html;
+      }).catch(function() {
+        refs.panel.innerHTML = '<div class="header-panel-inner"><div class="header-panel-card">메뉴를 불러오지 못했습니다. 페이지를 새로고침해 주세요.</div></div>';
+      });
+    }
+    return refs;
+  }
+  document.addEventListener('click', function(event) {
+    var trigger = event.target.closest('.header-menu');
+    if (trigger) {
+      var refs = initPanel();
+      if (!refs.panel) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (refs.panel.classList.contains('is-open')) {
+        closePanel();
+      } else {
+        previousOverflow = document.body.style.overflow;
+        refs.panel.style.display = '';
+        refs.panel.classList.add('is-open');
+        refs.panel.setAttribute('aria-hidden', 'false');
+        refs.menu.setAttribute('aria-expanded', 'true');
+        document.body.style.overflow = 'hidden';
+      }
+      return;
+    }
+    var panel = document.getElementById('headerMainPanel');
+    if (!panel || !panel.classList.contains('is-open')) return;
+    if (event.target.closest('.header-panel-backdrop, [data-header-panel-close]')) {
+      event.preventDefault();
+      closePanel();
+    } else if (panel.contains(event.target) && event.target.closest('a[href]')) {
+      closePanel();
+    }
+  }, true);
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') closePanel();
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPanel);
+  else initPanel();
+})();
+</script>`;
+
+const CURRENT_GRADE_MARK_STYLE = `<style>${["vip", "platinum", "gold", "silver", "bronze"]
+  .map(grade => `.credit_mark.${grade}{background-image:url("/grade-icon/${grade}")!important;background-repeat:no-repeat!important;background-size:100% auto!important}`)
+  .join("")}</style>`;
+
+function prepare(html: string, user: Record<string, unknown> | null = null, includeHeaderMenu = true): string {
   const clean = fixMyroomNavLinks(rewriteExternalLinks(stripCsp(html)));
-  const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_MOBILE_STYLE + GLOBAL_NAV_INTERCEPTOR;
+  const headInject = buildUserScript(user) + ERROR_SUPPRESSOR + GLOBAL_MOBILE_STYLE + CURRENT_GRADE_MARK_STYLE + GLOBAL_NAV_INTERCEPTOR + (includeHeaderMenu ? SHARED_HEADER_MENU : "");
   // <head> 또는 문서 맨 앞에 에러 억제 + 전역 인터셉터 주입
   let result: string;
   if (clean.includes("<head>")) {
@@ -1989,8 +2166,23 @@ function prepare(html: string, user: Record<string, unknown> | null = null): str
   return result;
 }
 
-function serveItemmania(html: string, user: Record<string, unknown> | null = null): string {
-  let result = prepare(html, user);
+// The mobile home is appended after the large desktop snapshot. Hide the desktop
+// shell before the browser starts painting it, rather than waiting for the
+// overlay's CSS near the end of the document to be parsed.
+const MOBILE_HOME_FIRST_PAINT_STYLE = `<style>
+@media (max-width:780px) {
+  html,body{min-width:0!important;width:100%!important;max-width:100vw!important;overflow-x:hidden!important;background:#fff!important}
+  body .g_body{display:none!important}
+}
+</style>`;
+
+function serveItemmania(html: string, user: Record<string, unknown> | null = null, mobile = false): string {
+  let result = prepare(html, user, false);
+  if (mobile) {
+    result = result.includes("</head>")
+      ? result.replace("</head>", MOBILE_HOME_FIRST_PAINT_STYLE + "</head>")
+      : MOBILE_HOME_FIRST_PAINT_STYLE + result;
+  }
 
   // ── 메인 배너 스냅샷 상태 리셋 ──────────────────────────────────────────
   // SingleFile 스냅샷이 Swiper 초기화 완료 상태를 굳혀 저장하기 때문에,
@@ -2005,9 +2197,9 @@ function serveItemmania(html: string, user: Record<string, unknown> | null = nul
   // CSS (!important)로 처리 → Swiper.js가 JS로 set하는 inline style도 무력화
 
   if (result.includes("</body>")) {
-    return result.replace("</body>", INTERCEPT_SCRIPT + "</body>");
+    return result.replace("</body>", INTERCEPT_SCRIPT + (mobile ? mobileHomeHtml : "") + "</body>");
   }
-  return result + INTERCEPT_SCRIPT;
+  return result + INTERCEPT_SCRIPT + (mobile ? mobileHomeHtml : "");
 }
 
 function serveLogin(html: string, user: Record<string, unknown> | null = null): string {
@@ -2017,6 +2209,10 @@ function serveLogin(html: string, user: Record<string, unknown> | null = null): 
   }
   return result + LOGIN_INTERCEPT_SCRIPT;
 }
+
+const mobileLoginFontStyles = ((loginHtml as string).match(/@font-face\s*\{[^}]+\}/g) ?? [] as string[])
+  .filter(face => face.includes('font-family:"Pretendard"'))
+  .join("");
 
 function serveGiftcard(html: string, user: Record<string, unknown> | null = null): string {
   const result = prepare(html, user);
@@ -2215,6 +2411,28 @@ function serveLineageClassic(html: string, user: Record<string, unknown> | null 
 
 const SELL_LIST_INTERCEPT_SCRIPT = `
 <style>
+/* Completed DB listings retain their original card data beneath a quiet, non-interactive veil. */
+ul.search_list_normal > li.list_item.im-sold,
+ul.search_list_premium > li.list_item.im-sold {
+  position: relative !important;
+  overflow: hidden;
+  border-radius: 12px;
+}
+li.list_item.im-sold > .im-sold-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(238, 239, 241, .85);
+  color: #24262b;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  cursor: not-allowed;
+}
 /* ── 팝니다/삽니다 목록 모바일 ── */
 @media(max-width:768px){
   /* 서버 탭: 가로 스크롤 */
@@ -2329,6 +2547,26 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     return t;
   }
 
+  var verifiedSoldIds = {};
+  function markSold(li) {
+    li.classList.add('im-sold');
+    li.setAttribute('aria-label', '거래 완료');
+    li.querySelectorAll('a, button, input').forEach(function(control) {
+      control.setAttribute('tabindex', '-1');
+      control.setAttribute('aria-disabled', 'true');
+    });
+    var veil = document.createElement('div');
+    veil.className = 'im-sold-veil';
+    veil.textContent = '거래 완료';
+    veil.setAttribute('aria-hidden', 'true');
+    li.appendChild(veil);
+    li.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    return li;
+  }
+
   function makeCard(p, type) {
     var li = document.createElement('li');
     li.className = 'list_item';
@@ -2358,7 +2596,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       '<div class="col quantity">' + (p.description || '') + '</div>' +
       '<div class="col price"><span class=trade_money>' + fmt(p.price) + '원</span></div>' +
       '<div class="col reg_date">' + timeLabel(p.createdAt) + '</div>';
-    return li;
+    return p.status === 'sold' ? markSold(li) : li;
   }
 
   // 실시간 아이템마니아 상품 카드 (live-list API에서 받은 데이터)
@@ -2390,7 +2628,8 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
       '<div class="col quantity">' + (p.description||'') + '</div>' +
       '<div class="col price"><span class=trade_money>' + fmt(p.price||0) + '원</span></div>' +
       '<div class="col reg_date">' + timeLabel(p.timestamp) + '</div>';
-    return li;
+    // A snapshot/live-list entry alone does not prove a sale. Only a sold DB row can.
+    return p.dbId && verifiedSoldIds[String(p.dbId)] ? markSold(li) : li;
   }
 
   // tab_bx data-value → DB itemCategory 값 매핑
@@ -2566,8 +2805,9 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     if (keyword) apiQ.push('keyword=' + encodeURIComponent(keyword));
     if (itemCat) apiQ.push('itemCategory=' + encodeURIComponent(itemCat));
     if (sort) apiQ.push('sort=' + encodeURIComponent(sort));
-    apiQ.push('page=1');
+    apiQ.push('page=' + Math.max(1, page));
     apiQ.push('limit=50');
+    apiQ.push('premium=0');
 
     var normalList = document.querySelector('ul.search_list_normal');
     var premiumList = document.querySelector('ul.search_list_premium');
@@ -2584,32 +2824,61 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
     var origImCountText = countEl ? countEl.textContent.trim() : '';
     var origImCount = parseInt(origImCountText.replace(/[^0-9]/g, ''), 10) || origNormalCount;
 
-    // 실시간 아이템마니아 상품 fetch (ScraperAPI 5분 캐시) — 병렬 시작
-    var liveQ = 'gameCode=' + encodeURIComponent(gameCode) + '&type=' + type;
-    var livePromise = gameCode
-      ? fetch('/api/admin/live-list?' + liveQ, { credentials: 'include' })
-          .then(function(rl) { return rl.json(); })
-          .catch(function() { return { items: [], premiumItems: [], total: 0 }; })
-      : Promise.resolve({ items: [], premiumItems: [], total: 0 });
+    // 프리미엄은 관리자 전용 크롤링 API가 아닌 활성 상품 DB에서 별도로 조회한다.
+    var premiumQ = apiQ.filter(function(q) { return !/^(page|limit|premium)=/.test(q); });
+    premiumQ.push('page=1', 'limit=10', 'premium=1');
+    var premiumPromise = fetch('/api/products?' + premiumQ.join('&'), { credentials: 'include' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .catch(function() { return { items: [], total: 0, error: true }; });
+    var soldQ = apiQ.concat('status=sold');
+    var soldPremiumQ = premiumQ.concat('status=sold');
+    var soldPromise = fetch('/api/products?' + soldQ.join('&'), { credentials: 'include' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .catch(function() { return { items: [], total: 0 }; });
+    var soldPremiumPromise = fetch('/api/products?' + soldPremiumQ.join('&'), { credentials: 'include' })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .catch(function() { return { items: [], total: 0 }; });
 
-    fetch('/api/products?' + apiQ.join('&'), { credentials: 'include' })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var items = data.items || [];
-        var ourTotal = data.total || 0;
+    Promise.all([
+      fetch('/api/products?' + apiQ.join('&'), { credentials: 'include' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+      soldPromise, premiumPromise, soldPremiumPromise
+    ])
+      .then(function(results) {
+        var data = results[0], soldData = results[1], premiumData = results[2], soldPremiumData = results[3];
+        verifiedSoldIds = {};
+        var seenDbIds = {}, seenItemmaniaIds = {};
+        var items = [];
+        [data.items || [], soldData.items || [], premiumData.items || [], soldPremiumData.items || []].forEach(function(group) {
+          group.forEach(function(p) {
+            if (!p || !p.id || seenDbIds[String(p.id)]) return;
+            seenDbIds[String(p.id)] = true;
+            if (p.itemmaniaid) seenItemmaniaIds[String(p.itemmaniaid)] = true;
+            if (p.status === 'sold') verifiedSoldIds[String(p.id)] = true;
+          });
+        });
+        (data.items || []).concat(soldData.items || []).forEach(function(p) {
+          if (!p || !p.id || items.some(function(existing) { return existing.id === p.id; })) return;
+          items.push(p);
+        });
+        var ourTotal = (data.total || 0) + (soldData.total || 0);
+        function notInDb(el) {
+          var tid = el.getAttribute('data-tid') || '';
+          return !seenItemmaniaIds[tid] && !seenDbIds[tid];
+        }
 
         // ── itemCategory 필터: 원본 상품도 탭에 맞게 걸러냄 ─────
         // gameCode가 있으면 스냅샷 원본(리니지클래식 기본)은 표시하지 않음 — Phase 2에서 실시간으로 교체
         var filteredOrig = gameCode ? [] : (itemCat ? origNormalItems.filter(function(el) {
           var goodsEl = el.querySelector('[data-search=goods]');
           return goodsEl && goodsEl.textContent.trim() === itemCat;
-        }) : origNormalItems);
+        }) : origNormalItems).filter(notInDb);
 
         // ── 프리미엄 섹션 itemCategory 필터 ────────────────────────
         var filteredPremium = gameCode ? [] : (itemCat ? origPremiumItems.filter(function(el) {
           var goodsEl = el.querySelector('[data-search=goods]');
           return goodsEl && goodsEl.textContent.trim() === itemCat;
-        }) : origPremiumItems);
+        }) : origPremiumItems).filter(notInDb);
 
         // 전체 건수: gameCode/itemCategory 필터 없으면 스냅샷 총 건수, 있으면 filteredOrig 길이 사용
         var snapshotCount = (gameCode || itemCat) ? filteredOrig.length : origImCount;
@@ -2654,9 +2923,7 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
         if (premiumList) {
           filteredPremium.forEach(function(el) { premiumList.appendChild(el); });
           var premParent = premiumList.closest('div, section') || premiumList.parentElement;
-          if (premParent) {
-            premParent.style.display = filteredPremium.length === 0 ? 'none' : '';
-          }
+          if (premParent) premParent.style.display = gameCode ? '' : (filteredPremium.length === 0 ? 'none' : '');
         }
 
         // 페이지네이션 (우리 DB 기준)
@@ -2689,40 +2956,24 @@ const SELL_LIST_INTERCEPT_SCRIPT = `
           }
         }
 
-        // ── Phase 2: 실시간 아이템마니아 상품으로 스냅샷 교체 ────────────────
-        livePromise.then(function(liveData) {
-          if (!liveData || !liveData.items) return;
-          var liveItems = liveData.items.filter(function(p2) {
-            return !itemCat || p2.itemCategory === itemCat;
+        {
+          var premiumItems = [];
+          (premiumData.items || []).concat(soldPremiumData.items || []).forEach(function(p) {
+            if (!p || !p.id || premiumItems.some(function(existing) { return existing.id === p.id; })) return;
+            premiumItems.push(p);
           });
-          var livePremium = (liveData.premiumItems || []).filter(function(p2) {
-            return !itemCat || p2.itemCategory === itemCat;
-          });
-          if (liveItems.length === 0 && livePremium.length === 0) return;
-          // 스냅샷 항목 제거, 우리 DB 항목(data-our)만 남김
-          Array.from(normalList.querySelectorAll('li:not([data-our])')).forEach(function(se) { se.remove(); });
-          // 실시간 카드 생성 후 우리 DB 카드와 합산·정렬
-          var liveEls = liveItems.map(function(p2) { return makeLiveCard(p2, type); });
-          var ourInDom = Array.from(normalList.querySelectorAll('li[data-our]'));
-          var all2 = ourInDom.concat(liveEls);
-          all2.sort(function(a2, b2) {
-            return (parseInt(b2.getAttribute('data-ts') || '0') || 0)
-                 - (parseInt(a2.getAttribute('data-ts') || '0') || 0);
-          });
-          normalList.innerHTML = '';
-          all2.forEach(function(e2) { normalList.appendChild(e2); });
-          // 건수 갱신: 카테고리 필터 없을 때만 실시간 총 건수 사용 (있으면 표시된 항목 수)
-          var liveTotal = liveData.total || 0;
-          var newTotal = itemCat ? (liveItems.length + ourTotal) : (liveTotal + ourTotal);
-          if (countEl && newTotal > 0) countEl.textContent = fmt(newTotal) + '건';
-          // 프리미엄 섹션 갱신
-          if (premiumList && livePremium.length > 0) {
-            premiumList.innerHTML = '';
-            livePremium.forEach(function(lp) { premiumList.appendChild(makeLiveCard(lp, type)); });
-            var premParent2 = premiumList.closest('div, section') || premiumList.parentElement;
-            if (premParent2) premParent2.style.display = '';
+          if (premiumList) {
+            premiumItems.forEach(function(p) { premiumList.appendChild(makeCardWithBadge(p, type)); });
+            if (gameCode && premiumItems.length === 0) {
+              premiumList.innerHTML = '<li style="padding:22px;text-align:center;color:#747b86;list-style:none">' +
+                (premiumData.error ? '프리미엄 상품을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.' :
+                '현재 확인된 프리미엄 상품이 없습니다. 최신 수집이 지연되었을 수 있습니다.') + '</li>';
+            }
+            var premiumWrap = premiumList.closest('div.list_premium_wrap') || premiumList.parentElement;
+            if (premiumWrap) premiumWrap.style.display = (gameCode || premiumItems.length || filteredPremium.length) ? '' : 'none';
           }
-        });
+          if (countEl) countEl.textContent = fmt(totalCount + (premiumData.total || 0) + (soldPremiumData.total || 0)) + '건';
+        }
       })
       .catch(function() {
         var loadEl2 = document.getElementById('_im_loading');
@@ -5558,13 +5809,16 @@ const PAYMENT_PHONE_LIST_INTERCEPT_SCRIPT = `
 const CHAT_NEW_INTERCEPT_SCRIPT = `
 <style>
 /* ── 채팅창 반응형 오버라이드 ── */
-/* popup_content min-width:825px + padding:40px = 865px → 창 너비 초과 방지 (전역 적용) */
 .popup_content{min-width:0!important;box-sizing:border-box!important;width:100%!important;max-width:100%!important;}
-.chat_room{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;}
-/* chat_room이 flex가 되면 chat_content_wrap이 flex 아이템이 되어 내용 크기만큼만 차지 → flex:1로 부모 채우기 */
-.chat_content_wrap{flex:1!important;min-width:0!important;}
+.chat_room{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;overflow:hidden!important;}
+.chat_info_wrap{box-sizing:border-box!important;min-width:0!important;}
+.chat_content_wrap{flex:1 1 auto!important;width:calc(100% - 210px)!important;min-width:0!important;box-sizing:border-box!important;}
+.chat_area,.chat_content{min-width:0!important;box-sizing:border-box!important;}
 /* ── 사이드바 레이아웃: 상단 버튼5개 / 하단 인계하기+거래취소+거래금액 ── */
-.chat_menu_area{justify-content:flex-start!important;}
+.chat_menu_area{justify-content:flex-start!important;width:210px!important;flex:0 0 210px!important;min-width:0!important;box-sizing:border-box!important;padding:16px 12px!important;}
+.chat_menu_area .chat_menu,.chat_menu_area>div{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+.chat_menu_area button,.trade_price_change{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+.chat_user .credit_mark_new{display:none!important;}
 .chat_menu_area>div:last-child{margin-top:auto!important;}
 @media(max-width:780px){
   html,body{overflow-x:hidden!important;}
@@ -5574,7 +5828,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
   .chat_area{width:100%!important;min-width:0!important;height:auto!important;}
   .chat_content{width:100%!important;min-width:0!important;}
   .chat_content_list{height:40vh!important;min-height:200px!important;}
-  .chat_menu_area{width:100%!important;min-width:0!important;flex-shrink:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;padding:8px!important;box-sizing:border-box!important;}
+  .chat_menu_area{width:100%!important;min-width:0!important;flex:0 0 auto!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;padding:8px!important;box-sizing:border-box!important;}
   .chat_menu_area .chat_menu{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;}
   .chat_menu_area .chat_menu button{flex:1!important;min-width:80px!important;white-space:nowrap!important;}
   .chat_menu_area>div{width:100%!important;}
@@ -5593,7 +5847,13 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       method: method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined
-    }).then(function(r){ return r.json(); }).catch(function(){ return {}; });
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(data) {
+        data._ok = r.ok;
+        data._status = r.status;
+        return data;
+      });
+    }).catch(function(){ return { _ok:false, error:'요청을 처리하지 못했습니다.' }; });
   }
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -5603,6 +5863,16 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     var d = new Date(iso);
     return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
   }
+  function formatMileage(value) {
+    var amount = Number(value);
+    return (Number.isFinite(amount) ? amount : 0).toLocaleString('ko-KR');
+  }
+  function orderlessCompletionPrompt(room) {
+    var amount = Number(room && room.productPrice);
+    if (!Number.isFinite(amount) || amount < 0) amount = 0;
+    return '거래완료(인수확인) 처리하시겠습니까?\\n\\n구매자 마일리지에서 상품 금액 ' + formatMileage(amount) +
+      '원이 차감되고, 수수료 없이 ' + formatMileage(amount) + '원 전액이 판매자에게 지급됩니다.';
+  }
 
   var STATUS_LABEL = { pending:'거래대기', active:'거래중', handover:'인계완료(인수대기)', ended:'거래종료', cancelled:'거래취소', rejected:'거래불가' };
   var stateTextEl = document.getElementById('trade_state_text');
@@ -5611,6 +5881,60 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
   var myId = null;
   var lastMsgId = 0;
   var pollTimer = null;
+  var currentRoom = null;
+  var chatEvents = null;
+
+  function refreshWallet() {
+    return fetch('/api/wallet', { credentials: 'include', cache: 'no-store' })
+      .then(function(response) {
+        if (!response.ok) throw new Error('마일리지 잔액을 새로고침하지 못했습니다.');
+        return response.json();
+      })
+      .then(function(data) {
+        var balance = Number(data && data.balance);
+        if (!Number.isFinite(balance)) throw new Error('마일리지 잔액 응답을 확인할 수 없습니다.');
+        if (typeof window._IM_updateBalance === 'function') window._IM_updateBalance(balance);
+      });
+  }
+
+  function refreshAfterCompletion() {
+    loadMessages();
+    refreshWallet().catch(function() {
+      showTradeError('거래는 완료되었지만 마일리지 잔액을 새로고침하지 못했습니다.');
+    });
+  }
+
+  function canHandoverRoom(room) {
+    return !!(room && room.sellerId === myId && (room.status === 'pending' || room.status === 'active') &&
+      (!room.orderId || room.orderStatus === 'pending'));
+  }
+
+  function canConfirmRoom(room) {
+    return !!(room && room.buyerId === myId && room.status === 'handover' &&
+      (!room.orderId || room.orderStatus === 'shipped'));
+  }
+
+   function showTradeError(message) {
+     alert(message || '거래 상태를 변경하지 못했습니다.');
+   }
+
+   function updateTradeActions(room) {
+    currentRoom = room || currentRoom;
+    room = currentRoom;
+    if (!room) return;
+    var handover = document.getElementById('_im_handover_btn');
+    if (handover) {
+       handover.disabled = !canHandoverRoom(room) || !!handover._busy;
+      handover.style.opacity = handover.disabled ? '0.5' : '';
+    }
+    var confirmReceipt = document.getElementById('trade_ing');
+    if (confirmReceipt) {
+       var canConfirm = canConfirmRoom(room);
+      confirmReceipt.style.display = isBuyerChat ? '' : 'none';
+      confirmReceipt.disabled = !canConfirm;
+      confirmReceipt.style.opacity = confirmReceipt.disabled ? '0.45' : '';
+    }
+  }
 
   function appendMessage(m) {
     var list = document.getElementById('chat_content_list');
@@ -5637,6 +5961,7 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
   var isBuyerChat = false;
 
   function updateStatusUI(status) {
+    if (currentRoom) currentRoom.status = status;
     var stateEl = document.getElementById('trade_state_text');
     if (stateEl) stateEl.textContent = STATUS_LABEL[status] || status;
     var ti = document.getElementById('trade_ing');
@@ -5668,14 +5993,24 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       if (ti) { ti.style.display = isBuyerChat ? '' : 'none'; }
       if (hBtn) { hBtn.disabled = false; hBtn.textContent = '인계하기'; hBtn.style.opacity = ''; }
     }
+     updateTradeActions(currentRoom);
   }
 
   function loadMessages() {
     if (!roomId) return;
     api('GET', '/chat/rooms/' + roomId + '/messages').then(function(data) {
-      if (!data || !data.messages) return;
+      if (!data || !Array.isArray(data.messages) || !data.room) {
+        var content = document.querySelector('.popup_content');
+        if (content) {
+          content.textContent = data && data.error ? data.error : '채팅방을 불러올 수 없습니다. 다시 시도해 주세요.';
+          content.style.cssText += ';padding:40px;text-align:center;';
+        }
+        return;
+      }
       if (data.room) {
         var r = data.room;
+        var previousStatus = currentRoom && currentRoom.status;
+        currentRoom = r;
         var isBuyer = r.buyerId === myId;
         isBuyerChat = isBuyer;
         // 인수하기 버튼: 구매자 채팅창에서만 표시
@@ -5695,6 +6030,10 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         var partnerName = isBuyer ? (r.sellerNickname || '판매자') : (r.buyerNickname || '구매자');
         var uidEl = document.querySelector('.chat_user .uid');
         if (uidEl) uidEl.textContent = partnerName;
+        var tidEl = document.querySelector('.chat_user2 .sub_info .tid a');
+        if (tidEl) tidEl.textContent = '#' + r.id;
+        var oldCategory = document.querySelector('.chat_user2 .sub_info > a');
+        if (oldCategory) oldCategory.textContent = '';
         var subjectA = document.querySelector('.chat_user2 .subject a');
         var subjectDiv = document.querySelector('.chat_user2 .subject');
         if (r.productTitle) {
@@ -5715,6 +6054,16 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
           if (priceInput) priceInput.value = '';
         }
         updateStatusUI(r.status || 'pending');
+        if (r.status === 'ended' && previousStatus !== 'ended') {
+          refreshWallet().catch(function() {
+            showTradeError('거래는 완료되었지만 마일리지 잔액을 새로고침하지 못했습니다.');
+          });
+        }
+        if (['ended', 'cancelled', 'rejected'].indexOf(r.status) !== -1 && pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+         updateTradeActions(r);
         var userInfoEl = document.getElementById('chat_user_info');
         if (userInfoEl) {
           userInfoEl.className = 'chat_user_info ' + (isBuyer ? 'sell' : 'buy');
@@ -5764,8 +6113,8 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
         // 판매자: 입금 안내 박스 표시 / 구매자: 숨김
         var noticeEl2 = document.getElementById('chat_notice_txt');
         if (noticeEl2) {
-          if (!isBuyer) {
-            noticeEl2.innerHTML = '<b>입금이 완료된 상품입니다 (아이템을 먼저 전달해 주세요.)</b><br><span class="sub_txt">안전한 거래를 위해 구매자는 아이템을 정상적으로 전달받은 후에만 구매확정을 진행해 주세요.</span>';
+          if (!isBuyer && (r.status === 'active' || r.status === 'handover')) {
+            noticeEl2.innerHTML = '<b>거래가 진행 중입니다.</b><br><span class="sub_txt">물품 전달과 인수 여부를 확인한 뒤 거래를 진행해 주세요.</span>';
             noticeEl2.style.display = '';
           } else {
             noticeEl2.style.display = 'none';
@@ -5775,6 +6124,12 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       var list = document.getElementById('chat_content_list');
       if (list && lastMsgId === 0) list.innerHTML = '';
       data.messages.forEach(appendMessage);
+      if (data.room) {
+        currentRoom = data.room;
+         updateTradeActions(currentRoom);
+      }
+      var roomEl = document.querySelector('.chat_room');
+      if (roomEl) roomEl.style.visibility = 'visible';
     });
   }
 
@@ -5796,15 +6151,54 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       api('GET', '/chat/rooms/' + roomId + '/messages').then(function(data) {
         if (!data || !data.messages) return;
         data.messages.forEach(appendMessage);
-        if (data.room) updateStatusUI(data.room.status || 'pending');
+        if (data.room) {
+          var previousStatus = currentRoom && currentRoom.status;
+          currentRoom = data.room;
+          updateStatusUI(data.room.status || 'pending');
+           updateTradeActions(currentRoom);
+          if (data.room.status === 'ended' && previousStatus !== 'ended') {
+            refreshWallet().catch(function() {
+              showTradeError('거래는 완료되었지만 마일리지 잔액을 새로고침하지 못했습니다.');
+            });
+          }
+          if (['ended', 'cancelled', 'rejected'].indexOf(data.room.status) !== -1 && pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+        }
       });
     }, 4000);
+  }
+
+  function startChatEvents() {
+    if (typeof EventSource === 'undefined' || !roomId) return;
+    chatEvents = new EventSource('/api/events');
+    var connected = false;
+    chatEvents.addEventListener('connected', function() {
+      if (connected && !document.hidden) refreshAfterCompletion();
+      connected = true;
+    });
+    chatEvents.addEventListener('notification', function(event) {
+      try {
+        var notice = JSON.parse(event.data);
+        if (!document.hidden && notice.type === 'trade_ended' &&
+            notice.link === '/myroom/chat/new_chat.html?roomId=' + roomId) {
+          refreshAfterCompletion();
+        }
+      } catch (error) {}
+    });
+    chatEvents.addEventListener('balance', function() {
+      if (!document.hidden) refreshWallet().catch(function() {
+        showTradeError('마일리지 잔액을 새로고침하지 못했습니다.');
+      });
+    });
   }
 
   function changeStatus(newStatus, confirmMsg) {
     if (!confirm(confirmMsg)) return;
     api('PATCH', '/chat/rooms/' + roomId, { status: newStatus }).then(function(res) {
-      if (res && res.status) updateStatusUI(res.status);
+      if (res && res._ok && res.status) updateStatusUI(res.status);
+       else showTradeError(res && res.error ? res.error : '거래 상태를 변경하지 못했습니다.');
     });
   }
 
@@ -5905,12 +6299,14 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     if (tradeIngBtn) {
       tradeIngBtn.addEventListener('click', function(e) {
         e.preventDefault(); e.stopImmediatePropagation();
-        if (!confirm('거래완료(인수확인) 처리하시겠습니까?')) return;
-        // 인수 확인 후 배너 표시
-        var notice = document.getElementById('chat_notice_txt');
-        if (notice) notice.style.display = '';
+        if (!canConfirmRoom(currentRoom)) return;
+        if (!confirm(currentRoom.orderId
+          ? '거래완료(인수확인) 처리하시겠습니까? 판매자에게 대금이 지급됩니다.'
+          : orderlessCompletionPrompt(currentRoom))) return;
         api('PATCH', '/chat/rooms/' + roomId, { status: 'ended' }).then(function(res) {
-          if (res && res.status) {
+          if (res && res._ok && res.status) {
+            var notice = document.getElementById('chat_notice_txt');
+            if (notice) notice.style.display = '';
             updateStatusUI(res.status);
             // 채팅 목록 맨 아래에 핑크색 종료 알림 박스 추가
             var list = document.getElementById('chat_content_list');
@@ -5922,7 +6318,8 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
               list.appendChild(box);
               list.scrollTop = list.scrollHeight;
             }
-          }
+            refreshAfterCompletion();
+          } else { alert(res && res.error ? res.error : '거래 완료 처리에 실패했습니다.'); }
         });
       }, true);
     }
@@ -5940,19 +6337,25 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       var btn = e.target && (e.target.id === '_im_handover_btn' ? e.target : (e.target.closest && e.target.closest('#_im_handover_btn')));
       if (!btn || btn.disabled) return;
       e.preventDefault(); e.stopImmediatePropagation();
+      if (!canHandoverRoom(currentRoom)) return;
       if (!confirm('인계하기를 처리하시겠습니까?\\n\\n구매자에게 물품/아이템을 전달한 후 클릭하세요.')) return;
+      btn._busy = true;
       btn.disabled = true;
       btn.textContent = '처리중...';
       api('PATCH', '/chat/rooms/' + roomId, { status: 'handover' }).then(function(res) {
-        if (res && res.status) {
+        if (res && res._ok && res.status) {
           updateStatusUI(res.status);
+          currentRoom.status = res.status;
+           updateTradeActions(currentRoom);
         } else {
-          btn.disabled = false;
-          btn.textContent = '인계하기';
+           showTradeError(res && res.error ? res.error : '인계 처리에 실패했습니다.');
         }
       }).catch(function() {
-        btn.disabled = false;
-        btn.textContent = '인계하기';
+         showTradeError('인계 처리에 실패했습니다.');
+      }).finally(function() {
+        btn._busy = false;
+         updateTradeActions(currentRoom);
+        if (!currentRoom || currentRoom.status !== 'handover') btn.textContent = '인계하기';
       });
     }, true);
 
@@ -5968,8 +6371,20 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
     var textarea = document.getElementById('write_chat');
     if (sendBtn) sendBtn.addEventListener('click', sendMsg);
     if (textarea) {
+      var composing = false;
+      var justComposed = false;
+      textarea.addEventListener('compositionstart', function() { composing = true; });
+      textarea.addEventListener('compositionend', function() {
+        composing = false;
+        justComposed = true;
+        // Some browsers dispatch the confirming Enter after compositionend.
+        setTimeout(function() { justComposed = false; }, 0);
+      });
       textarea.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        if (e.isComposing || composing || e.keyCode === 229 || justComposed) return;
+        e.preventDefault();
+        sendMsg();
       });
     }
 
@@ -5987,8 +6402,14 @@ const CHAT_NEW_INTERCEPT_SCRIPT = `
       }
       loadMessages();
       startPolling();
+      startChatEvents();
     });
   }
+
+  window.addEventListener('pagehide', function() {
+    if (pollTimer) clearInterval(pollTimer);
+    if (chatEvents) chatEvents.close();
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -6279,9 +6700,33 @@ const CHAT_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const SELL_CHAT_HEAD_INTERCEPT = `<script>
+document.addEventListener('click', function(e) {
+  var purchaseBtn = e.target && e.target.closest ? e.target.closest('.g_btn_new button') : null;
+  if (purchaseBtn && purchaseBtn.textContent.trim() === '구매신청') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (window._im_on_purchase) window._im_on_purchase(purchaseBtn);
+    return;
+  }
+  var btn = e.target && e.target.closest ? e.target.closest('button.go_chat, button[name=go_chat]') : null;
+  if (!btn) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (window._im_on_sell_chat) window._im_on_sell_chat();
+}, true);
+ document.addEventListener('submit', function(e) {
+   if (!e.target || e.target.id !== 'frmSell') return;
+   e.preventDefault();
+   e.stopImmediatePropagation();
+   if (window._im_on_purchase) window._im_on_purchase(document.querySelector('.g_btn_new button[data-im-purchase]'));
+ }, true);
+</script>`;
+
 const SELL_APPLICATION_INTERCEPT_SCRIPT = `
 <script>
 (function() {
+  var purchasePending = false;
   function api(method, path, body) {
     return fetch('/api' + path, {
       method: method,
@@ -6292,13 +6737,104 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
   }
 
   function showLoginModal() {
-    try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+    try {
+      sessionStorage.setItem('_im_login_next', location.href);
+      sessionStorage.setItem('_im_purchase_after_login', location.pathname + location.search);
+    } catch(ex) {}
     location.href = '/login';
   }
 
-  function showPurchaseSuccess() {
-    alert('구매 신청이 완료되었습니다.\\n판매자와 채팅으로 거래를 진행해 주세요.');
-  }
+  window._im_on_purchase = function(btn) {
+    if (purchasePending) return false;
+    var user = window._IM_USER;
+    if (!user || !user.id) { showLoginModal(); return false; }
+    var prod = window.__PRODUCT__;
+    if (!prod || !prod.id || !prod.sellerId) {
+      alert('이 글은 이 사이트의 판매자 계정과 연결되어 있지 않아 구매신청할 수 없습니다.');
+      return false;
+    }
+    if (prod.status !== 'active') {
+      alert('현재 거래할 수 없는 상품입니다.');
+      return false;
+    }
+    if (Number(prod.sellerId) === Number(user.id)) {
+      alert('자신의 상품에는 구매신청할 수 없습니다.');
+      return false;
+    }
+    purchasePending = true;
+    var oldLabel = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '처리 중...'; }
+    fetch('/api/chat/rooms', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sellerId: Number(prod.sellerId), productId: Number(prod.id) })
+    }).then(function(r) {
+      return r.json().catch(function(){ return {}; }).then(function(room) {
+        if (!r.ok) throw new Error(room.error || '구매신청에 실패했습니다.');
+        return room;
+      });
+    }).then(function(room) {
+      if (!room || !room.id) throw new Error('거래 채팅방을 열 수 없습니다.');
+      location.href = '/myroom/chat/new_chat.html?roomId=' + encodeURIComponent(room.id);
+    }).catch(function(err) {
+      alert(err.message || '구매신청에 실패했습니다.');
+    }).finally(function() {
+      purchasePending = false;
+      if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+    });
+    return false;
+  };
+
+  window._im_on_sell_chat = function() {
+    var user = window._IM_USER;
+    if (!user || !user.id) {
+      try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
+      location.href = '/login';
+      return false;
+    }
+    var prod = window.__PRODUCT__;
+    if (!prod || !prod.sellerId || !prod.id) {
+      alert('이 글은 이 사이트의 판매자 계정과 연결되어 있지 않아 채팅할 수 없습니다.');
+      return false;
+    }
+    if (Number(prod.sellerId) === Number(user.id)) {
+      alert('자신의 상품에는 채팅할 수 없습니다.');
+      return false;
+    }
+    var popup = (window._nativeOpen || window.open.bind(window))(
+      'about:blank', 'im_product_chat_' + prod.id, 'width=900,height=700,resizable=yes,scrollbars=yes'
+    );
+    if (popup && !popup.closed) {
+      try { popup.document.body.textContent = '채팅방을 준비 중입니다...'; } catch(ex) {}
+    }
+    var charEl = document.getElementById('user_character');
+    var charName = charEl ? (charEl.value || '').trim() : '';
+    var unitTxt = (document.querySelector('.unit_info') || {}).textContent || '';
+    var goodsType = document.querySelector('.character_write')
+      ? (unitTxt.indexOf('게임머니') >= 0 ? '게임머니' : '아이템') : '계정';
+    fetch('/api/chat/rooms', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sellerId: Number(prod.sellerId), productId: Number(prod.id),
+        characterName: charName || undefined, goodsType: goodsType
+      })
+    }).then(function(r) {
+      return r.json().then(function(room) {
+        if (!r.ok) throw new Error(room.error || '채팅방을 만들 수 없습니다.');
+        return room;
+      });
+    }).then(function(room) {
+      if (!room || !room.id) throw new Error('채팅방을 찾을 수 없습니다.');
+      var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
+      if (popup && !popup.closed) popup.location.replace(chatUrl);
+      else location.href = chatUrl;
+    }).catch(function(err) {
+      if (popup && !popup.closed) popup.close();
+      alert(err.message || '채팅방을 열 수 없습니다.');
+    });
+    return false;
+  };
 
   // ── 내 거래정보 섹션: 로그인 유저 정보로 교체 ────────────────────
   function loadUserTradeInfo() {
@@ -6330,7 +6866,7 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
       if (_prod && _prod.gameName) {
         var _gsInp = document.getElementById('searchGameServer');
         if (_gsInp) _gsInp.value = _prod.gameName;
-        var _gsInp2 = document.querySelector('input.search_gs_name[id!=searchGameServer]');
+        var _gsInp2 = document.querySelector('input.search_gs_name:not(#searchGameServer)');
         if (_gsInp2) _gsInp2.value = _prod.gameName;
       }
     })();
@@ -6395,108 +6931,15 @@ const SELL_APPLICATION_INTERCEPT_SCRIPT = `
       });
     })();
 
-    // 구매신청 버튼 — form 제출 인터셉트
-    var form = document.getElementById('frmSell');
-    if (form) {
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        window._IM_auth().then(function(data){
-          if (data && data.id) { showPurchaseSuccess(); }
-          else { showLoginModal(); }
-        });
-      });
-    }
-    // 구매신청 버튼 (button[type=button] 이름 없는 마지막 버튼)
-    document.querySelectorAll('button[type=button]').forEach(function(btn) {
-      if (btn.textContent.trim() === '구매신청') {
-        btn.addEventListener('click', function(e) {
-          e.preventDefault(); e.stopImmediatePropagation();
-          window._IM_auth().then(function(data){
-            if (data && data.id) { showPurchaseSuccess(); }
-            else { showLoginModal(); }
-          });
-        }, true);
+    // 로그인 후 원래 상품으로 돌아왔으면 구매신청을 한 번만 재개
+    try {
+      var currentPath = location.pathname + location.search;
+      if (window._IM_USER && window._IM_USER.id &&
+          sessionStorage.getItem('_im_purchase_after_login') === currentPath) {
+        sessionStorage.removeItem('_im_purchase_after_login');
+        window._im_on_purchase(document.querySelector('.g_btn_new button[data-im-purchase]'));
       }
-    });
-
-    // 채팅 버튼 → 판매자와 채팅방 생성 후 이동
-    document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        window._IM_auth().then(function(user) {
-          if (!user || !user.id) {
-            try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
-            return;
-          }
-          var params2 = new URLSearchParams(location.search);
-          var productId2 = params2.get('id') || (window._IM_PRODUCT && String(window._IM_PRODUCT.id)) || null;
-          var knownProduct = window._IM_PRODUCT || null;
-
-          function openChatWithProduct(prod) {
-            if (!prod || !prod.sellerId) {
-              var nOpen0 = window._nativeOpen || window.open.bind(window);
-              var w0 = nOpen0('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-              if (!w0 || w0.closed) { location.href = '/myroom/chat/list.html'; }
-              return;
-            }
-            if (Number(prod.sellerId) === Number(user.id)) {
-              alert('자신의 상품에는 채팅할 수 없습니다.'); return;
-            }
-            var charEl = document.getElementById('user_character');
-            var charName = charEl ? (charEl.value || '').trim() : '';
-            var detectedType = '';
-            if (document.querySelector('.character_write')) {
-              var unitTxt = (document.querySelector('.unit_info') || {}).textContent || '';
-              detectedType = unitTxt.indexOf('게임머니') >= 0 ? '게임머니' : '아이템';
-            } else {
-              detectedType = '계정';
-            }
-            fetch('/api/chat/rooms', {
-              method: 'POST', credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                sellerId: Number(prod.sellerId),
-                productId: prod.id ? Number(prod.id) : undefined,
-                characterName: charName || undefined,
-                goodsType: detectedType || undefined
-              })
-            }).then(function(r) { return r.json(); })
-            .then(function(room) {
-              var nOpen = window._nativeOpen || window.open.bind(window);
-              if (room && room.id) {
-                var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
-                var w = nOpen(chatUrl, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
-                if (!w || w.closed) { location.href = chatUrl; }
-              } else {
-                var w2 = nOpen('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-                if (!w2 || w2.closed) { location.href = '/myroom/chat/list.html'; }
-              }
-            }).catch(function() {
-              var nOpen2 = window._nativeOpen || window.open.bind(window);
-              var w3 = nOpen2('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-              if (!w3 || w3.closed) { location.href = '/myroom/chat/list.html'; }
-            });
-          }
-
-          if (knownProduct) {
-            openChatWithProduct(knownProduct);
-          } else if (productId2) {
-            fetch('/api/products/' + productId2, { credentials: 'include' })
-              .then(function(r) { return r.json(); })
-              .then(function(prod) { openChatWithProduct(prod); })
-              .catch(function() {
-                var nOpen3 = window._nativeOpen || window.open.bind(window);
-                var w4 = nOpen3('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-                if (!w4 || w4.closed) { location.href = '/myroom/chat/list.html'; }
-              });
-          } else {
-            var nOpen4 = window._nativeOpen || window.open.bind(window);
-            var w5 = nOpen4('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-            if (!w5 || w5.closed) { location.href = '/myroom/chat/list.html'; }
-          }
-        });
-      }, true);
-    });
+    } catch(ex) {}
 
     // 충전하기 버튼 → 준비 중
     document.querySelectorAll('button.charge_btn').forEach(function(btn) {
@@ -6632,8 +7075,11 @@ const APPLICATION_DYNAMIC_SCRIPT = `
         '<div style="font-size:26px;font-weight:800;color:#e53e3e;margin-bottom:18px">' + fmt(p.price) + '원</div>' +
         '<div style="display:flex;gap:10px;margin-bottom:12px">' +
           '<button id=_im_buy_btn style="flex:2;padding:14px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">💳 구매하기</button>' +
-          '<button id=_im_chat_btn style="flex:1;padding:14px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">💬 채팅</button>' +
+          (p.sellerId
+            ? '<button id=_im_chat_btn style="flex:1;padding:14px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">💬 채팅</button>'
+            : '<button type=button disabled style="flex:1;padding:14px;background:#ddd;color:#666;border:none;border-radius:8px;font-size:15px">채팅 불가</button>') +
         '</div>' +
+        (!p.sellerId ? '<p style="margin:0 0 12px;font-size:13px;color:#666">이 글은 이 사이트의 판매자 계정과 연결되어 있지 않아 채팅할 수 없습니다.</p>' : '') +
         '<p style="margin:0;font-size:13px;color:#555">* 아이템마니아 에스크로로 안전하게 보호됩니다. 판매자가 거래를 완료해야 금액이 지급됩니다.</p>';
     } else {
       box.innerHTML =
@@ -6654,66 +7100,67 @@ const APPLICATION_DYNAMIC_SCRIPT = `
     var buyBtn = document.getElementById('_im_buy_btn');
     if (buyBtn) {
       buyBtn.addEventListener('click', function() {
+        if (type !== 'sell') {
+          if (window._im_on_sell_btn) window._im_on_sell_btn(buyBtn);
+          else showToast('판매신청을 처리할 수 없습니다.', false);
+          return;
+        }
         window._IM_auth().then(function(user) {
           if (!user || !user.id) {
             showToast('로그인이 필요합니다.', false);
             setTimeout(function() { try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login'; }, 1200);
             return;
           }
-          if (p.sellerId && Number(user.id) === Number(p.sellerId)) {
+          if (!p.sellerId) {
+            // Existing external-listing checkout stays on the legacy order path.
+            fetch('/api/wallet', { credentials: 'include' })
+              .then(function(r) { return r.json(); })
+              .then(function(w) {
+                var balance = Number(w.balance) || 0;
+                if (balance < p.price) {
+                  var msg = '잔액이 부족합니다.\\n현재 잔액: ' + fmt(balance) + '원\\n필요 금액: ' + fmt(p.price) + '원\\n\\n충전 페이지로 이동하시겠습니까?';
+                  if (confirm(msg)) location.href = '/myroom/mileage/payment/payment_list.html';
+                  return;
+                }
+                if (!confirm('[' + p.title + ']\\n' + fmt(p.price) + '원을 구매하시겠습니까?\\n\\n(에스크로 보호 거래)')) return;
+                buyBtn.disabled = true;
+                fetch('/api/orders', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ productId: p.id, productTitle: p.title, amount: p.price })
+                }).then(function(r) { return r.json(); })
+                  .then(function(order) {
+                    if (order.error) { showToast('구매 실패: ' + order.error, false); buyBtn.disabled = false; return; }
+                    showToast('구매가 완료되었습니다! 판매자와 채팅하세요.', true);
+                    setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
+                  })
+                  .catch(function() { showToast('오류가 발생했습니다. 다시 시도해주세요.', false); buyBtn.disabled = false; });
+              })
+              .catch(function() { showToast('잔액을 확인할 수 없습니다.', false); });
+            return;
+          }
+          if (Number(user.id) === Number(p.sellerId)) {
             showToast('자신의 상품은 구매할 수 없습니다.', false); return;
           }
 
-          if (type !== 'sell') {
-            // 판매 신청하기 (구매글에서 판매자가 신청) → 채팅방 생성 후 바로 이동
-            buyBtn.disabled = true;
-            fetch('/api/chat/rooms', {
-              method: 'POST', credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
-            }).then(function(r) { return r.json(); })
-            .then(function(room) {
-              if (room && room.id) {
-                location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
-              } else {
-                showToast('채팅방 생성에 실패했습니다.', false);
-                buyBtn.disabled = false;
-              }
-            }).catch(function() { showToast('오류가 발생했습니다.', false); buyBtn.disabled = false; });
-            return;
-          }
-
-          // 잔액 확인 후 구매 (판매글에서 구매자가 구매)
-          fetch('/api/wallet', { credentials: 'include' })
-            .then(function(r) { return r.json(); })
-            .then(function(w) {
-              var balance = Number(w.balance) || 0;
-              if (balance < p.price) {
-                var msg = '잔액이 부족합니다.\n현재 잔액: ' + fmt(balance) + '원\n필요 금액: ' + fmt(p.price) + '원\n\n충전 페이지로 이동하시겠습니까?';
-                if (confirm(msg)) location.href = '/myroom/mileage/payment/payment_list.html';
-                return;
-              }
-              if (!confirm('[' + p.title + ']\n' + fmt(p.price) + '원을 구매하시겠습니까?\n\n(에스크로 보호 거래)')) return;
-
-              fetch('/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                  productId: p.id,
-                  productTitle: p.title,
-                  amount: p.price,
-                  sellerId: p.sellerId
-                })
-              })
-              .then(function(r) { return r.json(); })
-              .then(function(order) {
-                if (order.error) { showToast('구매 실패: ' + order.error, false); return; }
-                showToast('구매가 완료되었습니다! 판매자와 채팅하세요.', true);
-                setTimeout(function() { location.href = '/myroom/index.html'; }, 1800);
-              })
-              .catch(function() { showToast('오류가 발생했습니다. 다시 시도해주세요.', false); });
+          buyBtn.disabled = true;
+          fetch('/api/chat/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ productId: Number(p.id), sellerId: Number(p.sellerId) })
+          }).then(function(r) {
+            return r.json().then(function(room) {
+              if (!r.ok || !room.id) throw new Error(room.error || '채팅방을 열 수 없습니다.');
+              return room;
             });
+          }).then(function(room) {
+            location.href = '/myroom/chat/new_chat.html?roomId=' + encodeURIComponent(room.id);
+          }).catch(function(err) {
+            showToast(err.message || '구매신청에 실패했습니다.', false);
+            buyBtn.disabled = false;
+          });
         });
       });
     }
@@ -6727,7 +7174,10 @@ const APPLICATION_DYNAMIC_SCRIPT = `
             try{sessionStorage.setItem('_im_login_next',location.href);}catch(ex){} location.href = '/login';
             return;
           }
-          if (!p || !p.sellerId) { location.href = '/myroom/chat/list.html'; return; }
+          if (!p || !p.sellerId) {
+            alert('이 글은 이 사이트의 판매자 계정과 연결되어 있지 않아 채팅할 수 없습니다.');
+            return;
+          }
           if (Number(p.sellerId) === Number(user.id)) {
             location.href = '/myroom/chat/list.html'; return;
           }
@@ -6755,8 +7205,8 @@ const APPLICATION_DYNAMIC_SCRIPT = `
               var w3 = opener3('/myroom/chat/new_chat.html?roomId=' + room.id, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
               if (!w3 || w3.closed) { w3 = opener3('/myroom/chat/new_chat.html?roomId=' + room.id, '_blank'); }
               if (!w3 || w3.closed) { location.href = '/myroom/chat/new_chat.html?roomId=' + room.id; }
-            } else { location.href = '/myroom/chat/list.html'; }
-          }).catch(function() { location.href = '/myroom/chat/list.html'; });
+            } else { alert(room.error || '채팅방을 열 수 없습니다.'); }
+          }).catch(function() { alert('채팅방을 열 수 없습니다.'); });
         });
       });
     }
@@ -6823,10 +7273,10 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       if (creditMark && p.sellerId) {
         creditMark.setAttribute('data-seller-id', String(p.sellerId));
         ALL_G.forEach(function(g) { creditMark.classList.remove(g); });
-        var gk = p.sellerGrade && (GRADE_LTR as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
+        var gk = p.sellerGrade && GRADE_LTR[p.sellerGrade] ? p.sellerGrade : null;
         if (gk) {
           creditMark.classList.add(gk);
-          creditMark.textContent = (GRADE_LTR as Record<string,string>)[gk];
+          creditMark.textContent = GRADE_LTR[gk];
         } else {
           creditMark.classList.add('regular');
           creditMark.textContent = '';
@@ -6836,14 +7286,24 @@ const APPLICATION_DYNAMIC_SCRIPT = `
       var vipTxt = document.querySelector('.vip_txt');
       if (vipTxt && p.sellerId) {
         vipTxt.setAttribute('data-seller-id', String(p.sellerId));
-        var gk2 = p.sellerGrade && (GRADE_NM as Record<string,string>)[p.sellerGrade] ? p.sellerGrade : null;
-        vipTxt.textContent = gk2 ? (GRADE_NM as Record<string,string>)[gk2] : '';
+        var gk2 = p.sellerGrade && GRADE_NM[p.sellerGrade] ? p.sellerGrade : null;
+        vipTxt.textContent = gk2 ? GRADE_NM[gk2] : '';
       }
-      // 판매자명 (.user_nick / .user_info strong)
+      // The only existing strong in some snapshots is .vip_txt (the grade
+      // label). Never replace it with the seller's name.
       if (p.sellerName) {
         var sellerEl = document.querySelector('.user_nick, .user_info strong:not(.vip_txt)');
-        if (!sellerEl) sellerEl = document.querySelector('.user_info strong');
         if (sellerEl) sellerEl.textContent = p.sellerName;
+        else {
+          var userInfo = document.querySelector('.user_info');
+          if (userInfo) {
+            sellerEl = document.createElement('strong');
+            sellerEl.className = 'user_nick';
+            sellerEl.style.cssText = 'font-size:15px;font-weight:700;margin-right:6px';
+            sellerEl.textContent = p.sellerName;
+            userInfo.insertBefore(sellerEl, userInfo.firstChild);
+          }
+        }
       }
     })();
 
@@ -7207,6 +7667,16 @@ const BUY_INTERCEPT_SCRIPT = `
 </script>
 `;
 
+const BUY_CHAT_HEAD_INTERCEPT = `<script>
+document.addEventListener('click', function(e) {
+  var btn = e.target && e.target.closest ? e.target.closest('button.go_chat, button[name=go_chat]') : null;
+  if (!btn) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (window._im_on_buy_chat) window._im_on_buy_chat();
+}, true);
+</script>`;
+
 const BUY_APPLICATION_INTERCEPT_SCRIPT = `
 <script>
 (function() {
@@ -7224,20 +7694,24 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     location.href = '/login';
   }
 
-  function showSuccessModal(msg) {
-    var overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-    overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:36px 32px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">' +
-      '<div style="font-size:40px;margin-bottom:12px">✅</div>' +
-      '<div style="font-size:20px;font-weight:700;margin-bottom:8px;color:#2e2e2e">' + msg + '</div>' +
-      '<div style="font-size:14px;color:#767676;margin-bottom:24px">채팅창에서 판매자와 거래를 진행해 주세요.</div>' +
-      '<button id="_im_modal_ok" style="padding:12px 40px;border:none;border-radius:8px;background:#159EFD;color:#fff;font-size:15px;font-weight:700;cursor:pointer">확인</button>' +
-    '</div>';
-    document.body.appendChild(overlay);
-    document.getElementById('_im_modal_ok').onclick = function(){ document.body.removeChild(overlay); };
+  function showApplicationToast(msg, error) {
+    var previous = document.getElementById('_im_sale_application_toast');
+    if (previous) previous.remove();
+    var toast = document.createElement('div');
+    toast.id = '_im_sale_application_toast';
+    toast.setAttribute('role', error ? 'alert' : 'status');
+    toast.style.cssText = 'position:fixed;top:24px;right:24px;z-index:2147483647;' +
+      'background:#fff;color:#222;border-left:4px solid ' + (error ? '#e53e3e' : '#00b767') + ';' +
+      'border-radius:8px;padding:15px 20px;box-shadow:0 5px 24px rgba(0,0,0,.2);' +
+      'font-size:15px;font-weight:700;max-width:320px';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 4000);
   }
+  window._im_notify_sale_application = showApplicationToast;
 
   var _loggedIn = null;
+  var applicationPending = false;
   function checkLogin() {
     if (_loggedIn !== null) return Promise.resolve(_loggedIn);
     return window._IM_auth().then(function(d){ _loggedIn = !!(d && d.id); return _loggedIn; });
@@ -7343,6 +7817,85 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     if (pm) pm.textContent = total;
   }
 
+  function openProductLoginPopup(p, intent) {
+    if (!p || !p.id || !p.sellerId) {
+      showApplicationToast('채팅할 상대방 정보를 찾을 수 없습니다.', true);
+      return false;
+    }
+    var returnPath = location.pathname + location.search;
+    var popup = (window._nativeOpen || window.open.bind(window))(
+      'about:blank', 'im_product_chat_' + p.id, 'width=900,height=700,resizable=yes,scrollbars=yes'
+    );
+    if (!popup || popup.closed) {
+      showApplicationToast('채팅 팝업을 허용한 뒤 다시 시도해 주세요.', true);
+      return false;
+    }
+    try {
+      popup.document.body.textContent = '로그인 후 채팅방을 준비 중입니다...';
+      popup.sessionStorage.setItem('_im_login_next', returnPath);
+      popup.sessionStorage.removeItem('_im_chat_after_login');
+      popup.sessionStorage.removeItem('_im_sale_after_login');
+      popup.sessionStorage.setItem('_im_product_chat_after_login', JSON.stringify({
+        returnPath: returnPath, productId: Number(p.id), buyerId: Number(p.sellerId), intent: intent
+      }));
+      popup.location.replace('/login?returnUrl=' + encodeURIComponent(returnPath));
+    } catch(ex) {
+      popup.close();
+      showApplicationToast('로그인 팝업을 열 수 없습니다. 다시 시도해 주세요.', true);
+    }
+    return false;
+  }
+
+  function openBuyProductChat(user, resumed) {
+    var p = window.__PRODUCT__;
+    if (!p || !p.sellerId) {
+      alert('이 상품은 채팅할 상대방 정보가 없습니다.');
+      return;
+    }
+    if (Number(p.sellerId) === Number(user.id)) {
+      alert('자신의 글에는 채팅할 수 없습니다.');
+      return;
+    }
+    var isLoginPopup = resumed && window.opener && window.name.indexOf('im_product_chat_') === 0;
+    var popup = isLoginPopup ? window : (window._nativeOpen || window.open.bind(window))(
+      'about:blank', 'im_product_chat_' + p.id, 'width=900,height=700,resizable=yes,scrollbars=yes'
+    );
+    if (!popup || popup.closed) {
+      alert('채팅 팝업을 허용한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    if (popup && popup !== window && !popup.closed) {
+      try { popup.document.body.textContent = '채팅방을 준비 중입니다...'; } catch(ex) {}
+    }
+    fetch('/api/chat/rooms', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buyerId: Number(p.sellerId), productId: Number(p.id) })
+    }).then(function(r) {
+      return r.json().then(function(room) {
+        if (!r.ok) throw new Error(room.error || '채팅방을 만들 수 없습니다.');
+        return room;
+      });
+    }).then(function(room) {
+      if (!room || !room.id) throw new Error('채팅방을 찾을 수 없습니다.');
+      var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
+      if (popup && !popup.closed) popup.location.replace(chatUrl);
+      else alert('채팅 팝업이 닫혔습니다. 다시 시도해 주세요.');
+    }).catch(function(err) {
+      if (popup && popup !== window && !popup.closed) popup.close();
+      alert(err.message || '채팅방을 열 수 없습니다.');
+    });
+  }
+
+  window._im_on_buy_chat = function() {
+    var user = window._IM_USER;
+    if (!user || !user.id) {
+      return openProductLoginPopup(window.__PRODUCT__ || {}, 'chat');
+    }
+    openBuyProductChat(user, false);
+    return false;
+  };
+
   function init() {
     updateBuyerInfo();
 
@@ -7352,7 +7905,7 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
       if (_prod && _prod.gameName) {
         var _gsInp = document.getElementById('searchGameServer');
         if (_gsInp) _gsInp.value = _prod.gameName;
-        var _gsInp2 = document.querySelector('input.search_gs_name[id!=searchGameServer]');
+        var _gsInp2 = document.querySelector('input.search_gs_name:not(#searchGameServer)');
         if (_gsInp2) _gsInp2.value = _prod.gameName;
       }
     })();
@@ -7369,44 +7922,6 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
     if (form) {
       form.addEventListener('submit', function(e){ e.preventDefault(); e.stopImmediatePropagation(); }, true);
     }
-
-    // 채팅 버튼 (.go_chat) → 이 구매글을 올린 사람(구매자)과 채팅방 생성 후 이동
-    document.querySelectorAll('button.go_chat, button[name=go_chat]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        window._IM_auth().then(function(user) {
-          if (!user || !user.id) { showLoginModal(); return; }
-          var p = window.__PRODUCT__;
-          function openList() {
-            var nOpen0 = window._nativeOpen || window.open.bind(window);
-            var w0 = nOpen0('/myroom/chat/list.html', 'im_chat_list', 'width=900,height=700,resizable=yes,scrollbars=yes');
-            if (!w0 || w0.closed) { location.href = '/myroom/chat/list.html'; }
-          }
-          if (!p || !p.sellerId) { openList(); return; }
-          if (Number(p.sellerId) === Number(user.id)) {
-            alert('자신의 글에는 채팅할 수 없습니다.'); return;
-          }
-          fetch('/api/chat/rooms', {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              buyerId: Number(p.sellerId),
-              productId: p.id ? Number(p.id) : undefined
-            })
-          }).then(function(r) { return r.json(); })
-          .then(function(room) {
-            var nOpen = window._nativeOpen || window.open.bind(window);
-            if (room && room.id) {
-              var chatUrl = '/myroom/chat/new_chat.html?roomId=' + room.id;
-              var w = nOpen(chatUrl, '_chat_' + room.id, 'width=900,height=700,resizable=yes,scrollbars=yes');
-              if (!w || w.closed) { location.href = chatUrl; }
-            } else {
-              openList();
-            }
-          }).catch(function() { openList(); });
-        });
-      }, true);
-    });
 
     // 찜하기 버튼
     document.querySelectorAll('button.btn_fav, button.btn_fav2').forEach(function(btn) {
@@ -7446,37 +7961,84 @@ const BUY_APPLICATION_INTERCEPT_SCRIPT = `
         }
       }
     });
+
+    // 로그인 직전 누른 채팅 요청을 같은 상품에서 한 번만 재개
+    try {
+      var currentPath = location.pathname + location.search;
+      var isChatPopup = window.opener && window.name.indexOf('im_product_chat_') === 0;
+      if (isChatPopup && window._IM_USER && window._IM_USER.id) {
+        if (sessionStorage.getItem('_im_sale_after_login') === currentPath) {
+          sessionStorage.removeItem('_im_sale_after_login');
+          var saleBtn = document.querySelector('button.btn_green');
+          if (saleBtn) window._im_on_sell_btn(saleBtn, true);
+        } else if (sessionStorage.getItem('_im_chat_after_login') === currentPath) {
+          sessionStorage.removeItem('_im_chat_after_login');
+          openBuyProductChat(window._IM_USER, true);
+        }
+      }
+    } catch(ex) {}
   }
 
   // ── 판매신청 버튼 핸들러: IIFE 최상위에서 즉시 등록 (DOMContentLoaded 대기 없음) ──
-  window._im_on_sell_btn = function(btn) {
+  window._im_on_sell_btn = function(btn, resumed) {
+    if (applicationPending) return false;
     var user = window._IM_USER;
     if (!user || !user.id) {
-      try { sessionStorage.setItem('_im_login_next', location.href); } catch(ex) {}
-      location.href = '/login';
-      return false;
+      return openProductLoginPopup(window.__PRODUCT__ || {}, 'sale');
     }
     var p = window.__PRODUCT__;
-    if (!p || !p.sellerId) { showSuccessModal('판매신청이 완료되었습니다'); return false; }
+    if (!p || !p.id || !p.sellerId) {
+      showApplicationToast('채팅할 구매자 정보를 찾을 수 없습니다.', true);
+      return false;
+    }
+    if (Number(p.sellerId) === Number(user.id)) {
+      showApplicationToast('자신의 글에는 판매신청할 수 없습니다.', true);
+      return false;
+    }
+    var popup = resumed && window.opener && window.name.indexOf('im_product_chat_') === 0
+      ? window
+      : (window._nativeOpen || window.open.bind(window))(
+          'about:blank', 'im_product_chat_' + p.id, 'width=900,height=700,resizable=yes,scrollbars=yes'
+        );
+    if (!popup || popup.closed) {
+      showApplicationToast('채팅 팝업을 허용한 뒤 다시 시도해 주세요.', true);
+      return false;
+    }
+    if (popup !== window) {
+      try { popup.document.body.textContent = '채팅방을 준비 중입니다...'; } catch(ex) {}
+      try { popup.blur(); window.focus(); } catch(ex) {}
+    }
+    applicationPending = true;
+    var originalLabel = btn.textContent;
     btn.disabled = true;
     btn.textContent = '처리 중...';
     fetch('/api/chat/rooms', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ buyerId: Number(p.sellerId), productId: p.id ? Number(p.id) : undefined })
-    }).then(function(r) { return r.json(); })
+      body: JSON.stringify({ buyerId: Number(p.sellerId), productId: Number(p.id) })
+    }).then(function(r) {
+      return r.json().then(function(room) {
+        if (!r.ok) throw new Error(room.error || '판매신청에 실패했습니다.');
+        return room;
+      });
+    })
     .then(function(room) {
-      if (room && room.id) {
-        location.href = '/myroom/chat/new_chat.html?roomId=' + room.id;
+      if (!room || !room.id) throw new Error('채팅방을 열 수 없습니다.');
+      if (popup.closed) throw new Error('채팅 팝업이 닫혔습니다. 다시 시도해 주세요.');
+      if (popup === window && window.opener && !window.opener.closed && window.opener._im_notify_sale_application) {
+        window.opener._im_notify_sale_application('판매신청이 되었습니다', false);
       } else {
-        showSuccessModal('판매신청이 완료되었습니다');
-        btn.disabled = false;
-        btn.textContent = '판매신청';
+        showApplicationToast('판매신청이 되었습니다', false);
       }
-    }).catch(function() {
-      showSuccessModal('판매신청이 완료되었습니다');
+      popup.location.replace('/myroom/chat/new_chat.html?roomId=' + room.id);
+      setTimeout(function() { if (!popup.closed) popup.focus(); }, 700);
+    }).catch(function(err) {
+      if (popup !== window && !popup.closed) popup.close();
+      showApplicationToast(err.message || '판매신청에 실패했습니다.', true);
+    }).finally(function() {
+      applicationPending = false;
       btn.disabled = false;
-      btn.textContent = '판매신청';
+      btn.textContent = originalLabel;
     });
     return false;
   };
@@ -7509,7 +8071,7 @@ function serveBuyApplication(html: string, user: Record<string, unknown> | null 
   if (product) {
     // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체 (serveApplication과 동일)
     result = applyProductToHtml(result, product, siteUrl);
-    const ps = buildProductScript(product);
+    const ps = BUY_CHAT_HEAD_INTERCEPT + buildProductScript(product);
     result = result.includes("<head>")
       ? result.replace("<head>", "<head>" + ps)
       : result.replace("<body", ps + "<body");
@@ -7528,6 +8090,10 @@ function serveBuyApplication(html: string, user: Record<string, unknown> | null 
   result = result.replace(
     '<button type=button class=btn_green>판매신청</button>',
     '<button type=button class=btn_green onclick="window._im_on_sell_btn&&window._im_on_sell_btn(this);return false;">판매신청</button>'
+  );
+  result = result.replace(
+    '<button type=button class=go_chat name=go_chat>채팅</button>',
+    '<button type=button class=go_chat name=go_chat onclick="window._im_on_buy_chat&&window._im_on_buy_chat();return false;">채팅</button>'
   );
   const combined = BUY_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   return result.includes("</body>")
@@ -7732,10 +8298,15 @@ function applyProductToHtml(html: string, p: Record<string, unknown>, siteUrl = 
     : '0점';
   r = r.replace(/<span class="credit_mark [^"]*">[^<]*<\/span>/, `<span class="${gCls}">${gLtr}</span>`);
 
-  // 11. vip_txt 텍스트 + 바로 뒤 신용점수 텍스트 교체
+  // 11. Captured markup wraps the score in a div after vip_txt. Replace
+  // the grade label independently so the static first paint is also correct.
   r = r.replace(
-    /(<strong class=vip_txt>)[^<]*(<\/strong>\s*)[\d,]+점/,
-    `$1${gName}$2${cScore}`
+    /(<strong class=vip_txt>)[^<]*(<\/strong>)/,
+    `$1${gName}$2`
+  );
+  r = r.replace(
+    /(<strong class=vip_txt>[^<]*<\/strong>\s*<div>\s*)[\d,]+점/,
+    `$1${cScore}`
   );
 
   // 12. 거래성사율 progress bar 초기화 (우리 DB에 없음)
@@ -7771,7 +8342,7 @@ function serveApplication(html: string, user: Record<string, unknown> | null = n
     // 서버 사이드에서 스냅샷 HTML 내 하드코딩된 값을 DB 데이터로 직접 교체
     result = applyProductToHtml(result, product, siteUrl);
     // window.__PRODUCT__ 주입 (클라이언트 JS 구매 박스용)
-    const ps = buildProductScript(product);
+    const ps = SELL_CHAT_HEAD_INTERCEPT + buildProductScript(product);
     result = result.includes("<head>")
       ? result.replace("<head>", "<head>" + ps)
       : result.replace("<body", ps + "<body");
@@ -7785,6 +8356,21 @@ function serveApplication(html: string, user: Record<string, unknown> | null = n
         `$1${_nick}$2`,
       );
     }
+  }
+  result = result.replace(
+    '<button type=button class=go_chat name=go_chat>채팅</button>',
+    product && !product.sellerId
+      ? '<button type=button class=go_chat name=go_chat disabled title="이 사이트의 판매자 계정이 연결되지 않았습니다">채팅 불가</button><span style="display:block;margin-top:6px;font-size:12px;color:#666">이 글은 이 사이트의 판매자 계정과 연결되어 있지 않아 채팅할 수 없습니다.</span>'
+      : '<button type=button class=go_chat name=go_chat onclick="window._im_on_sell_chat&&window._im_on_sell_chat();return false;">채팅</button>'
+  );
+  if (product) {
+    const purchaseButton = '<button type=button>구매신청</button>';
+    const replacement = product.status !== 'active'
+      ? '<button type=button disabled title="현재 거래할 수 없는 상품입니다">구매신청 불가</button>'
+      : !product.sellerId
+        ? '<button type=button disabled title="이 사이트의 판매자 계정이 연결되지 않았습니다">구매신청 불가</button>'
+        : '<button type=button data-im-purchase onclick="window._im_on_purchase&&window._im_on_purchase(this);return false;">구매신청</button>';
+    result = result.replaceAll(purchaseButton, replacement);
   }
   const combined = SELL_APPLICATION_INTERCEPT_SCRIPT + APPLICATION_DYNAMIC_SCRIPT;
   if (result.includes("</body>")) {
@@ -8010,6 +8596,7 @@ function servePaymentPhone(html: string, user: Record<string, unknown> | null = 
 
 function serveChatNew(html: string, user: Record<string, unknown> | null = null): string {
   let result = prepare(html, user);
+  result = result.replace("<div class=chat_room>", '<div class=chat_room style="visibility:hidden">');
 
   // buy_check_layer: 빈 레이어를 buycheck 파일의 전체 레이어로 교체
   if (chatNewBuycheckHtml) {
@@ -8719,6 +9306,84 @@ function showToast(title, body) {
 </html>`);
 });
 
+// PC 브라우저에서도 실제 데스크톱 화면에 영향을 주지 않고 모바일 화면을 볼 수 있다.
+function renderMobilePreviewFrame(src: string, title: string): string {
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>html,body{margin:0;min-height:100%;background:#e9edf2}iframe{display:block;margin:0 auto;width:min(461px,100vw);height:100dvh;border:0;background:#fff;box-shadow:0 0 24px #0002}</style>
+</head><body><iframe src="${src}" title="${title}"></iframe></body></html>`;
+}
+router.get("/mobile-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/?mobile=1", "모바일 홈 미리보기"));
+});
+router.get("/mobile-login-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/login?mobile=1", "모바일 로그인 미리보기"));
+});
+router.get("/mobile-chat-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/myroom/chat/list.html?mobile=1", "모바일 채팅 미리보기"));
+});
+router.get("/mobile-myroom-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/myroom/index.html?mobile=1", "모바일 마이룸 미리보기"));
+});
+router.get("/mobile-game-search-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/mobile-game-search?mode=search&mobile=1", "모바일 게임 검색 미리보기"));
+});
+router.get("/mobile-sell-register-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/sell/register.html?search_game=5990&mobile=1", "모바일 상품등록 미리보기"));
+});
+router.get("/mobile-sell-item-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/sell/register.html?search_game=5990&itemCategory=item&mobile=1", "모바일 아이템 등록 미리보기"));
+});
+router.get("/mobile-sell-account-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/sell/register.html?search_game=5990&itemCategory=account&mobile=1", "모바일 계정 등록 미리보기"));
+});
+router.get("/mobile-sell-other-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/sell/register.html?search_game=5990&itemCategory=other&mobile=1", "모바일 기타 등록 미리보기"));
+});
+router.get("/mobile-buy-meso-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/buy/register.html?search_game=5990&mobile=1", "모바일 메소 구매등록 미리보기"));
+});
+router.get("/mobile-buy-item-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/buy/register.html?search_game=5990&itemCategory=item&mobile=1", "모바일 아이템 구매등록 미리보기"));
+});
+router.get("/mobile-buy-item-detail-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/buy/register.html?search_game=5990&itemCategory=item&step=detail&mobile=1", "모바일 아이템 구매 입력 미리보기"));
+});
+router.get("/mobile-buy-account-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/buy/register.html?search_game=5990&itemCategory=account&mobile=1", "모바일 계정 구매등록 미리보기"));
+});
+router.get("/mobile-buy-other-preview", (_req, res): void => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(renderMobilePreviewFrame("/buy/register.html?search_game=5990&itemCategory=other&mobile=1", "모바일 기타 구매등록 미리보기"));
+});
+router.get("/mobile-game-search", (req, res): void => {
+  const mobile = /Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1";
+  if (!mobile) {
+    res.redirect(302, "/");
+    return;
+  }
+  if (!mobileGameSearchHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.type("html").send(mobileGameSearchHtml);
+});
+
 // 루트 접속 → 아이템마니아 메인으로 리다이렉트
 router.get(["/", ""], async (req, res): Promise<void> => {
   if (!staticHtml) {
@@ -8729,7 +9394,13 @@ router.get(["/", ""], async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
 
-  res.send(serveItemmania(staticHtml, user));
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  const page = serveItemmania(staticHtml, user, mobile);
+  // "PC버전" 링크를 선택한 휴대폰은 데스크톱 폭으로 렌더링한다.
+  res.send(mobile || req.query.pc !== "1"
+    ? page
+    : page.replace(/<meta name=viewport content="width=device-width,initial-scale=1\.0">/, '<meta name=viewport content="width=1080">'));
 });
 
 // React 앱 경로 → 아이템마니아 클론으로 리다이렉트
@@ -8755,16 +9426,19 @@ async function handleLegacyLogin(req: Parameters<typeof router.get>[1] extends (
   }
   try {
     let [user] = await db.select().from(usersTable).where(eq(usersTable.email, userId));
+    let autoCreated = false;
     if (!user) {
+      if ((await getRegistrationPolicy()).blocked) throw new RegistrationBlockedError();
       const passwordHash = await bcrypt.hash(userPw, 12);
       const nickname = userId.includes("@") ? userId.split("@")[0] : userId;
-      const [created] = await db.insert(usersTable).values({
+      const result = await createMemberAccount({
         email: userId, nickname, phone: null, passwordHash, role: "user",
         grade: "bronze", creditScore: 220,
-      }).returning();
-      await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
-      user = created;
-    } else {
+      });
+      user = result.user;
+      autoCreated = result.created;
+    }
+    if (!autoCreated) {
       const valid = await bcrypt.compare(userPw, user.passwordHash);
       if (!valid) {
         res.redirect(302, "/login?error=wrong_password");
@@ -8776,6 +9450,10 @@ async function handleLegacyLogin(req: Parameters<typeof router.get>[1] extends (
     const returnUrl = String((req as unknown as { query: Record<string, string> }).query.returnUrl || "/");
     res.redirect(302, returnUrl.startsWith("/") ? returnUrl : "/");
   } catch (err) {
+    if (err instanceof RegistrationBlockedError) {
+      res.status(403).type("html").send('<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><p>현재 신규 가입이 중단되었습니다. 기존 회원은 로그인할 수 있습니다.</p><a href="/login">로그인 화면으로</a></html>');
+      return;
+    }
     req.log.error({ err }, "legacy login error");
     res.redirect(302, "/login?error=server");
   }
@@ -8837,6 +9515,14 @@ router.get(["/myroom", "/myroom/"], async (req, res): Promise<void> => {
 router.get(
   ["/portal/user/p_login_form.html", "/login"],
   async (req, res): Promise<void> => {
+    const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+      && req.query.pc !== "1";
+    if (mobile) {
+      res.set("Content-Type", "text/html; charset=utf-8");
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.send(renderMobileLogin(mobileLoginFontStyles).replace("</body>", LOGIN_INTERCEPT_SCRIPT + "</body>"));
+      return;
+    }
     if (!loginHtml) {
       res.status(503).send("<html><body><h2>로그인 페이지를 불러올 수 없습니다</h2></body></html>");
       return;
@@ -8892,6 +9578,29 @@ router.get(
   ["/sell/list.html", "/sell/lineage-classic", "/sell/maplestory-world"],
   async (req, res): Promise<void> => {
     const game = String(req.query["search_game"] ?? "");
+    const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+      && req.query.pc !== "1";
+    if (mobile) {
+      const mobileGame = game || (req.path === "/sell/lineage-classic" ? "5913" : req.path === "/sell/maplestory-world" ? "5233" : "");
+      if (!mobileGame) {
+        res.redirect(302, `/mobile-game-search?mode=search${req.query.mobile === "1" ? "&mobile=1" : ""}`);
+        return;
+      }
+      const selected = /^\d{1,8}$/.test(mobileGame) ? await findGameByCode(mobileGame) : null;
+      if (!selected) {
+        res.status(404).send("해당 게임을 찾을 수 없습니다.");
+        return;
+      }
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.type("html").send(renderMobileProductList({
+        game: { code: mobileGame, name: selected.name, servers: selected.servers.map(server => server.name) },
+        side: "sell",
+        items: [],
+        fontFaceStyles: mobileLoginFontStyles,
+        initialCategory: typeof req.query.itemCategory === "string" ? req.query.itemCategory : undefined,
+      }));
+      return;
+    }
 
     // 게임 ID → HTML 선택
     let html: string;
@@ -8938,6 +9647,30 @@ router.get("/sell/list.html", async (req, res): Promise<void> => {
 
 // 판매등록 페이지
 router.get(["/sell/register.html", "/sell/", "/sell"], async (req, res): Promise<void> => {
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  if (mobile && req.path === "/sell/register.html") {
+    const code = typeof req.query.search_game === "string" ? req.query.search_game : "";
+    if (!code) {
+      res.redirect(302, `/mobile-game-search?mode=sell${req.query.mobile === "1" ? "&mobile=1" : ""}`);
+      return;
+    }
+    if (!/^\d{1,8}$/.test(code)) {
+      res.status(400).send("올바른 게임 코드를 입력해 주세요.");
+      return;
+    }
+    const game = await findGameByCode(code);
+    if (!game) {
+      res.status(404).send("해당 게임을 찾을 수 없습니다.");
+      return;
+    }
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.type("html").send(renderMobileSellRegister(
+      { name: game.name, code, servers: game.servers.map(server => server.name) },
+      join(STATIC_DIR, "mobile-sell-assets"),
+    ));
+    return;
+  }
   if (!sellRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -9193,6 +9926,30 @@ router.get("/buy/index_view.html", async (req, res): Promise<void> => {
 
 // 구매등록 페이지
 router.get("/buy/register.html", async (req, res): Promise<void> => {
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  if (mobile) {
+    const code = typeof req.query.search_game === "string" ? req.query.search_game : "";
+    if (!code) {
+      res.redirect(302, `/mobile-game-search?mode=buy${req.query.mobile === "1" ? "&mobile=1" : ""}`);
+      return;
+    }
+    if (!/^\d{1,8}$/.test(code)) {
+      res.status(400).send("올바른 게임 코드를 입력해 주세요.");
+      return;
+    }
+    const game = await findGameByCode(code);
+    if (!game) {
+      res.status(404).send("해당 게임을 찾을 수 없습니다.");
+      return;
+    }
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.type("html").send(renderMobileBuyRegister(
+      { name: game.name, code, servers: game.servers.map(server => server.name) },
+      join(STATIC_DIR, "mobile-sell-assets"),
+    ));
+    return;
+  }
   if (!buyRegisterHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -9271,6 +10028,14 @@ router.get(["/myroom/mileage/charge/", "/myroom/mileage/charge"], async (req, re
 
 // 마이룸 페이지
 router.get(["/myroom/index.html", "/myroom/", "/myroom"], async (req, res): Promise<void> => {
+  const mobile = /Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1";
+  if (mobile) {
+    const user = await getSessionUser(req);
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.send(renderMobileMyroom(user, mobileFooterBadges));
+    return;
+  }
   if (!myroomHtml) {
     res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
     return;
@@ -9360,7 +10125,7 @@ router.get("/myroom/batch_goods/index.html", async (req, res): Promise<void> => 
 // 상품 상세 구매 신청 페이지 (/sell/application.html?id=...)
 /**
  * 상품 ID로 DB 조회 후 판매자/구매자 실제 nickname·grade를 포함한 product 객체 반환.
- * sellerId가 없을 경우 sellerName(이메일/닉네임)으로 users 테이블 fallback 조회.
+ * 회원이 직접 등록한 글에 저장된 sellerId만 로컬 회원과 연결한다.
  */
 async function resolveProductByRawId(rawId: string): Promise<Record<string, unknown> | null> {
   // 숫자이면 DB 내부 id로 먼저 조회, 실패하면 itemmaniaid로 재시도
@@ -9383,7 +10148,7 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
 
   let resolvedName = p.sellerName;
   let resolvedGrade = p.sellerGrade;
-  let resolvedSellerId = p.sellerId;
+  let resolvedSellerId = localProductSellerId(p);
   let resolvedCreditScore: number | null = null;
   let resolvedAuthStates: Record<string, boolean> | null = null;
 
@@ -9395,17 +10160,10 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
     resolvedAuthStates = (u.authStates as Record<string, boolean>) ?? null;
   }
 
-  if (p.sellerId) {
-    const [u] = await db.select().from(usersTable).where(eq(usersTable.id, p.sellerId));
+  if (resolvedSellerId) {
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.id, resolvedSellerId));
     if (u) await applyUser(u);
-  } else if (p.sellerName) {
-    const [u] = await db.select().from(usersTable).where(eq(usersTable.email, p.sellerName));
-    if (u) {
-      await applyUser(u);
-    } else {
-      const [u2] = await db.select().from(usersTable).where(eq(usersTable.nickname, p.sellerName));
-      if (u2) await applyUser(u2);
-    }
+    else resolvedSellerId = null;
   }
 
   // 게임 코드 조회 (OG 이미지 URL 생성용)
@@ -9417,7 +10175,7 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
   }
 
   return {
-    id: p.id, title: p.title, price: Number(p.price),
+    id: p.id, title: p.title, price: Number(p.price), category: p.category,
     gameName: p.gameName, serverName: p.serverName, itemCategory: p.itemCategory,
     sellerName: resolvedName, description: p.description,
     sellerId: resolvedSellerId, sellerGrade: resolvedGrade,
@@ -9429,10 +10187,6 @@ async function resolveProductWithUser(productId: number): Promise<Record<string,
 }
 
 router.get("/sell/application.html", async (req, res): Promise<void> => {
-  if (!sellApplicationHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
-    return;
-  }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
@@ -9441,6 +10195,27 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
   const rawId = String(Array.isArray(req.query.id) ? req.query.id[0] : req.query.id ?? "").trim();
   if (rawId) {
     product = await resolveProductByRawId(rawId);
+  }
+
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  if (mobile) {
+    if (!product) {
+      res.status(404).send('<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width,initial-scale=1"><title>판매글을 찾을 수 없습니다</title><body style="font:16px sans-serif;padding:24px">판매글을 찾을 수 없습니다. <a href="/sell/list.html">목록으로 돌아가기</a></body></html>');
+      return;
+    }
+    if (product.category === "buy") {
+      res.redirect(302, `/buy/application.html?id=${encodeURIComponent(String(product.id))}${req.query.mobile === "1" ? "&mobile=1" : ""}`);
+      return;
+    }
+    if (product.sellerId) {
+      res.send(renderMobileSellDetail(product, user, join(STATIC_DIR, "mobile-sell-assets")));
+      return;
+    }
+  }
+  if (!sellApplicationHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
   }
 
   const publicHost = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
@@ -9456,10 +10231,6 @@ router.get("/sell/application.html", async (req, res): Promise<void> => {
 
 // 삽니다 상세 페이지 (/buy/application.html?id=...)
 router.get("/buy/application.html", async (req, res): Promise<void> => {
-  if (!buyApplicationHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
-    return;
-  }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const user = await getSessionUser(req);
@@ -9468,6 +10239,27 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
   const rawIdB = String(Array.isArray(req.query.id) ? req.query.id[0] : req.query.id ?? "").trim();
   if (rawIdB) {
     product = await resolveProductByRawId(rawIdB);
+  }
+
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  if (mobile) {
+    if (!product) {
+      res.status(404).send('<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width,initial-scale=1"><title>구매글을 찾을 수 없습니다</title><body style="font:16px sans-serif;padding:24px">구매글을 찾을 수 없습니다. <a href="/buy/list.html">목록으로 돌아가기</a></body></html>');
+      return;
+    }
+    if (product.category === "sell") {
+      res.redirect(302, `/sell/application.html?id=${encodeURIComponent(String(product.id))}${req.query.mobile === "1" ? "&mobile=1" : ""}`);
+      return;
+    }
+    if (product.sellerId) {
+      res.send(renderMobileSellDetail(product, user, join(STATIC_DIR, "mobile-sell-assets")));
+      return;
+    }
+  }
+  if (!buyApplicationHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
   }
 
   const publicHostB = process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host') || 'itenmania.com';
@@ -9485,6 +10277,24 @@ router.get("/buy/application.html", async (req, res): Promise<void> => {
 // 삽니다 목록 페이지 (/buy/list.html?search_game=...)
 router.get("/buy/list.html", async (req, res): Promise<void> => {
   const game = String(req.query["search_game"] ?? "");
+  const mobile = (/Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1")
+    && req.query.pc !== "1";
+  if (mobile && game) {
+    const selected = /^\d{1,8}$/.test(game) ? await findGameByCode(game) : null;
+    if (!selected) {
+      res.status(404).send("해당 게임을 찾을 수 없습니다.");
+      return;
+    }
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.type("html").send(renderMobileProductList({
+      game: { code: game, name: selected.name, servers: selected.servers.map(server => server.name) },
+      side: "buy",
+      items: [],
+      fontFaceStyles: mobileLoginFontStyles,
+      initialCategory: typeof req.query.itemCategory === "string" ? req.query.itemCategory : undefined,
+    }));
+    return;
+  }
 
   // search_game 없으면 마이룸 구매등록물품으로 리다이렉트
   if (!game) {
@@ -9533,13 +10343,42 @@ router.get("/buy/", async (req, res): Promise<void> => {
 
 // 개별 채팅방 페이지
 router.get("/myroom/chat/new_chat.html", async (req, res): Promise<void> => {
-  if (!chatNewHtml) {
-    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+  const rawOrderId = String(req.query.orderId ?? "");
+  if (!req.query.roomId && /^[1-9]\d*$/.test(rawOrderId) && Number.isSafeInteger(Number(rawOrderId))) {
+    const user = await getSessionUser(req);
+    if (!user) {
+      res.redirect(302, `/login?returnUrl=${encodeURIComponent(req.originalUrl)}`);
+      return;
+    }
+    const [room] = await db.select().from(chatRoomsTable).where(and(
+      eq(chatRoomsTable.orderId, Number(rawOrderId)),
+      or(eq(chatRoomsTable.buyerId, user.id as number), eq(chatRoomsTable.sellerId, user.id as number)),
+    )).limit(1);
+    res.redirect(302, room
+      ? `/myroom/chat/new_chat.html?roomId=${room.id}${req.query.mobile === "1" ? "&mobile=1" : ""}`
+      : "/myroom/chat/list.html");
     return;
   }
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const mobile = /Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1";
+  if (mobile) {
+    res.send(renderMobileChatRoom(req.session.userId ?? null));
+    return;
+  }
+  if (!chatNewHtml) {
+    res.status(503).send("<html><body><h2>페이지를 불러올 수 없습니다</h2></body></html>");
+    return;
+  }
   const user = await getSessionUser(req);
+  if (!user) {
+    const roomId = String(req.query.roomId ?? "");
+    const returnPath = /^\d+$/.test(roomId)
+      ? `/myroom/chat/new_chat.html?roomId=${roomId}`
+      : "/myroom/chat/list.html";
+    res.redirect(302, `/login?returnUrl=${encodeURIComponent(returnPath)}`);
+    return;
+  }
 
   res.send(serveChatNew(chatNewHtml, user));
 });
@@ -9552,6 +10391,13 @@ router.get("/myroom/chat/new_chat.html", async (req, res): Promise<void> => {
 
 // 매니아 채팅 페이지
 router.get(["/myroom/chat/list.html", "/myroom/chat/"], async (req, res): Promise<void> => {
+  const mobile = /Android|iPhone|iPod|Mobile/i.test(req.get("user-agent") ?? "") || req.query.mobile === "1";
+  if (mobile) {
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.send(renderMobileChat(req.session.userId ?? null));
+    return;
+  }
   const order = req.query["order"];
   const html = order === "1" ? chatOrderedHtml : chatHtml;
   if (!html) {

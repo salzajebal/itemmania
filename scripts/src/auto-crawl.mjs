@@ -27,7 +27,7 @@ const _onceFlag = _args.includes('--once');
 // 수집할 게임 목록
 const ALL_GAMES = [
   { id: 5913, name: '리니지클래식' },
-  { id: 8458, name: '메이플스토리' },
+  { id: 138,  name: '메이플스토리' },
   { id: 5233, name: '메이플스토리월드' },
   { id: 5990, name: '메이플랜드' },
   { id: 281,  name: '던전앤파이터' },
@@ -99,6 +99,10 @@ async function fetchAjaxList(gameId, category, page, retries = 2) {
         req.write(body);
         req.end();
       });
+      if ((result.status === 429 || result.status >= 500) && attempt < retries) {
+        await sleep(1500 * (attempt + 1));
+        continue;
+      }
       return result;
     } catch (e) {
       if (attempt < retries) { await sleep(2000 * (attempt + 1)); continue; }
@@ -111,13 +115,15 @@ async function fetchAjaxList(gameId, category, page, retries = 2) {
 // 실제 확인된 필드: trade_id, trade_subject, trade_money, credit_name_en,
 //   gs_name("게임[서버]"), str_trade_kind, seller_id, trade_reg_date
 function parseProducts(data, gameId, gameName, category) {
-  // p = 프리미엄/전체, g = 일반 목록, pp = 추가 프리미엄
+  // p = 프리미엄, g = 일반 목록 (search_game=138 실응답 확인)
   const items = [
-    ...(Array.isArray(data.p)  ? data.p  : []),
-    ...(Array.isArray(data.g)  ? data.g  : []),
-    ...(Array.isArray(data.pp) ? data.pp : []),
+    ...(Array.isArray(data.p) ? data.p.map(item => ({ ...item, isPremium: true })) : []),
+    ...(Array.isArray(data.g) ? data.g.map(item => ({ ...item, isPremium: false })) : []),
+    // pp는 추가 필드의 의미를 검증하기 전까지 기존 DB 분류를 덮어쓰지 않는다.
+    ...(Array.isArray(data.pp) ? data.pp.map(item => ({ ...item, isPremium: null })) : []),
   ];
 
+  const seenIds = new Set();
   return items.map(item => {
     const price = parseInt(String(item.trade_money ?? '0').replace(/[^0-9]/g, ''), 10) || 0;
 
@@ -152,6 +158,7 @@ function parseProducts(data, gameId, gameName, category) {
       serverName,
       itemCategory,
       category,
+      isPremium: item.isPremium,
       sellerGrade,
       sellerName,
       detailUrl: item.trade_id
@@ -159,7 +166,11 @@ function parseProducts(data, gameId, gameName, category) {
         : null,
       ...(originalCreatedAt && !isNaN(originalCreatedAt.getTime()) && { originalCreatedAt: originalCreatedAt.toISOString() }),
     };
-  }).filter(p => p.itemmaniaid);
+  }).filter(p => {
+    if (!p.itemmaniaid || seenIds.has(p.itemmaniaid)) return false;
+    seenIds.add(p.itemmaniaid);
+    return true;
+  });
 }
 
 // ─── pagging_list HTML에서 총 페이지 수 추출 ─────────────────────────────
@@ -236,14 +247,16 @@ async function runOnce() {
           if (products.length === 0) {
             if (page === 1) {
               const dataKeys = JSON.stringify(Object.keys(data));
-              process.stdout.write(`\n  [데이터없음] keys=${dataKeys}\n`);
+              process.stdout.write(`\n  [실패] 성공 응답에 상품이 없음; keys=${dataKeys}\n`);
             }
+            totalFailed++;
             break;
           }
 
           // 서버에 배치 업로드
           const result = await batchUpload(products);
           const saved = result.upserted ?? 0;
+          totalFailed += result.failed ?? 0;
           gameSaved += saved;
           totalSaved += saved;
           pagesDone++;

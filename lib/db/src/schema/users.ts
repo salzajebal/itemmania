@@ -31,6 +31,9 @@ export const usersTable = pgTable("users", {
   authStates: jsonb("auth_states").$type<AuthStates>().notNull().default(DEFAULT_AUTH_STATES),
   grade: text("grade").default("bronze"),
   creditScore: integer("credit_score").default(220),
+  signupIp: text("signup_ip"),
+  lastLoginIp: text("last_login_ip"),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

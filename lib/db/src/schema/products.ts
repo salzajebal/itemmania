@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, bigint, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, bigint, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,7 @@ export const productsTable = pgTable("products", {
   sellerId: integer("seller_id"),
   sellerName: text("seller_name"),
   sellerGrade: text("seller_grade"),
+  isPremium: boolean("is_premium").notNull().default(false),
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),
   detailUrl: text("detail_url"),

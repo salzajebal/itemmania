@@ -22,7 +22,11 @@ if (Number.isNaN(port) || port <= 0) {
 async function seedAdmin(): Promise<void> {
   try {
     const ADMIN_EMAIL = "admin";
-    const ADMIN_PASSWORD = "admin1234";
+    const ADMIN_PASSWORD = process.env["ADMIN_PASSWORD"];
+    if (!ADMIN_PASSWORD) {
+      logger.warn("ADMIN_PASSWORD가 설정되지 않아 관리자 계정 초기화를 건너뜁니다.");
+      return;
+    }
 
     const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
@@ -60,6 +64,21 @@ const GAME_SEED_DATA: Array<{ name: string; code: string | null; servers: string
   { name: "메이플스토리", code: "8458", servers: ["스카니아","베라","레드","이노시스","크로아","유니온","이든","헤네시스","엘리시움","아케인","나루","루미","오로라","제니스","마리아","홀리"] },
   { name: "메이플스토리월드", code: "5233", servers: ["메이플플래닛","아르테일","로나","메이플스타","바람의나라키우기","기타"] },
   { name: "메이플랜드", code: "5990", servers: ["일반","버닝월드","기타"] },
+  // Codes: itemmania.com/sell/list.html?search_game=5491, 6027, 6028.
+  // Server selectors: itembay.com/item/sell/game-4589/server-16529 (Zeus),
+  // itembay.com/item/sell/game-4572/type-3 (Eclipse); Itemmania's old-baram
+  // listings identify the server as 기타. Checked 2026-09-29.
+  { name: "옛날바람", code: "5491", servers: ["기타"] },
+  { name: "제우스:오만의신", code: "6027", servers: [
+    ...["아테나","아레스","제우스","헤라","포세이돈","아폴론","아르테미스","아프로디테","헤파이스토스","헤르메스","데메테르","디오니소스","하데스"]
+      .flatMap(group => ["01","02","03"].map(number => `${group} ${number}`)),
+    "기타",
+  ] },
+  { name: "이클립스:더어웨이크닝", code: "6028", servers: [
+    ...["헤스카리온","세라하","발키리아","바르카디온","벨제라"]
+      .flatMap(group => ["01","02","03","04","05","06"].map(number => `${group}${number}`)),
+    "기타",
+  ] },
   { name: "마비노기", code: null, servers: ["류트","만돌린","하프","첼로","템페스트","라사","이리아"] },
   { name: "로스트아크", code: null, servers: ["아브렐슈드","아제나","아만","아이기르","안톤","알테이아","실린","카제로스"] },
   { name: "던전앤파이터", code: null, servers: ["안톤","카인","디레지에","시로코","바칼","베가"] },
@@ -118,10 +137,15 @@ async function seedGames(): Promise<void> {
   }
 }
 
-seedAdmin()
-  .then(() => seedGames())
+// 운영 재시작은 기존 데이터에 쓰기를 수행하지 않는다. 관리자가 명시적으로
+// 초기화를 허용한 경우 또는 개발 환경에서만 관리자/게임 시드를 동기화한다.
+const prepareStartup = process.env.NODE_ENV === "development" || process.env.ALLOW_STARTUP_DB_SYNC === "1"
+  ? seedAdmin().then(() => seedGames())
+  : Promise.resolve();
+
+prepareStartup
   .then(() => {
-    app.listen(port, (err) => {
+    app.listen(port, process.env.BIND_HOST || "0.0.0.0", (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);

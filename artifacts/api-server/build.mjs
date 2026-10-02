@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm, copyFile, readFile, writeFile } from "node:fs/promises";
+import { rm, copyFile, readFile, readdir, writeFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -129,6 +129,23 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // The Pino plugin embeds the build machine's absolute dist path in worker bundles.
+  // Resolve it at runtime so the compiled files can also run on the VPS.
+  const bakedOutputDir = `const outputDir = ${JSON.stringify(distDir)};`;
+  let replacements = 0;
+  for (const name of await readdir(distDir)) {
+    if (!name.endsWith(".mjs")) continue;
+    const filename = path.join(distDir, name);
+    const source = await readFile(filename, "utf-8");
+    if (!source.includes(bakedOutputDir)) continue;
+    replacements++;
+    await writeFile(filename, source.replaceAll(
+      bakedOutputDir,
+      'const outputDir = new URL(".", import.meta.url).pathname;',
+    ));
+  }
+  if (replacements === 0) throw new Error("Pino worker output path was not found in the build");
 }
 
 buildAll()

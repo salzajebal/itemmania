@@ -7,3 +7,5 @@ export * from "./withdrawals";
 export * from "./games";
 export * from "./sessions";
 export * from "./notifications";
+export * from "./ip-blocks";
+export * from "./registration-settings";

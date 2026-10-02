@@ -10,7 +10,10 @@ import proxyRouter from "./routes/proxy";
 import adminUiRouter from "./routes/admin-ui";
 import customerUiRouter from "./routes/customer-ui";
 import { logger } from "./lib/logger";
+import { snapshotFontsRouter } from "./lib/snapshot-fonts";
 import { pool } from "@workspace/db";
+import { rejectBlockedIp } from "./lib/ip-blocks";
+import { rejectSuspendedAccount } from "./lib/account-suspension";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +51,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Public content-hashed fonts are served before session loading.
+app.use(snapshotFontsRouter);
 
 const sessionSecret = process.env["SESSION_SECRET"];
 if (!sessionSecret) {
@@ -97,8 +103,8 @@ app.use(memberSessionMw);
 app.use((req: Request, res: Response, next: NextFunction): void => {
   const p = req.path;
   const isAdminPath =
-    p.startsWith("/tkfwkwpqkf") ||
-    p === "/admin-login" ||
+    p === "/banana777" ||
+    p.startsWith("/banana777/") ||
     p.startsWith("/api/admin");
   if (isAdminPath) {
     switchToAdminSession(req, res, next);
@@ -135,6 +141,9 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
 });
 // ─────────────────────────────────────────────────────────────────
 
+app.use(rejectBlockedIp);
+app.use(rejectSuspendedAccount);
+
 // 채팅 이미지 업로드 정적 서빙
 app.use("/chat-images", express.static(path.join(__dirname, "..", "uploads", "chat-images")));
 
@@ -144,7 +153,7 @@ app.use(proxyRouter);
 // /customer 고객센터 UI
 app.use(customerUiRouter);
 
-// /admin 어드민 UI (api prefix 없이)
+// /banana777 어드민 UI (api prefix 없이)
 app.use(adminUiRouter);
 
 // /api/* 라우터

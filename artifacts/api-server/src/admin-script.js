@@ -47,7 +47,7 @@ async function doLogin(){
     showAdmin(d);
   }catch(e){errEl.textContent='서버 연결 오류';errEl.style.display='block';}
 }
-document.getElementById('loginPw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+document.getElementById('loginForm').addEventListener('submit',function(e){e.preventDefault();doLogin();});
 
 async function checkSession(){
   try{
@@ -79,7 +79,7 @@ var _notifBaseline=-1; /* -1: 아직 baseline 미설정 */
 
 async function _pollAdminNotifs(){
   try{
-    var r=await fetch('/api/notifications',{credentials:'include',cache:'no-store'});
+    var r=await fetch('/api/admin/notifications',{credentials:'include',cache:'no-store'});
     if(!r.ok)return;
     var d=await r.json();
     var rows=d.notifications||[];
@@ -92,15 +92,7 @@ async function _pollAdminNotifs(){
     if(newRows.length){
       _notifBaseline=rows[0].id;
       newRows.forEach(function(n){
-        if(typeof showAdminToast==='function') showAdminToast(n.title,n.body||'');
-        if(typeof _adminBeep==='function'){
-          _adminBeep(880,0.18);
-          setTimeout(function(){_adminBeep(1100,0.18);},200);
-        }
-        if(typeof _adminVoiceOn!=='undefined'&&_adminVoiceOn&&typeof _adminTTS==='function'){
-          setTimeout(function(){_adminTTS(n.title);},350);
-        }
-        if(typeof window._adminBrowserNotif==='function') window._adminBrowserNotif(n.title,n.body||'');
+        if(typeof window._adminHandleNotification==='function') window._adminHandleNotification(n);
       });
     }
   }catch(e){}
@@ -121,17 +113,19 @@ async function doLogout(){
 
 function switchTab(tab){
   currentTab=tab;
-  var tabs=['products','users','orders','withdrawals','crawl','chatrooms'];
+  var tabs=['products','users','orders','withdrawals','crawl','chatrooms','ipblocks'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',tabs[i]===tab);});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='crawl'){initCrawlTab();return;}
+  if(tab==='users')loadRegistrationPolicy();
   if(!loadedTabs[tab]){
     loadedTabs[tab]=true;
     if(tab==='users')loadUsers();
     else if(tab==='orders')loadOrders();
     else if(tab==='withdrawals')loadWithdrawals();
     else if(tab==='chatrooms')loadChatRooms();
+    else if(tab==='ipblocks')loadIpBlocks();
   }
 }
 
@@ -144,13 +138,25 @@ async function initCrawlTab(){
     var r=await fetch('/api/admin/crawl/games',{credentials:'include'});
     var d=await r.json();
     crawlGamesData=d.games||[];
-    var hasKey=d.hasApiKey;
+    var provider=d.provider||d.crawlProvider;
+    var hasFirecrawl=provider==='firecrawl'||d.hasFirecrawlKey===true;
+    var hasKey=hasFirecrawl||d.hasApiKey;
     if(hasKey){
       document.getElementById('crawlApiKeySection').style.background='#d4edda';
       document.getElementById('crawlApiKeySection').style.borderColor='#28a745';
-      document.getElementById('crawlApiKeyStatus').textContent='✅ 환경변수 SCRAPER_API_KEY 설정됨';
+      document.getElementById('crawlApiKeyStatus').textContent=hasFirecrawl
+        ?'✅ 서버 Firecrawl 키 설정됨 (키는 이 브라우저로 전달되지 않습니다)'
+        :provider==='scraperapi'
+          ?'✅ 서버 ScraperAPI 키 설정됨'
+          :'✅ 서버 수집 API 키 설정됨 (Firecrawl 키가 있으면 우선 사용)';
       document.getElementById('crawlApiKeyStatus').style.color='#155724';
+    }else{
+      document.getElementById('crawlApiKeyStatus').textContent='서버 Firecrawl 키를 찾지 못했습니다. FIRECRAWL_API_KEY를 서버 Secrets에 설정하거나 기존 ScraperAPI 키를 선택 입력하세요.';
+      document.getElementById('crawlApiKeyStatus').style.color='#8a5a00';
     }
+    if(provider==='firecrawl'||hasFirecrawl)document.getElementById('crawlBtn').textContent='🕷️ Firecrawl로 수집';
+    else if(provider==='scraperapi')document.getElementById('crawlBtn').textContent='🕷️ ScraperAPI로 수집';
+    else document.getElementById('crawlBtn').textContent='🕷️ 서버 수집 API로 시작';
     var container=document.getElementById('crawlGameList');
     container.innerHTML='';
     crawlGamesData.forEach(function(g){
@@ -173,6 +179,7 @@ async function initCrawlTab(){
     });
     document.getElementById('crawlPages').onchange=updateCrawlCostEstimate;
     document.getElementById('crawlDetailCheck').onchange=updateCrawlCostEstimate;
+    updateCrawlCostEstimate();
     var origin=location.origin;
     document.getElementById('crawlScriptUrl').textContent=origin+'/api/admin/crawl-script';
     document.getElementById('crawlApiBaseUrl').textContent=origin;
@@ -232,16 +239,15 @@ function updateCrawlCostEstimate(){
   var selectedIds=Array.from(crawlSelectedGames);
   var pages=parseInt((document.getElementById('crawlPages')||{value:'1'}).value)||1;
   var withDetail=document.getElementById('crawlDetailCheck')&&document.getElementById('crawlDetailCheck').checked;
-  var estProducts=selectedIds.length*pages*55;
-  var listCredits=selectedIds.length*pages;
-  var totalCredits=withDetail?listCredits+estProducts:listCredits;
+  var categoryCount=2; /* 팝니다 + 삽니다 */
+  var listRequests=selectedIds.length*pages*categoryCount;
+  var estimatedDetailRequests=selectedIds.length*pages*categoryCount*55;
+  var totalRequests=listRequests+(withDetail?estimatedDetailRequests:0);
   var costEl=document.getElementById('crawlDetailCost');
   if(costEl){
-    if(withDetail){
-      costEl.textContent='예상 크레딧 소모: 목록 '+listCredits+'회 + 상세 ~'+estProducts+'회 = 총 ~'+totalCredits+'회 ('+selectedIds.length+'게임×'+pages+'페이지×약55개)';
-    }else{
-      costEl.textContent='';
-    }
+    costEl.textContent='예상 기본 소모: 목록 '+listRequests+'페이지 요청 (게임 '+selectedIds.length+'개 × '+pages+'페이지 × 팝니다·삽니다 2종)'
+      +(withDetail?' + 상세 약 '+estimatedDetailRequests+'건 = 총 약 '+totalRequests+'크레딧':' = 약 '+totalRequests+'크레딧')
+      +'. 상세 추정은 페이지당 약 55개 기준이며, 재시도·옵션에 따라 실제 사용량은 달라질 수 있습니다.';
   }
 }
 
@@ -371,6 +377,8 @@ async function startCrawl(){
 
   try{
     var body={gameIds:selectedIds,pages:pages,crawlDetail:withDetail};
+    /* Firecrawl 키는 서버 Secrets에만 보관하며 브라우저 요청에 포함하지 않습니다.
+       아래 필드는 사용자가 선택 입력한 기존 ScraperAPI 키가 있을 때만 전송합니다. */
     if(apiKey)body.scraperApiKey=apiKey;
 
     /* 1. 작업 시작 — 즉시 jobId 반환 */
@@ -782,36 +790,126 @@ async function saveProduct(){
 }
 
 async function deleteProduct(id){
-  if(!confirm('이 상품을 삭제하시겠습니까?'))return;
+  if(!confirm('이 상품을 삭제하시겠습니까?\n거래 기록이 있는 글은 거래 내역 보호를 위해 비활성화됩니다.'))return;
   try{
     var r=await fetch('/api/admin/products/'+id,{method:'DELETE',credentials:'include'});
-    if(!r.ok){var d=await r.json();showToast('오류: '+(d.error||'삭제 실패'));return;}
-    showToast('🗑 상품이 삭제되었습니다');
+    var d=await r.json().catch(function(){return {}});
+    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
+    showToast(d.archived?'거래 기록을 보존하며 글을 비활성화했습니다.':'🗑 상품이 삭제되었습니다');
     loadProducts(currentProductsPage);
-  }catch(e){showToast('서버 오류');}
+  }catch(e){showToast('삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.');}
 }
 
 async function deleteNoGradeProducts(){
-  if(!confirm('등급 없는 상품을 전부 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.'))return;
+  if(!confirm('등급 없는 상품을 전부 삭제하시겠습니까?\n거래 기록이 없는 글은 영구 삭제되고, 거래 기록이 있는 글은 비활성화되어 이력이 보존됩니다.'))return;
   try{
     var r=await fetch('/api/admin/products/no-grade',{method:'DELETE',credentials:'include'});
-    var d=await r.json();
+    var d=await r.json().catch(function(){return {}});
     if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
-    showToast('🗑 등급없는 상품 '+d.deleted+'개 삭제 완료');
+    showToast('등급없는 상품 '+d.deleted+'개 삭제, 거래 이력 있는 '+(d.archived||0)+'개 비활성화 완료');
     loadProducts(1);
     loadStats();
-  }catch(e){showToast('서버 오류');}
+  }catch(e){showToast('삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.');}
 }
 
 // ── 회원 ─────────────────────────────────────────────────
+var adminUsersById=Object.create(null);
+var registrationPolicyBlocked=null;
+var registrationPolicyLoading=false;
+var registrationPolicyPending=false;
+var registrationPolicyError='';
+var registrationPolicyRequestId=0;
+
+function renderRegistrationPolicy(){
+  var button=document.getElementById('registrationPolicyToggle');
+  var status=document.getElementById('registrationPolicyStatus');
+  if(!button||!status)return;
+  var retry=document.getElementById('registrationPolicyRetry');
+  var known=typeof registrationPolicyBlocked==='boolean';
+  button.disabled=!known||registrationPolicyLoading||registrationPolicyPending||!!registrationPolicyError;
+  button.setAttribute('aria-checked',known?String(registrationPolicyBlocked):'false');
+  button.textContent=known?(registrationPolicyBlocked?'ON':'OFF'):'—';
+  button.setAttribute('aria-label','신규 회원 가입 차단: '+(known?(registrationPolicyBlocked?'ON, 차단':'OFF, 허용'):'상태 확인 중'));
+  status.classList.toggle('error',!!registrationPolicyError);
+  if(retry)retry.hidden=!registrationPolicyError;
+  if(registrationPolicyPending)status.textContent='저장 중...';
+  else if(registrationPolicyLoading)status.textContent='상태 확인 중...';
+  else if(registrationPolicyError)status.textContent=registrationPolicyError;
+  else if(known)status.textContent='현재 상태: '+(registrationPolicyBlocked?'ON (차단)':'OFF (허용)');
+  else status.textContent='상태를 확인할 수 없습니다.';
+}
+
+async function loadRegistrationPolicy(){
+  if(registrationPolicyPending)return;
+  var requestId=++registrationPolicyRequestId;
+  registrationPolicyLoading=true;
+  registrationPolicyError='';
+  renderRegistrationPolicy();
+  try{
+    var r=await fetch('/api/admin/registration-policy',{credentials:'include',cache:'no-store'});
+    var data=await r.json().catch(function(){return {};});
+    if(!r.ok)throw new Error(data.error||'가입 정책을 불러오지 못했습니다. ('+r.status+')');
+    if(typeof data.blocked!=='boolean')throw new Error('가입 정책 응답을 확인할 수 없습니다.');
+    if(requestId===registrationPolicyRequestId)registrationPolicyBlocked=data.blocked;
+  }catch(e){
+    if(requestId===registrationPolicyRequestId)registrationPolicyError=e.message||'가입 정책을 불러오지 못했습니다.';
+  }finally{
+    if(requestId===registrationPolicyRequestId){
+      registrationPolicyLoading=false;
+      renderRegistrationPolicy();
+    }
+  }
+}
+
+async function toggleRegistrationPolicy(){
+  if(typeof registrationPolicyBlocked!=='boolean'||registrationPolicyLoading||registrationPolicyPending)return;
+  var savedState=registrationPolicyBlocked;
+  var requestedState=!savedState;
+  ++registrationPolicyRequestId;
+  registrationPolicyLoading=false;
+  registrationPolicyPending=true;
+  registrationPolicyError='';
+  renderRegistrationPolicy();
+  try{
+    var r=await fetch('/api/admin/registration-policy',{
+      method:'PATCH',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({blocked:requestedState})
+    });
+    var data=await r.json().catch(function(){return {};});
+    if(!r.ok)throw new Error(data.error||'가입 정책을 저장하지 못했습니다. ('+r.status+')');
+    if(typeof data.blocked==='boolean'&&data.blocked!==requestedState)throw new Error('저장된 가입 정책이 요청한 상태와 다릅니다.');
+    registrationPolicyBlocked=typeof data.blocked==='boolean'?data.blocked:requestedState;
+  }catch(e){
+    registrationPolicyBlocked=savedState;
+    registrationPolicyError=e.message||'가입 정책을 저장하지 못했습니다.';
+  }finally{
+    registrationPolicyPending=false;
+    renderRegistrationPolicy();
+  }
+}
+
+function refreshUsers(){
+  loadUsers();
+  loadRegistrationPolicy();
+}
+
+window.addEventListener('focus',function(){
+  if(currentTab==='users'&&document.visibilityState!=='hidden')loadRegistrationPolicy();
+});
+
 async function loadUsers(){
   var tbody=document.getElementById('usersBody');
-  tbody.innerHTML='<tr class="empty-row"><td colspan="9">로딩 중...</td></tr>';
+  tbody.innerHTML='<tr class="empty-row"><td colspan="11">로딩 중...</td></tr>';
   try{
-    var r=await fetch('/api/admin/users',{credentials:'include'});
+    var r=await fetch('/api/admin/users',{credentials:'include',cache:'no-store'});
+    if(!r.ok)throw new Error('회원 목록을 불러오지 못했습니다.');
     var users=await r.json();
+    adminUsersById=Object.create(null);
+    users.forEach(function(u){adminUsersById[u.id]=u});
     document.getElementById('statUsers').textContent=users.length;
-    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="9">회원이 없습니다</td></tr>';return;}
+    if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="11">회원이 없습니다</td></tr>';return;}
     tbody.innerHTML=users.map(function(u){
       var delBtn=u.role!=='admin'
         ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
@@ -819,6 +917,11 @@ async function loadUsers(){
       var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증</button>';
       var milBtn='<button class="action-btn edit" onclick="openBalanceModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+','+(u.balance||0)+')">💰</button>';
       var editBtn='<button class="action-btn" style="background:#f0f4ff;color:#5a5fc7" onclick="openUserEditModal('+JSON.stringify(u).replace(/"/g,'&quot;')+')">수정</button>';
+      var ipRow=function(label,ip,kind){
+        return '<div style="white-space:nowrap">'+label+': <code>'+escHtml(ip||'미기록')+'</code>'
+          +(ip? " <button class=\"action-btn\" onclick=\"blockMemberIp("+u.id+",'"+kind+"')\">이 IP 차단</button>":'')+'</div>';
+      };
+      var accountBtn=u.role==='admin'?'-':'<button class="action-btn '+(u.suspendedAt?'edit':'delete')+'" onclick="setMemberSuspension('+u.id+','+(!u.suspendedAt)+')">'+(u.suspendedAt?'차단 해제':'계정 차단')+'</button>';
       return '<tr id="user-row-'+u.id+'">'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
@@ -827,11 +930,41 @@ async function loadUsers(){
         +'<td id="user-grade-'+u.id+'">'+(function(g){var m={vip:['#7B5CAA','V'],platinum:['#E84060','P'],gold:['#D4941C','G'],silver:['#9B9EA4','S'],bronze:['#5CB85C','B']};var e=g?m[g]:null;return e?'<svg width="22" height="26" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg" title="'+g.toUpperCase()+'"><polygon points="11,0 22,6.5 22,19.5 11,26 0,19.5 0,6.5" fill="'+e[0]+'"/><text x="11" y="19" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="Arial,Helvetica,sans-serif">'+e[1]+'</text></svg>':'-';})(u.grade)+'</td>'
         +'<td id="user-bal-'+u.id+'">'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
+        +'<td>'+ipRow('가입',u.signupIp,'signup')+ipRow('최근 로그인',u.lastLoginIp,'login')+'</td>'
+        +'<td>'+(u.suspendedAt?'<strong style="color:#b42318">차단됨</strong>':'정상')+'<br>'+accountBtn+'</td>'
         +'<td>'+editBtn+milBtn+authBtn+'</td>'
         +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="9">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="11">회원 목록을 불러오지 못했습니다.</td></tr>';}
+}
+
+async function setMemberSuspension(id,suspended){
+  var u=adminUsersById[id];if(!u||u.role==='admin')return;
+  if(!confirm((suspended?'계정 차단':'계정 차단 해제')+' — '+(u.nickname||u.email)+'\\n'+(suspended?'현재 로그인된 세션도 곧 접근할 수 없게 됩니다. IP 차단은 별도로 적용해야 합니다.':'다시 로그인할 수 있게 됩니다.')+' 계속할까요?'))return;
+  try{
+    var r=await fetch('/api/admin/users/'+id+'/suspension',{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({suspended:suspended})});
+    var data=await r.json().catch(function(){return {}});
+    if(!r.ok)throw new Error(data.error||'계정 상태 변경에 실패했습니다.');
+    await loadUsers();
+    showToast(suspended?'계정을 차단했습니다.':'계정 차단을 해제했습니다.');
+  }catch(e){showToast(e.message||'계정 상태를 변경하지 못했습니다.')}
+}
+
+async function blockMemberIp(id,kind){
+  var u=adminUsersById[id];if(!u)return;
+  var ip=kind==='signup'?u.signupIp:kind==='login'?u.lastLoginIp:null;
+  if(!ip||!isValidIpAddress(ip)){showToast('이 회원의 IP가 기록되지 않았습니다.');return}
+  if(!confirm('IP '+ip+'를 차단할까요? 같은 IP를 사용하는 다른 사람도 차단됩니다. 이 회원의 계정이나 다른 IP는 차단되지 않습니다.'))return;
+  var reason=prompt('차단 사유를 입력하세요.', '회원 #'+id+' 관련');
+  if(reason===null)return;
+  try{
+    var r=await fetch('/api/admin/ip-blocks',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:ip,reason:reason.trim()})});
+    var data=await r.json().catch(function(){return {}});
+    if(!r.ok)throw new Error(data.error||'IP 차단에 실패했습니다.');
+    await loadIpBlocks();
+    showToast('IP를 차단했습니다.');
+  }catch(e){showToast(e.message||'IP를 차단하지 못했습니다.')}
 }
 
 async function deleteUser(id){
@@ -986,16 +1119,16 @@ async function loadOrders(){
 async function loadChatRooms(){
   var tbody=document.getElementById('chatroomsBody');
   if(!tbody)return;
-  tbody.innerHTML='<tr class="empty-row"><td colspan="7">로딩 중...</td></tr>';
+  tbody.innerHTML='<tr class="empty-row"><td colspan="8">로딩 중...</td></tr>';
   var statusFilter=document.getElementById('chatroomStatusFilter').value;
   var url='/api/admin/chat-rooms'+(statusFilter?'?status='+statusFilter:'');
   try{
     var r=await fetch(url,{credentials:'include'});
     var rooms=await r.json();
     if(!Array.isArray(rooms))rooms=[];
-    if(!rooms.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">채팅 거래가 없습니다</td></tr>';return;}
+    if(!rooms.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">채팅 거래가 없습니다</td></tr>';return;}
     var filtered=statusFilter?rooms.filter(function(rm){return rm.status===statusFilter;}):rooms;
-    if(!filtered.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">해당 상태의 거래가 없습니다</td></tr>';return;}
+    if(!filtered.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">해당 상태의 거래가 없습니다</td></tr>';return;}
     var statusLabel={active:'진행중',handover:'인계완료',ended:'거래완료',cancelled:'취소'};
     tbody.innerHTML=filtered.map(function(rm){
       var sl=statusLabel[rm.status]||rm.status;
@@ -1007,9 +1140,168 @@ async function loadChatRooms(){
         +'<td>'+(rm.amount!=null?fmtMoney(rm.amount):'-')+'</td>'
         +'<td><span class="badge '+rm.status+'">'+sl+'</span></td>'
         +'<td>'+fmtDate(rm.createdAt)+'</td>'
+        +'<td>'+(rm.canDelete
+          ?'<button class="action-btn delete" id="delete-chatroom-'+rm.id+'" onclick="deleteChatRoom('+rm.id+')">삭제</button>'
+          :'<button class="action-btn delete" disabled title="주문에 연결된 채팅방은 삭제할 수 없습니다">삭제 불가</button>')+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="7">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">오류 발생</td></tr>';}
+}
+
+async function deleteChatRoom(id){
+  if(!confirm('채팅방 #'+id+'과 모든 메시지를 영구 삭제하시겠습니까?\n구매자·판매자에게도 보이지 않으며 복구할 수 없습니다. 주문에 연결된 방은 삭제되지 않습니다.'))return;
+  var btn=document.getElementById('delete-chatroom-'+id);
+  if(btn)btn.disabled=true;
+  try{
+    var r=await fetch('/api/admin/chat-rooms/'+id,{method:'DELETE',credentials:'include'});
+    var d=await r.json().catch(function(){return {}});
+    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));loadChatRooms();return;}
+    showToast('채팅방과 메시지가 삭제되었습니다.');
+    loadChatRooms();
+  }catch(e){
+    showToast('삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.');
+    loadChatRooms();
+  }
+}
+
+// ── IP 차단 ─────────────────────────────────────────────────
+function isValidIpv4(value){
+  var parts=value.split('.');
+  return parts.length===4&&parts.every(function(part){
+    return /^(0|[1-9]\d{0,2})$/.test(part)&&Number(part)<=255;
+  });
+}
+
+function isValidIpAddress(value){
+  if(!value||value.indexOf('/')!==-1||value.indexOf('%')!==-1)return false;
+  if(value.indexOf(':')===-1)return isValidIpv4(value);
+
+  var address=value;
+  if(address.indexOf('.')!==-1){
+    var lastColon=address.lastIndexOf(':');
+    if(lastColon<0||!isValidIpv4(address.slice(lastColon+1)))return false;
+    address=address.slice(0,lastColon+1)+'0:0';
+  }
+  var compression=address.indexOf('::');
+  if(compression!==-1&&compression!==address.lastIndexOf('::'))return false;
+  function validGroups(groups){
+    return groups.every(function(group){return /^[0-9a-f]{1,4}$/i.test(group);});
+  }
+  if(compression!==-1){
+    var halves=address.split('::');
+    var left=halves[0]?halves[0].split(':'):[];
+    var right=halves[1]?halves[1].split(':'):[];
+    return validGroups(left)&&validGroups(right)&&left.length+right.length<8;
+  }
+  var groups=address.split(':');
+  return groups.length===8&&validGroups(groups);
+}
+
+function setIpBlockMessage(message,isError){
+  var el=document.getElementById('ipBlocksMessage');
+  if(!el)return;
+  el.textContent=message||'';
+  el.style.color=isError?'#c53030':'#276749';
+}
+
+function renderIpBlocks(items){
+  var tbody=document.getElementById('ipBlocksBody');
+  if(!Array.isArray(items)){
+    tbody.innerHTML='<tr class="empty-row"><td colspan="4">차단 목록 응답을 확인할 수 없습니다.</td></tr>';
+    return;
+  }
+  if(!items.length){
+    tbody.innerHTML='<tr class="empty-row"><td colspan="4">차단된 IP가 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=items.map(function(item){
+    var id=Number(item&&item.id);
+    var action=Number.isSafeInteger(id)&&id>0
+      ?'<button class="action-btn delete" type="button" onclick="unblockIpBlock('+id+')">차단 해제</button>'
+      :'<span style="color:#999">해제 불가</span>';
+    var reason=item&&item.reason!=null?escHtml(String(item.reason)):'-';
+    var createdAt=item&&item.createdAt?fmtDate(item.createdAt):'-';
+    if(createdAt==='Invalid Date')createdAt='-';
+    return '<tr>'
+      +'<td><code>'+escHtml(String(item&&item.ip||'-'))+'</code></td>'
+      +'<td>'+reason+'</td>'
+      +'<td>'+escHtml(createdAt)+'</td>'
+      +'<td>'+action+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+async function loadIpBlocks(){
+  var tbody=document.getElementById('ipBlocksBody');
+  var currentIpEl=document.getElementById('ipBlocksCurrentIp');
+  if(!tbody)return;
+  tbody.innerHTML='<tr class="empty-row"><td colspan="4">차단 목록을 불러오는 중...</td></tr>';
+  setIpBlockMessage('',false);
+  try{
+    var r=await fetch('/api/admin/ip-blocks',{credentials:'include',cache:'no-store'});
+    var data=await r.json().catch(function(){return{};});
+    if(!r.ok)throw new Error(data.error||'차단 목록을 불러오지 못했습니다. ('+r.status+')');
+    if(!data||!Array.isArray(data.items))throw new Error('차단 목록 응답 형식이 올바르지 않습니다.');
+    if(currentIpEl)currentIpEl.textContent=String(data.currentIp||'확인할 수 없음');
+    renderIpBlocks(data.items);
+  }catch(e){
+    tbody.innerHTML='<tr class="empty-row"><td colspan="4">차단 목록을 불러오지 못했습니다.</td></tr>';
+    setIpBlockMessage(e.message||'차단 목록을 불러오지 못했습니다.',true);
+  }
+}
+
+async function createIpBlock(event){
+  if(event)event.preventDefault();
+  var ipInput=document.getElementById('ipBlockAddress');
+  var reasonInput=document.getElementById('ipBlockReason');
+  var submit=document.getElementById('ipBlockSubmit');
+  var ip=ipInput.value.trim();
+  var reason=reasonInput.value.trim();
+  if(!isValidIpAddress(ip)){
+    setIpBlockMessage('유효한 IPv4 또는 IPv6 주소를 입력하세요. CIDR 대역 표기는 지원하지 않습니다.',true);
+    ipInput.focus();
+    return;
+  }
+  submit.disabled=true;
+  var originalLabel=submit.textContent;
+  submit.textContent='처리 중...';
+  setIpBlockMessage('',false);
+  try{
+    var r=await fetch('/api/admin/ip-blocks',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ip:ip,reason:reason})
+    });
+    var data=await r.json().catch(function(){return{};});
+    if(!r.ok)throw new Error(data.error||'IP를 차단하지 못했습니다. ('+r.status+')');
+    document.getElementById('ipBlockForm').reset();
+    await loadIpBlocks();
+    setIpBlockMessage('IP 차단을 추가했습니다.',false);
+  }catch(e){
+    setIpBlockMessage(e.message||'IP를 차단하지 못했습니다.',true);
+  }finally{
+    submit.disabled=false;
+    submit.textContent=originalLabel;
+  }
+}
+
+async function unblockIpBlock(id){
+  if(!Number.isSafeInteger(Number(id))||Number(id)<1)return;
+  if(!confirm('이 IP의 차단을 해제할까요?'))return;
+  setIpBlockMessage('',false);
+  try{
+    var r=await fetch('/api/admin/ip-blocks/'+Number(id),{
+      method:'DELETE',
+      credentials:'include'
+    });
+    var data=await r.json().catch(function(){return{};});
+    if(!r.ok)throw new Error(data.error||'IP 차단을 해제하지 못했습니다. ('+r.status+')');
+    await loadIpBlocks();
+    setIpBlockMessage('IP 차단을 해제했습니다.',false);
+  }catch(e){
+    setIpBlockMessage(e.message||'IP 차단을 해제하지 못했습니다.',true);
+  }
 }
 
 // ── 출금 ─────────────────────────────────────────────────

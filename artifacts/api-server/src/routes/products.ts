@@ -4,8 +4,13 @@ import { db, productsTable, gamesTable, ordersTable, usersTable } from "@workspa
 import { requireAuth } from "../middlewares/auth";
 import { getAllGamesWithServers } from "./games";
 import { notifyAdmin } from "./notifications";
+import { localProductSellerId } from "./product-ownership";
 
 const router: IRouter = Router();
+
+// A listing's stored grade is a historical fallback; linked members always
+// display their current grade, including on the single-product endpoint.
+const visibleSellerGrade = sql<string | null>`coalesce(${usersTable.grade}, ${productsTable.sellerGrade}, case when ${productsTable.sellerId} is not null then 'bronze' end)`;
 
 type ProductRow = {
   id: number; itemmaniaid: string; title: string; price: number;
@@ -16,6 +21,7 @@ type ProductRow = {
   detailUrl: string | null; status: string | null;
   crawledAt: Date | null; createdAt: Date;
   sellerGrade?: string | null;
+  isPremium: boolean;
 };
 
 function formatProduct(p: ProductRow) {
@@ -28,9 +34,10 @@ function formatProduct(p: ProductRow) {
     itemCategory: p.itemCategory,
     gameName: p.gameName,
     serverName: p.serverName,
-    sellerId: p.sellerId,
+    sellerId: localProductSellerId(p),
     sellerName: p.sellerName,
     sellerGrade: p.sellerGrade ?? null,
+    isPremium: p.isPremium,
     description: p.description,
     thumbnailUrl: p.thumbnailUrl,
     detailUrl: p.detailUrl,
@@ -47,7 +54,10 @@ router.get("/products", async (req, res): Promise<void> => {
   const offset = (page - 1) * limit;
   const { category, itemCategory, gameName, keyword, gameCode, serverName, sort } = req.query;
 
-  const conditions = [eq(productsTable.status, "active")];
+  // Completed listings are only returned when explicitly requested by the list filter.
+  const conditions = [eq(productsTable.status, req.query.status === "sold" ? "sold" : "active")];
+  if (req.query.premium === "1") conditions.push(eq(productsTable.isPremium, true));
+  if (req.query.premium === "0") conditions.push(eq(productsTable.isPremium, false));
 
   // category: sell/buy 구분 필터
   if (category && typeof category === "string") {
@@ -80,11 +90,19 @@ router.get("/products", async (req, res): Promise<void> => {
     conditions.push(ilike(productsTable.title, `%${keyword}%`));
   }
 
+  const grades = ["vip", "platinum", "gold", "silver"];
+  const minimumGrade = typeof req.query.gradeMin === "string" ? grades.indexOf(req.query.gradeMin) : -1;
+  if (minimumGrade >= 0) {
+    const actualGrade = sql<string>`lower(coalesce(${usersTable.grade}, ${productsTable.sellerGrade}, 'bronze'))`;
+    conditions.push(inArray(actualGrade, grades.slice(0, minimumGrade + 1)));
+  }
+
   const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(productsTable)
+    .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))
     .where(where);
 
   const sortOrder = sort === "price_asc"
@@ -111,7 +129,8 @@ router.get("/products", async (req, res): Promise<void> => {
       status: productsTable.status,
       crawledAt: productsTable.crawledAt,
       createdAt: productsTable.createdAt,
-      sellerGrade: sql<string | null>`coalesce(${usersTable.grade}, ${productsTable.sellerGrade}, case when ${productsTable.sellerId} is not null then 'bronze' end)`,
+      sellerGrade: visibleSellerGrade,
+      isPremium: productsTable.isPremium,
     })
     .from(productsTable)
     .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))
@@ -129,10 +148,14 @@ router.get("/products/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   if (isNaN(id) || id > 2147483647 || id < 1) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
 
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!product) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
+  const [row] = await db
+    .select({ product: productsTable, sellerGrade: visibleSellerGrade })
+    .from(productsTable)
+    .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))
+    .where(eq(productsTable.id, id));
+  if (!row) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
 
-  res.json(formatProduct(product));
+  res.json(formatProduct({ ...row.product, sellerGrade: row.sellerGrade }));
 });
 
 // 상품 등록 (로그인 필요)
@@ -172,7 +195,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
   const postCategory = inserted.category === "buy" ? "구매 등록" : "판매 등록";
   notifyAdmin(postCategory, {
     body: `${inserted.title}${inserted.gameName ? ` (${inserted.gameName})` : ""} — ${inserted.price.toLocaleString()}원`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.status(201).json(formatProduct(inserted));

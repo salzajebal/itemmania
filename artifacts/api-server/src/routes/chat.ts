@@ -3,11 +3,12 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import multer from "multer";
 import { Router, type IRouter } from "express";
-import { eq, and, or, ne, lt, desc, sql } from "drizzle-orm";
-import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable } from "@workspace/db";
+import { eq, and, or, ne, lt, desc, sql, gte } from "drizzle-orm";
+import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable, ordersTable, escrowLedgerTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 import { createNotification, notifyAdmin } from "./notifications";
+import { localProductSellerId } from "./product-ownership";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,36 +129,128 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const conditions = [eq(chatRoomsTable.buyerId, resolvedBuyerId), eq(chatRoomsTable.sellerId, resolvedSellerId)];
-  if (productId) conditions.push(eq(chatRoomsTable.productId, productId));
-
-  const [existing] = await db.select().from(chatRoomsTable).where(and(...conditions)).limit(1);
-  if (existing) {
-    // 종료/취소/불가 상태 방은 재사용하지 않고 새 방 생성
-    const closedStatuses = ["ended", "cancelled", "rejected"];
-    if (!closedStatuses.includes(existing.status)) {
-      if (characterName && !existing.characterName) {
-        await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, existing.id));
-      }
-      res.json({ id: existing.id, created: false });
-      return;
-    }
+  if (productId !== undefined && (!Number.isSafeInteger(productId) || productId < 1)) {
+    res.status(400).json({ error: "잘못된 상품 ID입니다." });
+    return;
   }
 
-  const [room] = await db
-    .insert(chatRoomsTable)
-    .values({
-      buyerId: resolvedBuyerId, sellerId: resolvedSellerId, productId: productId ?? null,
-      characterName: characterName ?? null, goodsType: goodsType ?? null,
-    })
-    .returning();
+  let result: { room: typeof chatRoomsTable.$inferSelect; created: boolean };
+  try {
+    result = await db.transaction(async tx => {
+      // Lock a stable parent row before lookup+insert so parallel requests cannot create
+      // two open rooms for the same buyer/listing. No schema migration is required.
+      if (productId) {
+        const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId)).for("update");
+        const ownerId = product && localProductSellerId(product);
+        if (!ownerId || product?.status !== "active" ||
+            (sellerId !== undefined && (product.category !== "sell" || ownerId !== resolvedSellerId)) ||
+            (buyerId !== undefined && (product.category !== "buy" || ownerId !== resolvedBuyerId))) {
+          throw new Error("이 글은 이 사이트의 작성자와 연결되어 있지 않아 채팅할 수 없습니다.");
+        }
+      } else {
+        await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, resolvedSellerId)).for("update");
+      }
+      const conditions = [eq(chatRoomsTable.buyerId, resolvedBuyerId), eq(chatRoomsTable.sellerId, resolvedSellerId)];
+      if (productId) conditions.push(eq(chatRoomsTable.productId, productId));
+      const existingRooms = await tx.select().from(chatRoomsTable).where(and(...conditions)).orderBy(desc(chatRoomsTable.id));
+      const existing = existingRooms.find(room => !["ended", "cancelled", "rejected"].includes(room.status));
+      if (existing) return { room: existing, created: false };
+      const [room] = await tx.insert(chatRoomsTable).values({
+        buyerId: resolvedBuyerId, sellerId: resolvedSellerId, productId: productId ?? null,
+        characterName: characterName ?? null, goodsType: goodsType ?? null,
+      }).returning();
+      return { room, created: true };
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "채팅방을 열 수 없습니다." });
+    return;
+  }
+  const { room, created } = result;
+  if (!created) {
+    if (characterName && !room.characterName) {
+      await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, room.id));
+    }
+    res.json({ id: room.id, created: false });
+    return;
+  }
 
   notifyAdmin("채팅 거래 시작", {
     body: `채팅방 #${room.id} 거래가 시작되었습니다.`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.status(201).json({ id: room.id, created: true });
+});
+
+// Legacy paid member trades still use this endpoint; the chat UI intentionally
+// has no new-payment action. Keep this path for existing paid-flow compatibility,
+// Completion also settles rooms that have not used this optional prepayment path.
+// Buyer pays for an active, locally-owned member listing using its current server price.
+router.post("/chat/rooms/:roomId/pay", requireAuth, async (req, res): Promise<void> => {
+  const roomId = parseInt(req.params.roomId as string, 10);
+  const userId = req.session.userId!;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [room] = await tx.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId)).for("update");
+      if (!room) throw new Error("채팅방을 찾을 수 없습니다.");
+      if (room.buyerId !== userId) throw new Error("구매자만 결제할 수 있습니다.");
+      if (room.orderId) throw new Error("이미 결제된 거래입니다.");
+      if (!["pending", "active"].includes(room.status)) throw new Error("종료된 채팅방에서는 결제할 수 없습니다.");
+      if (!room.productId) throw new Error("결제 가능한 판매글이 연결되지 않았습니다.");
+
+      const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, room.productId)).for("update");
+      const ownerId = product && localProductSellerId(product);
+       if (!product || product.status !== "active" ||
+           !ownerId || !(
+             (product.category === "sell" && ownerId === room.sellerId) ||
+             (product.category === "buy" && ownerId === room.buyerId)
+           ) || room.sellerId === room.buyerId) {
+         throw new Error("활성 상태의 회원 글과 거래 당사자가 일치하지 않습니다.");
+      }
+      const amount = Number(product.price);
+      if (!Number.isSafeInteger(amount) || amount < 1) throw new Error("판매글 가격이 올바르지 않습니다.");
+
+      const [wallet] = await tx.update(walletsTable)
+        .set({ balance: sql`${walletsTable.balance} - ${amount}` })
+        .where(and(eq(walletsTable.userId, userId), gte(walletsTable.balance, amount)))
+        .returning();
+      if (!wallet) throw new Error("잔액이 부족합니다.");
+
+      const [order] = await tx.insert(ordersTable).values({
+        buyerId: room.buyerId,
+        sellerId: room.sellerId,
+        productId: product.id,
+        productTitle: product.title,
+        amount,
+        feeAmount: 0,
+        status: "pending",
+      }).returning();
+      await tx.insert(escrowLedgerTable).values({ orderId: order.id, type: "charge", amount });
+      await tx.update(chatRoomsTable).set({ orderId: order.id }).where(and(
+        eq(chatRoomsTable.id, roomId),
+        eq(chatRoomsTable.buyerId, userId),
+        sql`${chatRoomsTable.orderId} IS NULL`,
+      ));
+      await tx.update(productsTable).set({ status: "sold" }).where(eq(productsTable.id, product.id));
+      return { order, balance: Number(wallet.balance) };
+    });
+    pushToUser(userId, "balance", { balance: result.balance });
+    res.status(201).json({
+      id: result.order.id,
+      buyerId: result.order.buyerId,
+      sellerId: result.order.sellerId,
+      productId: result.order.productId,
+      productTitle: result.order.productTitle,
+      amount: Number(result.order.amount),
+      feeAmount: Number(result.order.feeAmount),
+      netAmount: Number(result.order.amount) - Number(result.order.feeAmount),
+      status: result.order.status,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "결제 처리 중 오류가 발생했습니다.";
+    res.status(message === "채팅방을 찾을 수 없습니다." ? 404 : 400).json({ error: message });
+  }
 });
 
 // 채팅방 상태 변경
@@ -172,24 +265,187 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
     return;
   }
 
-  const [room] = await db.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId));
-  if (!room) { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
-  if (room.buyerId !== userId && room.sellerId !== userId) {
-    res.status(403).json({ error: "접근 권한이 없습니다." }); return;
+  if (!["handover", "ended", "cancelled"].includes(status)) {
+    res.status(400).json({ error: "이 상태로 변경할 수 없습니다." });
+    return;
+  }
+  let room: typeof chatRoomsTable.$inferSelect;
+  let newBalance: number | null = null;
+  let buyerBalance: number | null = null;
+  let settlement: { amount: number; netAmount: number } | null = null;
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [lockedRoom] = await tx.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId)).for("update");
+      if (!lockedRoom) throw new Error("채팅방을 찾을 수 없습니다.");
+      if (lockedRoom.buyerId !== userId && lockedRoom.sellerId !== userId) throw new Error("접근 권한이 없습니다.");
+      if (status === "handover" && userId !== lockedRoom.sellerId) throw new Error("판매자만 인계하기를 할 수 있습니다.");
+      if (status === "ended" && userId !== lockedRoom.buyerId) throw new Error("구매자만 거래완료를 할 수 있습니다.");
+      if (status === "handover" && !["pending", "active"].includes(lockedRoom.status)) {
+        throw new Error("거래 진행 중인 방에서만 인계할 수 있습니다.");
+      }
+      if (status === "ended" && lockedRoom.status !== "handover") {
+        throw new Error("판매자가 인계한 후에만 인수확인할 수 있습니다.");
+      }
+      if (status === "cancelled" && ["cancelled", "ended", "rejected"].includes(lockedRoom.status)) {
+        throw new Error("취소할 수 없는 채팅방 상태입니다.");
+      }
+
+      let updatedBalance: number | null = null;
+      let debitedBuyerBalance: number | null = null;
+      let settledAmounts: { amount: number; netAmount: number } | null = null;
+      let completedRoom = lockedRoom;
+      if (lockedRoom.orderId) {
+        const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, lockedRoom.orderId)).for("update");
+        if (!order || order.buyerId !== lockedRoom.buyerId || order.sellerId !== lockedRoom.sellerId ||
+            (lockedRoom.productId !== null && order.productId !== lockedRoom.productId)) {
+          throw new Error("채팅방과 주문 정보가 일치하지 않습니다.");
+        }
+        const [charge] = await tx.select({ id: escrowLedgerTable.id }).from(escrowLedgerTable).where(and(
+          eq(escrowLedgerTable.orderId, order.id),
+          eq(escrowLedgerTable.type, "charge"),
+        )).limit(1);
+
+        if (status === "handover") {
+          if (!charge || order.status !== "pending") throw new Error("결제가 완료된 대기 주문만 인계할 수 있습니다.");
+          await tx.update(ordersTable).set({ status: "shipped" }).where(and(
+            eq(ordersTable.id, order.id), eq(ordersTable.status, "pending"),
+          ));
+        } else if (status === "ended") {
+          if (!charge || order.status !== "shipped") throw new Error("결제 및 인계가 완료된 주문만 종료할 수 있습니다.");
+          // Existing prepaid orders also settle fee-free from now on.
+          // Completed historical orders are never rewritten by this endpoint.
+          const netAmount = Number(order.amount);
+          if (!Number.isSafeInteger(netAmount) || netAmount < 1) throw new Error("주문 정산 금액이 올바르지 않습니다.");
+          const [completed] = await tx.update(ordersTable).set({ status: "completed", feeAmount: 0 }).where(and(
+            eq(ordersTable.id, order.id), eq(ordersTable.status, "shipped"),
+          )).returning();
+          if (!completed) throw new Error("이미 처리된 주문입니다.");
+          const [wallet] = await tx.insert(walletsTable).values({
+            userId: lockedRoom.sellerId, balance: netAmount,
+          }).onConflictDoUpdate({
+            target: walletsTable.userId,
+            set: { balance: sql`${walletsTable.balance} + ${netAmount}` },
+          }).returning();
+          updatedBalance = Number(wallet.balance);
+          if (!Number.isSafeInteger(updatedBalance) || updatedBalance < 0) throw new Error("판매자 마일리지 잔액이 허용 범위를 초과했습니다.");
+          settledAmounts = { amount: Number(order.amount), netAmount };
+          await tx.insert(escrowLedgerTable).values({ orderId: order.id, type: "release", amount: netAmount });
+        } else if (status === "cancelled" && ["pending", "shipped"].includes(order.status)) {
+          if (!charge) throw new Error("결제 기록이 없는 주문은 환불할 수 없습니다.");
+          const [cancelled] = await tx.update(ordersTable).set({ status: "cancelled" }).where(and(
+            eq(ordersTable.id, order.id), or(eq(ordersTable.status, "pending"), eq(ordersTable.status, "shipped")),
+          )).returning();
+          if (!cancelled) throw new Error("이미 처리된 주문입니다.");
+          const amount = Number(order.amount);
+          const [wallet] = await tx.insert(walletsTable).values({
+            userId: lockedRoom.buyerId, balance: amount,
+          }).onConflictDoUpdate({
+            target: walletsTable.userId,
+            set: { balance: sql`${walletsTable.balance} + ${amount}` },
+          }).returning();
+          updatedBalance = Number(wallet.balance);
+          await tx.insert(escrowLedgerTable).values({ orderId: order.id, type: "refund", amount });
+          if (order.productId) {
+            const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, order.productId));
+             if (product && localProductSellerId(product) === (product.category === "buy" ? lockedRoom.buyerId : lockedRoom.sellerId)) {
+              await tx.update(productsTable).set({ status: "active" }).where(and(
+                eq(productsTable.id, product.id), eq(productsTable.status, "sold"),
+              ));
+            }
+          }
+        } else if (status === "cancelled" && order.status !== "cancelled") {
+          throw new Error("완료된 주문은 취소할 수 없습니다.");
+        }
+      }
+      // Handover does not debit an unpaid room. Buyer receipt settles both wallets,
+      // records the completed order and closes the listing in this same transaction.
+      if (!lockedRoom.orderId && status === "ended" && !lockedRoom.productId) {
+        throw new Error("거래 금액을 확인할 수 있는 게시글이 연결되지 않았습니다.");
+      }
+      if (!lockedRoom.orderId && lockedRoom.productId && (status === "handover" || status === "ended")) {
+        const [product] = await tx.select().from(productsTable)
+          .where(eq(productsTable.id, lockedRoom.productId)).for("update");
+        const expectedOwner = product?.category === "buy" ? lockedRoom.buyerId : lockedRoom.sellerId;
+        if (!product || !["sell", "buy"].includes(product.category ?? "") ||
+            localProductSellerId(product) !== expectedOwner || lockedRoom.buyerId === lockedRoom.sellerId) {
+          throw new Error("채팅방과 게시글의 작성자가 일치하지 않습니다.");
+        }
+        if (product.status === "sold") {
+          throw new Error("다른 거래에서 이미 완료된 게시글입니다.");
+        }
+        if (status === "handover" && product.status !== "active") {
+          throw new Error("판매중인 게시글에서만 인계할 수 있습니다.");
+        }
+        if (status === "ended") {
+          // Archived listings remain hidden, so their status alone cannot prevent
+          // two already-handed-over rooms from settling the same listing.
+          const [existingOrder] = await tx.select({ id: ordersTable.id }).from(ordersTable).where(and(
+            eq(ordersTable.productId, product.id), ne(ordersTable.status, "cancelled"),
+          )).limit(1);
+          if (existingOrder) throw new Error("다른 거래에서 이미 결제 또는 정산된 게시글입니다.");
+          const amount = Number(product.price);
+          if (!Number.isSafeInteger(amount) || amount < 1) throw new Error("게시글 거래 금액이 올바르지 않습니다.");
+          const feeAmount = 0;
+          const netAmount = amount;
+          // Stable wallet lock order also covers trades where the two members swap roles.
+          await tx.select({ userId: walletsTable.userId }).from(walletsTable)
+            .where(or(eq(walletsTable.userId, lockedRoom.buyerId), eq(walletsTable.userId, lockedRoom.sellerId)))
+            .orderBy(walletsTable.userId).for("update");
+          const [buyerWallet] = await tx.update(walletsTable)
+            .set({ balance: sql`${walletsTable.balance} - ${amount}` })
+            .where(and(eq(walletsTable.userId, lockedRoom.buyerId), gte(walletsTable.balance, amount)))
+            .returning();
+          if (!buyerWallet) throw new Error("구매자의 마일리지가 부족하여 거래를 종료할 수 없습니다.");
+          const [sellerWallet] = await tx.insert(walletsTable).values({
+            userId: lockedRoom.sellerId, balance: netAmount,
+          }).onConflictDoUpdate({
+            target: walletsTable.userId,
+            set: { balance: sql`${walletsTable.balance} + ${netAmount}` },
+          }).returning();
+          if (!Number.isSafeInteger(Number(buyerWallet.balance)) || Number(buyerWallet.balance) < 0 ||
+              !Number.isSafeInteger(Number(sellerWallet.balance)) || Number(sellerWallet.balance) < 0) {
+            throw new Error("마일리지 잔액이 허용 범위를 초과했습니다.");
+          }
+          const [order] = await tx.insert(ordersTable).values({
+            buyerId: lockedRoom.buyerId, sellerId: lockedRoom.sellerId,
+            productId: product.id, productTitle: product.title,
+            amount, feeAmount, status: "completed",
+          }).returning();
+          await tx.insert(escrowLedgerTable).values([
+            { orderId: order.id, type: "charge", amount },
+            { orderId: order.id, type: "release", amount: netAmount },
+          ]);
+          await tx.update(chatRoomsTable).set({ orderId: order.id }).where(eq(chatRoomsTable.id, roomId));
+          completedRoom = { ...lockedRoom, orderId: order.id };
+          debitedBuyerBalance = Number(buyerWallet.balance);
+          updatedBalance = Number(sellerWallet.balance);
+          settledAmounts = { amount, netAmount };
+          if (product.status === "active") {
+            await tx.update(productsTable).set({ status: "sold" })
+              .where(and(eq(productsTable.id, product.id), eq(productsTable.status, "active")));
+          }
+        }
+        // Admin-archived (inactive) listings stay hidden if a room that was
+        // already handed over is later acknowledged.
+      }
+
+      await tx.update(chatRoomsTable).set({ status }).where(eq(chatRoomsTable.id, roomId));
+      return { room: completedRoom, balance: updatedBalance, buyerBalance: debitedBuyerBalance, settlement: settledAmounts };
+    });
+    room = result.room;
+    newBalance = result.balance;
+    buyerBalance = result.buyerBalance;
+    settlement = result.settlement;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "거래 상태를 변경할 수 없습니다.";
+    const code = message === "채팅방을 찾을 수 없습니다." ? 404 :
+      ["접근 권한이 없습니다.", "판매자만 인계하기를 할 수 있습니다.", "구매자만 거래완료를 할 수 있습니다."].includes(message) ? 403 : 400;
+    res.status(code).json({ error: message });
+    return;
   }
 
-  // 인계하기: 판매자만 가능
-  if (status === "handover" && userId !== room.sellerId) {
-    res.status(403).json({ error: "판매자만 인계하기를 할 수 있습니다." }); return;
-  }
-  // 거래완료(인수확인): 구매자만 가능
-  if (status === "ended" && userId !== room.buyerId) {
-    res.status(403).json({ error: "구매자만 거래완료를 할 수 있습니다." }); return;
-  }
-  // 채팅취소: 판매자 또는 구매자 모두 가능
-  // (cancelled는 별도 제한 없음)
-
-  await db.update(chatRoomsTable).set({ status }).where(eq(chatRoomsTable.id, roomId));
+  if (newBalance !== null) pushToUser(status === "ended" ? room!.sellerId : room!.buyerId, "balance", { balance: newBalance });
+  if (buyerBalance !== null) pushToUser(room!.buyerId, "balance", { balance: buyerBalance });
 
   // 판매자가 인계하기 → 구매자에게 실시간 알림 (인수확인 버튼 활성화)
   if (status === "handover") {
@@ -197,10 +453,10 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
     await createNotification(room.buyerId, "trade_handover", "아이템 인계 완료", {
       body: "판매자가 아이템을 인계했습니다. 인수확인을 진행해 주세요.",
       link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
-    });
+    }).catch(() => {});
     notifyAdmin("인계하기 완료", {
       body: `채팅방 #${roomId} — 판매자가 아이템을 인계했습니다.`,
-      link: "/tkfwkwpqkf",
+    link: "/banana777",
     }).catch(() => {});
   }
 
@@ -210,55 +466,30 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
     await createNotification(otherId, "trade_cancelled", "거래가 취소되었습니다", {
       body: "상대방이 거래를 취소했습니다.",
       link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
-    });
+    }).catch(() => {});
     notifyAdmin("거래 취소", {
       body: `채팅방 #${roomId} 거래가 취소되었습니다.`,
-      link: "/tkfwkwpqkf",
+      link: "/banana777",
     }).catch(() => {});
   }
 
-  // 구매자가 인수하기(ended) 처리 → 판매자에게 거래금액 마일리지 지급
-  if (status === "ended" && userId === room.buyerId && room.productId) {
-    const [prod] = await db
-      .select({ price: productsTable.price })
-      .from(productsTable)
-      .where(eq(productsTable.id, room.productId));
-
-    if (prod?.price) {
-      const price = Number(prod.price);
-      // 판매자 지갑 upsert: 없으면 생성, 있으면 잔액 추가
-      const [existing] = await db
-        .select()
-        .from(walletsTable)
-        .where(eq(walletsTable.userId, room.sellerId));
-
-      let newBalance: number;
-      if (existing) {
-        const [updated] = await db
-          .update(walletsTable)
-          .set({ balance: sql`${walletsTable.balance} + ${price}` })
-          .where(eq(walletsTable.userId, room.sellerId))
-          .returning();
-        newBalance = Number(updated.balance);
-      } else {
-        const [created] = await db
-          .insert(walletsTable)
-          .values({ userId: room.sellerId, balance: price })
-          .returning();
-        newBalance = Number(created.balance);
-      }
-
-      // SSE로 판매자 마이룸에 실시간 반영
-      pushToUser(room.sellerId, "balance", { balance: newBalance });
-      await createNotification(room.sellerId, "trade_ended", "거래가 완료되었습니다", {
-        body: `마일리지 ${Number(prod.price).toLocaleString("ko-KR")}원이 지급되었습니다.`,
+  // Both prepaid and completion-time settlements were committed above.
+  if (status === "ended") {
+    const { amount, netAmount } = settlement!;
+    await createNotification(room!.sellerId, "trade_ended", "거래가 완료되었습니다", {
+      body: `마일리지 ${netAmount.toLocaleString("ko-KR")}원이 지급되었습니다.`,
+      link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
+    }).catch(() => {});
+    if (buyerBalance !== null) {
+      await createNotification(room!.buyerId, "system", "거래 마일리지 차감", {
+        body: `거래 완료로 마일리지 ${amount.toLocaleString("ko-KR")}원이 차감되었습니다.`,
         link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
-      });
-      notifyAdmin("거래 완료", {
-        body: `채팅방 #${roomId} 거래 완료 — ${Number(prod.price).toLocaleString("ko-KR")}원`,
-        link: "/tkfwkwpqkf",
       }).catch(() => {});
     }
+    notifyAdmin("거래 완료", {
+      body: `채팅방 #${roomId} 거래 완료 — ${amount.toLocaleString("ko-KR")}원`,
+      link: "/banana777",
+    }).catch(() => {});
   }
 
   res.json({ id: roomId, status });
@@ -282,18 +513,24 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
     .where(beforeId
       ? and(eq(chatMessagesTable.roomId, roomId), lt(chatMessagesTable.id, beforeId))
       : eq(chatMessagesTable.roomId, roomId))
-    .orderBy(chatMessagesTable.id)
+    .orderBy(desc(chatMessagesTable.id))
     .limit(50);
 
-  const [buyer] = await db.select({ nickname: usersTable.nickname, name: usersTable.name, phone: usersTable.phone }).from(usersTable).where(eq(usersTable.id, room.buyerId));
-  const [seller] = await db.select({ nickname: usersTable.nickname }).from(usersTable).where(eq(usersTable.id, room.sellerId));
+  const [buyer] = await db.select({ nickname: usersTable.nickname, name: usersTable.name, phone: usersTable.phone, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, room.buyerId));
+  const [seller] = await db.select({ nickname: usersTable.nickname, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, room.sellerId));
 
-  let productTitle: string | null = null;
-  let productPrice: number | null = null;
+   let productTitle: string | null = null;
+   let productPrice: number | null = null;
+   let gameName: string | null = null;
+   let serverName: string | null = null;
+   let productCategory: string | null = null;
   if (room.productId) {
-    const [prod] = await db.select({ title: productsTable.title, price: productsTable.price }).from(productsTable).where(eq(productsTable.id, room.productId));
+     const [prod] = await db.select({ title: productsTable.title, price: productsTable.price, gameName: productsTable.gameName, serverName: productsTable.serverName, category: productsTable.category }).from(productsTable).where(eq(productsTable.id, room.productId));
     productTitle = prod?.title ?? null;
     productPrice = prod?.price ?? null;
+     gameName = prod?.gameName ?? null;
+     serverName = prod?.serverName ?? null;
+     productCategory = prod?.category ?? null;
   }
 
   // 구매자 실명/전화번호: 판매자 또는 어드민에게만 노출
@@ -301,6 +538,11 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
   const buyerName = isSeller ? (buyer?.name ?? null) : null;
   const buyerPhone = isSeller ? (buyer?.phone ?? null) : null;
 
+  const [linkedOrder] = room.orderId
+    ? await db.select({
+        status: ordersTable.status, amount: ordersTable.amount, productTitle: ordersTable.productTitle,
+      }).from(ordersTable).where(eq(ordersTable.id, room.orderId))
+    : [];
   res.json({
     room: {
       id: room.id,
@@ -308,16 +550,23 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
       sellerId: room.sellerId,
       productId: room.productId,
       status: room.status,
-      productTitle,
-      productPrice,
+      productTitle: linkedOrder?.productTitle ?? productTitle,
+      productPrice: linkedOrder ? Number(linkedOrder.amount) : productPrice,
+       gameName,
+       serverName,
+       productCategory,
+      orderId: room.orderId ?? null,
+      orderStatus: linkedOrder?.status ?? null,
       characterName: room.characterName ?? null,
       goodsType: room.goodsType ?? null,
       buyerNickname: buyer?.nickname ?? String(room.buyerId),
       sellerNickname: seller?.nickname ?? String(room.sellerId),
+      buyerGrade: buyer?.grade ?? null,
+      sellerGrade: seller?.grade ?? null,
       buyerName,
       buyerPhone,
     },
-    messages: messages.map(m => ({
+    messages: messages.reverse().map(m => ({
       id: m.id,
       roomId: m.roomId,
       senderId: m.senderId,
@@ -331,22 +580,31 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
 router.post("/chat/rooms/:roomId/upload", requireAuth, upload.single("image"), async (req, res): Promise<void> => {
   const roomId = parseInt(req.params.roomId as string, 10);
   const userId = req.session.userId!;
-
-  const [room] = await db.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId));
-  if (!room) { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
-  if (room.buyerId !== userId && room.sellerId !== userId) {
-    res.status(403).json({ error: "접근 권한이 없습니다." }); return;
-  }
   if (!req.file) { res.status(400).json({ error: "이미지를 선택하세요." }); return; }
 
   const imageUrl = `/chat-images/${req.file.filename}`;
-
-  if (room.status === "pending") {
-    await db.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
+  let room: typeof chatRoomsTable.$inferSelect;
+  let message: typeof chatMessagesTable.$inferSelect;
+  try {
+    ({ room, message } = await db.transaction(async tx => {
+      const [locked] = await tx.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId)).for("update");
+      if (!locked) throw new Error("채팅방을 찾을 수 없습니다.");
+      if (locked.buyerId !== userId && locked.sellerId !== userId) throw new Error("접근 권한이 없습니다.");
+      if (["ended", "cancelled", "rejected"].includes(locked.status)) throw new Error("종료된 채팅방에는 메시지를 보낼 수 없습니다.");
+      if (locked.status === "pending") {
+        await tx.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
+      }
+      const [created] = await tx.insert(chatMessagesTable).values({
+        roomId, senderId: userId, content: `[img]${imageUrl}`,
+      }).returning();
+      return { room: locked, message: created };
+    }));
+  } catch (error) {
+    fs.rm(req.file.path, { force: true }, () => {});
+    const msg = error instanceof Error ? error.message : "메시지를 보낼 수 없습니다.";
+    res.status(msg.includes("찾을 수") ? 404 : msg.includes("접근 권한") ? 403 : 400).json({ error: msg });
+    return;
   }
-
-  const content = `[img]${imageUrl}`;
-  const [message] = await db.insert(chatMessagesTable).values({ roomId, senderId: userId, content }).returning();
 
   // 상대방에게 채팅 알림
   const uploadRecipientId = userId === room.buyerId ? room.sellerId : room.buyerId;
@@ -354,7 +612,7 @@ router.post("/chat/rooms/:roomId/upload", requireAuth, upload.single("image"), a
   await createNotification(uploadRecipientId, "chat_message", `${uploadSender?.nickname ?? "상대방"}님의 메시지`, {
     body: "📷 사진을 보냈습니다.",
     link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
-  });
+  }).catch(() => {});
 
   res.status(201).json({
     id: message.id,
@@ -375,22 +633,27 @@ router.post("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promi
     res.status(400).json({ error: "메시지 내용을 입력하세요." }); return;
   }
 
-  const [room] = await db.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId));
-  if (!room) { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
-  if (room.buyerId !== userId && room.sellerId !== userId) {
-    res.status(403).json({ error: "접근 권한이 없습니다." }); return;
+  let room: typeof chatRoomsTable.$inferSelect;
+  let message: typeof chatMessagesTable.$inferSelect;
+  try {
+    ({ room, message } = await db.transaction(async tx => {
+      const [locked] = await tx.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId)).for("update");
+      if (!locked) throw new Error("채팅방을 찾을 수 없습니다.");
+      if (locked.buyerId !== userId && locked.sellerId !== userId) throw new Error("접근 권한이 없습니다.");
+      if (["ended", "cancelled", "rejected"].includes(locked.status)) throw new Error("종료된 채팅방에는 메시지를 보낼 수 없습니다.");
+      if (locked.status === "pending") {
+        await tx.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
+      }
+      const [created] = await tx.insert(chatMessagesTable).values({
+        roomId, senderId: userId, content: content.trim(),
+      }).returning();
+      return { room: locked, message: created };
+    }));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "메시지를 보낼 수 없습니다.";
+    res.status(msg.includes("찾을 수") ? 404 : msg.includes("접근 권한") ? 403 : 400).json({ error: msg });
+    return;
   }
-
-  // 첫 메시지 → 거래대기에서 거래중으로 자동 전환
-  if (room.status === "pending") {
-    await db.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
-  }
-
-  const [message] = await db.insert(chatMessagesTable).values({
-    roomId,
-    senderId: userId,
-    content: content.trim(),
-  }).returning();
 
   // 상대방에게 채팅 알림 전송
   const recipientId = userId === room.buyerId ? room.sellerId : room.buyerId;
@@ -400,7 +663,7 @@ router.post("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promi
   await createNotification(recipientId, "chat_message", `${senderName}님의 메시지`, {
     body: preview,
     link: `/myroom/chat/new_chat.html?roomId=${roomId}`,
-  });
+  }).catch(() => {});
 
   res.status(201).json({
     id: message.id,

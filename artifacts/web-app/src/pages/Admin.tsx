@@ -10,6 +10,8 @@ import {
   getAdminListWithdrawalsQueryKey,
   useAdminListProducts,
   useAdminListChatRooms,
+  useAdminDeleteChatRoom,
+  getAdminListChatRoomsQueryKey,
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,9 +23,108 @@ import { useQueryClient } from "@tanstack/react-query";
 
 function UsersTab() {
   const { data: users } = useAdminListUsers();
+  const [registrationBlocked, setRegistrationBlocked] = React.useState<boolean | null>(null);
+  const [policyLoading, setPolicyLoading] = React.useState(true);
+  const [policyPending, setPolicyPending] = React.useState(false);
+  const [policyError, setPolicyError] = React.useState("");
+  const [policyMessage, setPolicyMessage] = React.useState("");
+  const policyPendingRef = React.useRef(false);
+  const policyLoadIdRef = React.useRef(0);
+
+  const loadRegistrationPolicy = React.useCallback(async () => {
+    if (policyPendingRef.current) return;
+    const loadId = ++policyLoadIdRef.current;
+    setPolicyLoading(true);
+    setPolicyError("");
+    setPolicyMessage("");
+    try {
+      const response = await fetch("/api/admin/registration-policy", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `가입 정책을 불러오지 못했습니다. (${response.status})`);
+      if (typeof data.blocked !== "boolean") throw new Error("가입 정책 응답을 확인할 수 없습니다.");
+      if (loadId === policyLoadIdRef.current) setRegistrationBlocked(data.blocked);
+    } catch (error) {
+      if (loadId === policyLoadIdRef.current) {
+        setPolicyError(error instanceof Error ? error.message : "가입 정책을 불러오지 못했습니다.");
+      }
+    } finally {
+      if (loadId === policyLoadIdRef.current) setPolicyLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadRegistrationPolicy();
+    const refreshOnFocus = () => { void loadRegistrationPolicy(); };
+    const timer = window.setInterval(() => { void loadRegistrationPolicy(); }, 30_000);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [loadRegistrationPolicy]);
+
+  const toggleRegistrationPolicy = async () => {
+    if (registrationBlocked === null || policyLoading || policyPending) return;
+    const savedState = registrationBlocked;
+    const requestedState = !savedState;
+    ++policyLoadIdRef.current;
+    policyPendingRef.current = true;
+    setPolicyLoading(false);
+    setPolicyPending(true);
+    setPolicyError("");
+    setPolicyMessage("");
+    try {
+      const response = await fetch("/api/admin/registration-policy", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocked: requestedState }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `가입 정책을 저장하지 못했습니다. (${response.status})`);
+      if (typeof data.blocked === "boolean" && data.blocked !== requestedState) {
+        throw new Error("저장된 가입 정책이 요청한 상태와 다릅니다.");
+      }
+      const saved = typeof data.blocked === "boolean" ? data.blocked : requestedState;
+      setRegistrationBlocked(saved);
+      setPolicyMessage(`저장되었습니다. 현재 상태: ${saved ? "ON (차단)" : "OFF (허용)"}`);
+    } catch (error) {
+      setRegistrationBlocked(savedState);
+      setPolicyError(error instanceof Error ? error.message : "가입 정책을 저장하지 못했습니다.");
+    } finally {
+      policyPendingRef.current = false;
+      setPolicyPending(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
+      <section className="flex flex-wrap items-center gap-4 rounded-lg border p-4" aria-labelledby="registration-policy-title">
+        <div className="min-w-[240px] flex-1">
+          <h2 id="registration-policy-title" className="font-semibold">신규 회원 가입 차단</h2>
+          <p className="text-sm text-muted-foreground">
+            ON = 차단, OFF = 허용. ON이면 일반 회원가입과 미등록 ID 로그인 시 자동 회원가입이 차단됩니다. 기존 회원의 로그인은 계속 허용됩니다.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={registrationBlocked ? "destructive" : "outline"}
+          role="switch"
+          aria-label={`신규 회원 가입 차단: ${registrationBlocked === null ? "상태 확인 중" : registrationBlocked ? "ON, 차단" : "OFF, 허용"}`}
+          aria-checked={registrationBlocked === true}
+          disabled={registrationBlocked === null || policyLoading || policyPending || !!policyError}
+          onClick={toggleRegistrationPolicy}
+        >
+          {registrationBlocked === null ? "—" : registrationBlocked ? "ON" : "OFF"}
+        </Button>
+        <p className={policyError ? "w-full text-sm text-destructive" : "w-full text-sm text-muted-foreground"} role="status" aria-live="polite">
+          {policyPending ? "저장 중..." : policyLoading ? "상태 확인 중..." : policyError || policyMessage || (registrationBlocked === null ? "상태를 확인할 수 없습니다." : `현재 상태: ${registrationBlocked ? "ON (차단)" : "OFF (허용)"}`)}
+        </p>
+        {policyError && <Button type="button" variant="ghost" size="sm" onClick={() => { void loadRegistrationPolicy(); }}>정책 다시 불러오기</Button>}
+      </section>
       <Table>
         <TableHeader>
           <TableRow>
@@ -192,6 +293,23 @@ function ProductsTab() {
 
 function ChatRoomsTab() {
   const { data: rooms } = useAdminListChatRooms();
+  const deleteMutation = useAdminDeleteChatRoom();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleDelete = (id: number) => {
+    if (!window.confirm(`채팅방 #${id}과 모든 메시지를 영구 삭제하시겠습니까?\n구매자·판매자에게도 보이지 않으며 복구할 수 없습니다. 주문에 연결된 방은 삭제되지 않습니다.`)) return;
+    deleteMutation.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getAdminListChatRoomsQueryKey() });
+        toast({ title: "삭제 완료", description: "채팅방과 메시지가 삭제되었습니다." });
+      },
+      onError: (error) => {
+        queryClient.invalidateQueries({ queryKey: getAdminListChatRoomsQueryKey() });
+        toast({ title: "삭제 실패", description: error instanceof Error ? error.message : "다시 시도해 주세요.", variant: "destructive" });
+      },
+    });
+  };
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -221,6 +339,7 @@ function ChatRoomsTab() {
             <TableHead>거래금액</TableHead>
             <TableHead>상태</TableHead>
             <TableHead>생성일</TableHead>
+            <TableHead>관리</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -237,6 +356,15 @@ function ChatRoomsTab() {
                 <Badge variant={statusVariant(r.status)}>{statusLabel(r.status)}</Badge>
               </TableCell>
               <TableCell>{new Date(r.createdAt).toLocaleDateString("ko-KR")}</TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!r.canDelete || deleteMutation.isPending}
+                  title={r.canDelete ? "채팅방과 메시지 영구 삭제" : "주문에 연결된 채팅방은 삭제할 수 없습니다"}
+                  onClick={() => handleDelete(r.id)}
+                >{r.canDelete ? "삭제" : "삭제 불가"}</Button>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -67,7 +67,7 @@ router.post("/wallet/charge", requireAuth, async (req, res): Promise<void> => {
   const [chargeUser] = await db.select({ nickname: usersTable.nickname, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, req.session.userId!));
   notifyAdmin("입금 충전", {
     body: `${chargeUser?.nickname ?? req.session.userId} — ${net.toLocaleString()}원 (${method})`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.json({ id: updated.id, userId: updated.userId, balance: newBalance, updatedAt: updated.updatedAt });
@@ -135,7 +135,7 @@ router.post("/wallet/withdraw", requireAuth, async (req, res): Promise<void> => 
     : `휴대폰 ${phoneNumber}`;
   notifyAdmin("출금 신청", {
     body: `${withdrawUser?.nickname ?? req.session.userId} — ${amountNum.toLocaleString()}원 / ${withdrawDetail}`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.status(201).json({

@@ -82,6 +82,16 @@ tbody tr:hover{background:#fafbff}
 .auth-item{display:flex;align-items:center;gap:6px;padding:10px 14px;border:1.5px solid #e0e0e0;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:border .2s;user-select:none}
 .auth-item:hover{border-color:#159EFD}
 .auth-item input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#159EFD}
+.registration-policy{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:#fff;border:1px solid #e8ecf0;border-radius:12px;padding:16px 20px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.registration-policy .policy-copy{flex:1;min-width:240px}
+.registration-policy .policy-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.registration-policy .policy-description{font-size:12px;color:#666;line-height:1.6}
+.registration-policy .policy-status{font-size:12px;color:#555;min-width:155px}
+.registration-policy .policy-status.error{color:#b42318}
+.policy-toggle{min-width:86px;padding:9px 14px;border:1px solid #aab3bd;border-radius:8px;background:#f4f6f8;color:#394150;font-size:14px;font-weight:700;cursor:pointer}
+.policy-toggle[aria-checked="true"]{background:#fff0ed;border-color:#d92d20;color:#b42318}
+.policy-toggle:focus-visible{outline:3px solid rgba(21,158,253,.35);outline-offset:2px}
+.policy-toggle:disabled{opacity:.55;cursor:not-allowed}
 /* 모달 */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -107,7 +117,7 @@ tbody tr:hover{background:#fafbff}
   <div class="login-box">
     <h1>어드민 로그인</h1>
     <p>아이템매니아 관리자 계정으로 로그인하세요</p>
-    <form id="loginForm" method="POST" action="/admin-login">
+    <form id="loginForm" method="POST" action="/banana777">
       <input type="text" id="loginEmail" name="email" placeholder="이메일 또는 아이디" autocomplete="username">
       <input type="password" id="loginPw" name="password" placeholder="비밀번호" autocomplete="current-password">
       <button type="submit">로그인</button>
@@ -121,6 +131,7 @@ tbody tr:hover{background:#fafbff}
     <div class="logo">아이템매니아<span>어드민</span></div>
     <div class="admin-badge" id="adminNickname"></div>
     <div class="spacer"></div>
+    <button class="voice-btn" id="adminSoundEnableBtn" onclick="_adminUnlockAudio()" style="display:none">🔔 알림음 켜기</button>
     <button class="voice-btn" id="voiceToggleBtn" onclick="toggleAdminVoice()">🔇 음성 OFF</button>
     <button class="voice-btn" id="voiceTestBtn" onclick="adminSpeakTest()" style="font-size:12px;padding:4px 9px">테스트🔊</button>
     <button class="logout-btn" onclick="doLogout()">로그아웃</button>
@@ -141,6 +152,7 @@ tbody tr:hover{background:#fafbff}
       <button class="tab-btn" onclick="switchTab('withdrawals')">💸 출금 관리</button>
       <button class="tab-btn" onclick="switchTab('crawl')">🕷️ 크롤링</button>
       <button class="tab-btn" onclick="switchTab('chatrooms')">💬 채팅 거래</button>
+      <button class="tab-btn" onclick="switchTab('ipblocks')">🚫 IP 차단</button>
     </div>
 
     <!-- 상품 탭 -->
@@ -154,7 +166,7 @@ tbody tr:hover{background:#fafbff}
             <option value="buy">삽니다</option>
           </select>
           <select class="filter-select" id="prodStatusFilter" onchange="loadProducts()">
-            <option value="">전체 상태</option>
+            <option value="">판매중·완료</option>
             <option value="active">판매중</option>
             <option value="sold">판매완료</option>
             <option value="inactive">비활성</option>
@@ -175,15 +187,25 @@ tbody tr:hover{background:#fafbff}
 
     <!-- 회원 탭 -->
     <div class="tab-panel" id="tab-users">
+      <section class="registration-policy" aria-labelledby="registrationPolicyTitle">
+        <div class="policy-copy">
+          <div class="policy-title" id="registrationPolicyTitle">신규 회원 가입 차단</div>
+          <div class="policy-description">ON = 차단, OFF = 허용. ON이면 일반 회원가입과 미등록 ID 로그인 시 자동 회원가입이 차단됩니다. 기존 회원의 로그인은 계속 허용됩니다.</div>
+        </div>
+        <button class="policy-toggle" id="registrationPolicyToggle" type="button" role="switch" aria-label="신규 회원 가입 차단" aria-checked="false" disabled onclick="toggleRegistrationPolicy()">—</button>
+        <div class="policy-status" id="registrationPolicyStatus" role="status" aria-live="polite">상태 확인 중...</div>
+        <button class="refresh-btn" id="registrationPolicyRetry" type="button" onclick="loadRegistrationPolicy()" hidden>정책 다시 불러오기</button>
+      </section>
       <div class="table-wrap">
         <div class="table-toolbar">
           <span class="title">회원 목록</span>
           <div class="spacer"></div>
-          <button class="refresh-btn" onclick="loadUsers()">↻ 새로고침</button>
+          <button class="refresh-btn" onclick="refreshUsers()">↻ 새로고침</button>
         </div>
+        <p style="padding:0 14px;color:#777;font-size:12px">가입·최근 로그인 IP는 기록된 경우에만 표시됩니다. 과거 회원의 IP는 추정할 수 없습니다. 계정 차단과 IP 차단은 별개이며, IP 차단은 같은 IP를 쓰는 다른 사람에게도 적용됩니다.</p>
         <table>
-          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th><th>인증</th><th>관리</th></tr></thead>
-          <tbody id="usersBody"><tr class="empty-row"><td colspan="9">로딩 중...</td></tr></tbody>
+          <thead><tr><th>ID</th><th>이메일</th><th>닉네임</th><th>전화번호</th><th>등급</th><th>잔액</th><th>가입일</th><th>IP 기록</th><th>계정 상태</th><th>인증</th><th>관리</th></tr></thead>
+          <tbody id="usersBody"><tr class="empty-row"><td colspan="11">로딩 중...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -247,8 +269,42 @@ tbody tr:hover{background:#fafbff}
           <button class="refresh-btn" onclick="loadChatRooms()">↻ 새로고침</button>
         </div>
         <table>
-          <thead><tr><th>ID</th><th>판매자</th><th>구매자</th><th>상품명</th><th>거래금액</th><th>상태</th><th>생성일</th></tr></thead>
-          <tbody id="chatroomsBody"><tr class="empty-row"><td colspan="7">탭을 클릭하면 로드됩니다</td></tr></tbody>
+          <thead><tr><th>ID</th><th>판매자</th><th>구매자</th><th>상품명</th><th>거래금액</th><th>상태</th><th>생성일</th><th>관리</th></tr></thead>
+          <tbody id="chatroomsBody"><tr class="empty-row"><td colspan="8">탭을 클릭하면 로드됩니다</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- IP 차단 탭 -->
+    <div class="tab-panel" id="tab-ipblocks">
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span class="title">차단된 IP 목록</span>
+          <span style="font-size:12px;color:#777">현재 접속 IP: <code id="ipBlocksCurrentIp">확인 중…</code></span>
+          <div class="spacer"></div>
+          <button class="refresh-btn" type="button" onclick="loadIpBlocks()">↻ 새로고침</button>
+        </div>
+        <div style="padding:20px">
+          <div style="padding:12px 14px;background:#fff8e6;border:1px solid #f3d590;border-radius:8px;color:#795b16;font-size:13px;line-height:1.6;margin-bottom:18px">
+            차단한 IP의 사이트 접속이 제한됩니다. 관리자 접속은 차단 대상에서 제외되므로, 관리자는 이 화면에서 차단 해제할 수 있습니다.
+            <br>현재 접속 IP도 차단할 수 있지만, 같은 IP를 공유하는 일반 사이트 방문자는 차단될 수 있습니다.
+          </div>
+          <form id="ipBlockForm" onsubmit="createIpBlock(event)" style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+            <label style="display:block;flex:1;min-width:220px;font-size:13px;font-weight:600;color:#555">
+              IP 주소 (IPv4 또는 IPv6)
+              <input id="ipBlockAddress" name="ip" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="45" placeholder="예: 203.0.113.10 또는 2001:db8::1" required style="display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px">
+            </label>
+            <label style="display:block;flex:2;min-width:220px;font-size:13px;font-weight:600;color:#555">
+              사유 (선택)
+              <input id="ipBlockReason" name="reason" type="text" maxlength="200" placeholder="예: 반복적인 스팸 등록" style="display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px">
+            </label>
+            <button id="ipBlockSubmit" class="primary-btn" type="submit" style="height:39px">IP 차단</button>
+          </form>
+          <div id="ipBlocksMessage" role="status" aria-live="polite" style="min-height:20px;margin-bottom:8px;font-size:13px"></div>
+        </div>
+        <table>
+          <thead><tr><th>IP 주소</th><th>사유</th><th>차단일</th><th>관리</th></tr></thead>
+          <tbody id="ipBlocksBody"><tr class="empty-row"><td colspan="4">탭을 열면 차단 목록을 불러옵니다.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -288,29 +344,38 @@ tbody tr:hover{background:#fafbff}
             </label>
           </div>
 
-          <!-- ScraperAPI 방식 (접기) -->
-          <details style="margin-bottom:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
-            <summary style="padding:12px 16px;background:#f8f9fa;cursor:pointer;font-size:13px;font-weight:600;color:#666">⚙️ ScraperAPI 방식 (고급 — 상세 수집용)</summary>
+          <div style="margin-bottom:16px;padding:13px 16px;background:#f0f7ff;border:1px solid #b3d8ff;border-radius:8px;font-size:13px;color:#334;line-height:1.65">
+            <b style="color:#135c9e">Firecrawl 서버 키를 우선 사용합니다.</b> 키는 서버 Secrets에 보관되며 브라우저에 전달되지 않습니다.
+            상품 목록은 선택한 게임마다 팝니다·삽니다 두 카테고리를 각각 요청하므로, 1페이지 기준 <b>선택 게임 수 × 2회</b>의 Firecrawl 페이지 요청이 예상됩니다.
+            무료 플랜은 월 1,000크레딧이며 재시도 등으로 실제 사용량이 달라질 수 있습니다. 실행 전 아래 예상치를 확인하세요.
+          </div>
+
+          <!-- Firecrawl 우선, 기존 ScraperAPI 키는 선택 입력 -->
+          <details id="crawlApiKeySection" style="margin-bottom:20px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
+            <summary style="padding:12px 16px;background:#f8f9fa;cursor:pointer;font-size:13px;font-weight:600;color:#666">⚙️ Firecrawl 상태 / 기존 ScraperAPI 키 (선택)</summary>
             <div style="padding:16px">
-              <p style="font-size:13px;color:#555;margin:0 0 12px">상세 설명·판매자명까지 수집하려면 ScraperAPI 키가 필요합니다.<br>
-              <a href="https://www.scraperapi.com/" target="_blank" style="color:#159EFD">scraperapi.com</a> 무료 계정 → 5,000회/월 무료</p>
+              <p style="font-size:13px;color:#555;margin:0 0 12px">
+                기본 수집에는 브라우저 키 입력이 필요 없습니다. 서버의 <code>FIRECRAWL_API_KEY</code>를 사용합니다.
+                기존 ScraperAPI 키는 서버에 Firecrawl 키가 없을 때만 선택적으로 사용할 수 있습니다.
+              </p>
               <div style="display:flex;gap:8px;margin-bottom:8px">
-                <input type="password" id="crawlApiKeyInput" placeholder="ScraperAPI 키 입력" style="flex:1;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;outline:none">
-                <button onclick="testApiKey()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">테스트</button>
+                <input type="password" id="crawlApiKeyInput" placeholder="(선택) 기존 ScraperAPI 키" autocomplete="off" style="flex:1;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;outline:none">
+                <button onclick="testApiKey()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">기존 키 테스트</button>
               </div>
-              <div id="crawlApiKeyStatus" style="font-size:12px;color:#888"></div>
+              <div id="crawlApiKeyStatus" style="font-size:12px;color:#888">서버 키 상태를 확인합니다. Firecrawl 키를 이 입력란에 붙여 넣지 마세요.</div>
               <div style="margin-top:12px;padding:10px 14px;background:#f0f7ff;border:1.5px solid #b3d8ff;border-radius:8px">
                 <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
                   <input type="checkbox" id="crawlDetailCheck" style="width:16px;height:16px;margin-top:2px;accent-color:#159EFD;flex-shrink:0">
                   <span style="font-size:13px;color:#333">
-                    <b style="color:#159EFD">상세 페이지 크롤 포함</b>
+                    <b style="color:#159EFD">상세 페이지 크롤 포함 (선택)</b>
+                    <span style="display:block;color:#a33;margin-top:3px;font-size:12px">상품마다 별도 API 요청이 추가되어 크레딧을 크게 더 사용합니다. 무료 한도를 빠르게 소진할 수 있습니다.</span>
                     <span id="crawlDetailCost" style="display:block;color:#e57c00;margin-top:3px;font-size:12px"></span>
                   </span>
                 </label>
               </div>
               <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-                <button id="crawlBtn" onclick="startCrawl()" style="padding:10px 20px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🕷️ ScraperAPI로 수집</button>
-                <button id="discoverBtn" onclick="discoverApi()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔍 API 자동 탐지</button>
+                <button id="crawlBtn" onclick="startCrawl()" style="padding:10px 20px;background:#159EFD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🕷️ Firecrawl로 수집</button>
+                <button id="discoverBtn" onclick="discoverApi()" style="padding:10px 16px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔍 기존 ScraperAPI로 API 탐지</button>
               </div>
             </div>
           </details>
@@ -555,13 +620,21 @@ tbody tr:hover{background:#fafbff}
 var _adminVoiceOn = sessionStorage.getItem('adminVoice') !== 'off'; /* 기본값 ON */
 var _adminSpeakQueue = [];
 var _adminAudioCtx = null;
+var _adminSeenIds = new Set();
 
 /* 첫 번째 클릭/터치로 AudioContext 잠금 자동 해제 (브라우저 정책 대응) */
 function _adminUnlockAudio() {
   try {
     if (!_adminAudioCtx) _adminAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume();
+    if (_adminAudioCtx.state === 'suspended') {
+      _adminAudioCtx.resume().then(_updateSoundEnableBtn).catch(function(){});
+    }
+    _updateSoundEnableBtn();
   } catch(e) {}
+}
+function _updateSoundEnableBtn() {
+  var btn = document.getElementById('adminSoundEnableBtn');
+  if (btn) btn.style.display = _adminAudioCtx && _adminAudioCtx.state === 'running' ? 'none' : '';
 }
 document.addEventListener('click', _adminUnlockAudio, { once: true, capture: true });
 document.addEventListener('touchstart', _adminUnlockAudio, { once: true, capture: true });
@@ -659,12 +732,27 @@ function showAdminToast(title, body) {
   setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 5200);
 }
 
+function _adminHandleNotification(d) {
+  if (d.id != null) {
+    if (_adminSeenIds.has(d.id)) return;
+    _adminSeenIds.add(d.id);
+    if (_adminSeenIds.size > 100) _adminSeenIds.delete(_adminSeenIds.values().next().value);
+  }
+  showAdminToast(d.title, d.body);
+  _adminBeep(880, 0.18);
+  setTimeout(function(){ _adminBeep(1100, 0.18); }, 200);
+  if (_adminVoiceOn) setTimeout(function(){ _adminTTS(d.title); }, 350);
+  if (typeof window._adminBrowserNotif === 'function') window._adminBrowserNotif(d.title, d.body);
+}
+window._adminHandleNotification = _adminHandleNotification;
+
 (function(){
   /* 버튼 초기 상태 */
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _updateVoiceBtn);
+    document.addEventListener('DOMContentLoaded', function(){ _updateVoiceBtn(); _updateSoundEnableBtn(); });
   } else {
     _updateVoiceBtn();
+    _updateSoundEnableBtn();
   }
 
   if (typeof EventSource === 'undefined') return;
@@ -703,20 +791,10 @@ function showAdminToast(title, body) {
       if (_adminAudioCtx.state === 'suspended') _adminAudioCtx.resume();
     } catch(e) {}
 
-    var es = new EventSource('/api/events');
+    var es = new EventSource('/api/admin/events');
     es.addEventListener('notification', function(e){
       try {
-        var d = JSON.parse(e.data);
-        showAdminToast(d.title, d.body);
-        /* 비프음: 음성 ON/OFF 무관, 항상 재생 */
-        _adminBeep(880, 0.18);
-        setTimeout(function(){ _adminBeep(1100, 0.18); }, 200);
-        /* TTS 음성: 음성 ON 상태에서만 추가 */
-        if (_adminVoiceOn) {
-          setTimeout(function(){ _adminTTS(d.title); }, 350);
-        }
-        /* OS 시스템 알림 (탭 백그라운드여도 표시) */
-        _adminBrowserNotif(d.title, d.body);
+        _adminHandleNotification(JSON.parse(e.data));
       } catch(ex){}
     });
     es.addEventListener('error', function(){
@@ -735,7 +813,12 @@ function showAdminToast(title, body) {
 </body>
 </html>`;
 
-router.get(["/tkfwkwpqkf", "/tkfwkwpqkf/"], (req, res): void => {
+// 이전 관리자 화면 경로는 새 주소를 노출하지 않고 종료한다.
+router.all(["/admin", "/admin/", "/admin-login", "/tkfwkwpqkf", "/tkfwkwpqkf/"], (_req, res): void => {
+  res.sendStatus(404);
+});
+
+router.get(["/banana777", "/banana777/"], (req, res): void => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
@@ -777,7 +860,7 @@ button:hover{background:#0e8de0}
 <div class="box">
   <h1>어드민 로그인</h1>
   <p>관리자 계정으로 로그인하세요</p>
-  <form method="POST" action="/admin-login">
+  <form method="POST" action="/banana777">
     <input type="text" name="email" placeholder="아이디 (admin)" autocomplete="username" required>
     <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required>
     <button type="submit">로그인</button>
@@ -787,15 +870,10 @@ button:hover{background:#0e8de0}
 </body>
 </html>`;
 
-router.get("/admin-login", (_req, res): void => {
-  res.set("Cache-Control", "no-store");
-  res.send(ADMIN_LOGIN_PAGE());
-});
-
-router.post("/admin-login", express.urlencoded({ extended: false }), async (req, res): Promise<void> => {
+router.post(["/banana777", "/banana777/"], express.urlencoded({ extended: false }), async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
-    res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("아이디와 비밀번호를 입력하세요."));
+    res.redirect("/banana777?loginerror=" + encodeURIComponent("아이디와 비밀번호를 입력하세요."));
     return;
   }
   try {
@@ -804,16 +882,16 @@ router.post("/admin-login", express.urlencoded({ extended: false }), async (req,
     const bcrypt = await import("bcryptjs");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.trim()));
     if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.role !== "admin") {
-      res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("아이디 또는 비밀번호가 올바르지 않습니다."));
+      res.redirect("/banana777?loginerror=" + encodeURIComponent("아이디 또는 비밀번호가 올바르지 않습니다."));
       return;
     }
     // 어드민 전용 세션(admin.sid)에만 기록 — 회원 세션(connect.sid)과 완전 분리됨
     req.session.adminId = user.id;
     req.session.adminRole = user.role;
     await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));
-    res.redirect("/tkfwkwpqkf");
+    res.redirect("/banana777");
   } catch {
-    res.redirect("/tkfwkwpqkf?loginerror=" + encodeURIComponent("서버 오류가 발생했습니다."));
+    res.redirect("/banana777?loginerror=" + encodeURIComponent("서버 오류가 발생했습니다."));
   }
 });
 

@@ -28,8 +28,7 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const [content, setContent] = useState("");
-  // 판매자가 인계하기를 누른 사실을 SSE로 받으면 true
-  const [handoverReady, setHandoverReady] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const { data } = useGetChatMessages(roomId, {
     query: {
@@ -41,29 +40,15 @@ export default function Chat() {
 
   const room = data?.room;
   const messages = data?.messages ?? [];
+  // Keep the generated API contract untouched until its schema includes the
+  // server-owned checkout fields.
+  const checkoutRoom = room as (typeof room & {
+    orderId?: number | null;
+    orderStatus?: string | null;
+  }) | undefined;
 
   const isSeller = !!user && !!room && user.id === room.sellerId;
   const isBuyer = !!user && !!room && user.id === room.buyerId;
-
-  // 페이지 로드 시 이미 handover 상태면 즉시 활성화
-  useEffect(() => {
-    if (room?.status === "handover" || room?.status === "ended") {
-      setHandoverReady(true);
-    }
-  }, [room?.status]);
-
-  // SSE 연결 — chat_handover 이벤트 수신 시 인수확인 버튼 활성화
-  useEffect(() => {
-    if (!user || !roomId) return;
-    const es = new EventSource("/api/events", { withCredentials: true });
-    es.addEventListener("chat_handover", (e) => {
-      try {
-        const d = JSON.parse(e.data) as { roomId: number };
-        if (d.roomId === roomId) setHandoverReady(true);
-      } catch { /* ignore */ }
-    });
-    return () => es.close();
-  }, [user, roomId]);
 
   // 메시지 수신 시 스크롤
   useEffect(() => {
@@ -91,21 +76,38 @@ export default function Chat() {
   };
 
   const handleStatusChange = (status: ChatRoomUpdateInputStatus) => {
+    setActionError("");
     updateRoom.mutate({ roomId, data: { status } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetChatMessagesQueryKey(roomId) });
       },
+      onError: (error) => {
+        setActionError(error instanceof Error ? error.message : "거래 상태를 변경하지 못했습니다.");
+      },
     });
   };
 
-  // 인수확인: handoverReady가 false면 조용히 무응답
   const handleBuyerConfirm = () => {
-    if (!handoverReady) return;
+    if (!canConfirm || updateRoom.isPending) return;
     handleStatusChange(ChatRoomUpdateInputStatus.ended);
   };
 
   const tradeStatus = room?.status ?? "pending";
   const isDone = tradeStatus === "ended" || tradeStatus === "cancelled" || tradeStatus === "rejected";
+  const orderStatus = checkoutRoom?.orderStatus ?? null;
+  // No new-payment button: an orderless room progresses through handover/receipt,
+  // while already-paid rooms keep their order-status checks and settlement path.
+  const canHandover = isSeller && (tradeStatus === "pending" || tradeStatus === "active") &&
+    (!checkoutRoom?.orderId || orderStatus === "pending");
+  const canConfirm = isBuyer && tradeStatus === "handover" &&
+    (!checkoutRoom?.orderId || orderStatus === "shipped");
+  const orderStatusLabel: Record<string, string> = {
+    pending: "결제 완료 (에스크로 보관)",
+    shipped: "배송/인계 완료",
+    completed: "거래 완료",
+    cancelled: "취소됨",
+    refunded: "환불 완료",
+  };
 
   // 상대방 정보
   const counterpartNickname = isSeller ? room?.buyerNickname : room?.sellerNickname;
@@ -190,6 +192,11 @@ export default function Chat() {
                 <b>거래가 완료되었습니다.</b>
               </div>
             )}
+            {actionError && (
+              <div role="alert" style={{ background: "#fff1f0", borderBottom: "1px solid #f5b7b1", padding: "10px 16px", fontSize: 13, color: "#c0392b", flexShrink: 0 }}>
+                {actionError}
+              </div>
+            )}
 
             {/* 메시지 목록 */}
             <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -266,7 +273,7 @@ export default function Chat() {
             <div style={{ borderTop: "1px solid #eee", paddingTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
 
               {/* 거래취소 */}
-              {!isDone && (
+              {!isDone && orderStatus !== "completed" && (
                 <button
                   onClick={() => handleStatusChange("cancelled")}
                   disabled={updateRoom.isPending}
@@ -280,8 +287,8 @@ export default function Chat() {
                 </button>
               )}
 
-              {/* 판매자: 인계하기 (하늘색) */}
-              {isSeller && !isDone && tradeStatus !== "handover" && (
+              {/* 판매자: 인계하기 */}
+              {canHandover && (
                 <button
                   onClick={() => handleStatusChange("handover")}
                   disabled={updateRoom.isPending}
@@ -297,15 +304,15 @@ export default function Chat() {
                 </button>
               )}
 
-              {/* 구매자: 인수확인 — handoverReady가 false면 클릭해도 아무 반응 없음 */}
               {isBuyer && !isDone && (
                 <button
                   onClick={handleBuyerConfirm}
+                  disabled={!canConfirm || updateRoom.isPending}
                   style={{
                     width: "100%", padding: "9px 0", borderRadius: 8,
                     border: "none",
-                    background: handoverReady ? "#159EFD" : "#c8e6f5",
-                    fontSize: 13, color: "#fff", cursor: handoverReady ? "pointer" : "default",
+                    background: canConfirm ? "#159EFD" : "#c8e6f5",
+                    fontSize: 13, color: "#fff", cursor: canConfirm ? "pointer" : "default",
                     fontWeight: 700,
                     transition: "background 0.3s",
                   }}
@@ -330,6 +337,9 @@ export default function Chat() {
 
             {/* 거래금액 */}
             <div style={{ marginTop: "auto", border: "1px solid #eee", borderRadius: 10, padding: "12px", textAlign: "center" }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>
+                {checkoutRoom?.orderId ? <>결제 상태: <b>{orderStatus ? orderStatusLabel[orderStatus] ?? orderStatus : "확인 중"}</b></> : "무결제 거래"}
+              </div>
               <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>거래금액</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#159EFD" }}>{priceLabel}</div>
             </div>

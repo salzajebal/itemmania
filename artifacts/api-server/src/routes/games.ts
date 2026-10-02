@@ -69,6 +69,18 @@ export async function getAllGamesWithServers(): Promise<GameWithServers[]> {
   return gamesCache;
 }
 
+const snapshotCodes: Record<string, string> = {
+  "5799": "아이온2", "2696": "로스트아크", "3449": "리니지M",
+  "281": "던전앤파이터", "155": "마비노기", "4696": "오딘", "101": "거상",
+};
+
+export async function findGameByCode(code: string): Promise<GameWithServers | null> {
+  const games = await getAllGamesWithServers();
+  const game = games.find(g => g.code === code)
+    ?? games.find(g => g.code === null && g.name === snapshotCodes[code]);
+  return game ? { ...game, code } : null;
+}
+
 // GET /api/games/search?q=검색어 (초성 검색 지원)
 router.get("/games/search", async (req, res): Promise<void> => {
   const q = String(req.query["q"] ?? "").trim();
@@ -87,12 +99,16 @@ router.get("/games/bycode/:code", async (req, res): Promise<void> => {
   const code = req.params["code"] ?? "";
   if (!code) { res.status(400).json({ error: "code 필요" }); return; }
 
-  const allGames = await getAllGamesWithServers();
-  const game = allGames.find(g => g.code === code);
+  const game = await findGameByCode(code);
   if (!game) { res.status(404).json({ error: "게임 없음" }); return; }
 
   res.set("Cache-Control", "public, max-age=300");
-  res.json({ id: game.id, name: game.name, code: game.code });
+  res.json({ id: game.id, name: game.name, code });
+});
+
+router.get("/games", async (_req, res): Promise<void> => {
+  res.set("Cache-Control", "public, max-age=60");
+  res.json(await getAllGamesWithServers());
 });
 
 // GET /api/games/:id/servers

@@ -9,6 +9,7 @@ import adminRouter from "./admin";
 import gamesRouter from "./games";
 import eventsRouter from "./events";
 import notificationsRouter from "./notifications";
+import ipBlocksRouter from "./ip-blocks";
 
 const router: IRouter = Router();
 
@@ -19,6 +20,7 @@ router.use(ordersRouter);
 router.use(notificationsRouter);
 router.use(chatRouter);
 router.use(productsRouter);
+router.use(ipBlocksRouter);
 router.use(adminRouter);
 router.use(gamesRouter);
 router.use(eventsRouter);

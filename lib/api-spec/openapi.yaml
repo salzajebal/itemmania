@@ -540,6 +540,78 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Admin ───────────────────────────────────────────────────────────────
+  /admin/registration-policy:
+    get:
+      operationId: adminGetRegistrationPolicy
+      tags: [admin]
+      summary: 신규 회원가입 차단 상태 조회
+      responses:
+        "200":
+          description: 현재 가입 정책
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationPolicy"
+        "401":
+          description: 관리자 로그인 필요
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: 관리자 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: 정책 조회 실패
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: adminUpdateRegistrationPolicy
+      tags: [admin]
+      summary: 신규 회원가입 차단 상태 변경
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrationPolicyUpdate"
+      responses:
+        "200":
+          description: 변경된 가입 정책
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationPolicy"
+        "400":
+          description: blocked 값이 boolean이 아님
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: 관리자 로그인 필요
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: 관리자 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: 정책 저장 실패
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/users:
     get:
       operationId: adminListUsers
@@ -567,6 +639,44 @@ paths:
                   $ref: "#/components/schemas/AdminUser"
         "403":
           description: 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}/suspension:
+    patch:
+      operationId: adminSetUserSuspension
+      tags: [admin]
+      summary: 회원 계정 차단 또는 해제 (IP 차단과 별개)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSuspensionRequest"
+      responses:
+        "200":
+          description: 변경된 차단 상태
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, suspendedAt]
+                properties:
+                  id:
+                    type: integer
+                  suspendedAt:
+                    type: ["string", "null"]
+                    format: date-time
+        "403":
+          description: 권한 없음 또는 관리자 차단 불가
           content:
             application/json:
               schema:
@@ -671,6 +781,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/chat-rooms/{id}:
+    delete:
+      operationId: adminDeleteChatRoom
+      tags: [admin]
+      summary: 주문에 연결되지 않은 채팅방과 메시지 영구 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 삭제 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: 잘못된 채팅방 ID
+        "403":
+          description: 관리자 권한 없음
+        "404":
+          description: 채팅방 없음
+        "409":
+          description: 주문에 연결된 채팅방은 삭제 불가
 
   /admin/withdrawals/{id}:
     patch:
@@ -1071,10 +1212,13 @@ components:
 
     AdminChatRoom:
       type: object
-      required: [id, sellerId, buyerId, status, createdAt]
+      required: [id, canDelete, sellerId, buyerId, status, createdAt]
       properties:
         id:
           type: integer
+        canDelete:
+          type: boolean
+          description: 주문에 연결되지 않아 삭제할 수 있는 채팅방인지 여부
         sellerId:
           type: integer
         buyerId:
@@ -1094,6 +1238,19 @@ components:
           format: date-time
 
     # ─── Admin ────────────────────────────────────────────────────────────
+    RegistrationPolicy:
+      type: object
+      required: [blocked]
+      properties:
+        blocked:
+          type: boolean
+    RegistrationPolicyUpdate:
+      type: object
+      required: [blocked]
+      properties:
+        blocked:
+          type: boolean
+
     AdminUser:
       type: object
       required: [id, email, nickname, role, createdAt]
@@ -1109,8 +1266,21 @@ components:
         role:
           type: string
           enum: [user, admin]
+        signupIp:
+          type: ["string", "null"]
+        lastLoginIp:
+          type: ["string", "null"]
+        suspendedAt:
+          type: ["string", "null"]
+          format: date-time
         balance:
           type: ["integer", "null"]
         createdAt:
           type: string
           format: date-time
+    AdminSuspensionRequest:
+      type: object
+      required: [suspended]
+      properties:
+        suspended:
+          type: boolean

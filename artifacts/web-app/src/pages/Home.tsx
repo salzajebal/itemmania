@@ -5,6 +5,7 @@ import { BuyModal } from "@/components/modals/BuyModal";
 import { useListProducts } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { ListProductsParams } from "@workspace/api-client-react";
 
 function formatKRW(amount: number) {
   return amount.toLocaleString("ko-KR") + "원";
@@ -22,15 +23,16 @@ type ProductType = {
 };
 
 function ProductCard({ product, onBuy }: { product: ProductType; onBuy: (p: ProductType) => void }) {
+  const sold = product.status === "sold";
   return (
     <div
       data-testid={`card-product-${product.id}`}
-      onClick={() => onBuy(product)}
-      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/60 hover:shadow-md transition-all cursor-pointer group"
+      onClick={sold ? undefined : () => onBuy(product)}
+      className={`relative bg-card border border-border rounded-lg overflow-hidden group ${sold ? "cursor-not-allowed" : "hover:border-primary/60 hover:shadow-md transition-all cursor-pointer"}`}
     >
       <div className="aspect-square bg-muted relative overflow-hidden">
         {product.thumbnailUrl ? (
-          <img src={product.thumbnailUrl} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <img src={product.thumbnailUrl} alt={product.title} className={`w-full h-full object-cover ${sold ? "" : "group-hover:scale-105 transition-transform duration-300"}`} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">이미지 없음</div>
         )}
@@ -45,11 +47,20 @@ function ProductCard({ product, onBuy }: { product: ProductType; onBuy: (p: Prod
           <p className="text-xs text-muted-foreground">{product.sellerName}</p>
         )}
         <div className="pt-1">
-          <span className="inline-block w-full text-center text-xs font-semibold py-1.5 rounded bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+          <span className={`inline-block w-full text-center text-xs font-semibold py-1.5 rounded bg-primary/10 text-primary ${sold ? "" : "group-hover:bg-primary group-hover:text-primary-foreground transition-colors"}`}>
             구매하기
           </span>
         </div>
       </div>
+      {sold && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-[#eeeff1]/85 text-[#24262b] text-xl font-extrabold tracking-tight select-none"
+          aria-label="거래 완료"
+          data-testid={`status-sold-${product.id}`}
+        >
+          거래 완료
+        </div>
+      )}
     </div>
   );
 }
@@ -60,9 +71,12 @@ export default function Home() {
   const [keyword, setKeyword] = useState("");
   const [searchInput, setSearchInput] = useState("");
 
-  const { data: productData, isLoading } = useListProducts(
-    keyword ? { keyword, limit: 40 } : { limit: 40 }
-  );
+  const listParams = keyword ? { keyword, limit: 40 } : { limit: 40 };
+  const { data: productData, isLoading: activeLoading, isError: activeError, refetch: refetchActive } = useListProducts(listParams);
+  // The generated query URL accepts extra query parameters even though its schema has not
+  // yet been updated to type the server's existing status filter.
+  const soldParams: ListProductsParams & { status: string } = { ...listParams, status: "sold" };
+  const { data: soldData, isLoading: soldLoading, isError: soldError, refetch: refetchSold } = useListProducts(soldParams);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -91,6 +105,7 @@ export default function Home() {
   };
 
   const handleBuy = (product: ProductType) => {
+    if (product.status === "sold") return;
     if (!user) {
       openLogin();
       return;
@@ -102,7 +117,17 @@ export default function Home() {
     });
   };
 
-  const products = productData?.items ?? [];
+  const isLoading = activeLoading || soldLoading;
+  const isError = activeError || soldError;
+  const products: ProductType[] = [];
+  const seen = new Set<string>();
+  [...(productData?.items ?? []), ...(soldData?.items ?? [])].forEach((product) => {
+    const key = product.itemmaniaid || String(product.id);
+    if (seen.has(key)) return;
+    seen.add(key);
+    products.push(product);
+  });
+  products.sort((a, b) => b.id - a.id);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
@@ -160,6 +185,11 @@ export default function Home() {
                   <Skeleton className="h-4 w-1/2" />
                 </div>
               ))}
+            </div>
+          ) : isError ? (
+            <div className="py-16 text-center" role="alert" data-testid="error-products">
+              <p className="text-sm text-muted-foreground mb-4">상품을 불러오지 못했습니다.</p>
+              <button type="button" data-testid="button-retry-products" onClick={() => { void refetchActive(); void refetchSold(); }} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">다시 시도</button>
             </div>
           ) : products.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">

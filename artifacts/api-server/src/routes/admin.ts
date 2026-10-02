@@ -1,15 +1,18 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { eq, sql, desc, or, inArray, and } from "drizzle-orm";
+import { eq, sql, desc, or, inArray, and, isNull } from "drizzle-orm";
 import cron from "node-cron";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
 import { pushToUser } from "../lib/sse";
+import { invalidateAccountSuspension } from "../lib/account-suspension";
 import { logger } from "../lib/logger";
 import * as cheerio from "cheerio";
 import { fetchProxyPage } from "../lib/proxy";
+import { fetchCrawlHtml, fetchDetailHtml, fetchPageHtml, resolveCrawlProvider, scraperFetch, type CrawlProvider } from "../lib/crawl-fetch";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createHmac } from "crypto";
+import { getRegistrationPolicy, setRegistrationPolicy } from "../lib/registration-policy";
 
 // SESSION_SECRET 기반 고정 크롤 키 (재시작해도 동일)
 const CRAWL_KEY = createHmac("sha256", process.env.SESSION_SECRET || "itemmania-default")
@@ -28,7 +31,7 @@ const ADMIN_STATIC_DIR = (() => {
 const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string }> = [
   { file: "sell-lineage-classic.html", gameId: 5913, gameName: "리니지클래식" },
   { file: "sell-maplestory-world.html", gameId: 5233, gameName: "메이플스토리월드" },
-  { file: "sell-maplestory.html", gameId: 8458, gameName: "메이플스토리" },
+  { file: "sell-maplestory.html", gameId: 138, gameName: "메이플스토리" },
   { file: "sell-odin.html", gameId: 4696, gameName: "오딘" },
   { file: "sell-mabinogi.html", gameId: 155, gameName: "마비노기" },
   { file: "sell-lostark.html", gameId: 2696, gameName: "로스트아크" },
@@ -83,13 +86,47 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
   res.status(401).json({ error: "관리자 로그인이 필요합니다." });
 });
 
+// Unlike crawler endpoints, a crawl key must never authorize policy changes.
+async function requirePolicyAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const actorId = req.session?.adminId ?? req.session?.userId;
+  if (!actorId) { res.status(401).json({ error: "관리자 로그인이 필요합니다." }); return; }
+  const [actor] = await db.select({ role: usersTable.role, suspendedAt: usersTable.suspendedAt })
+    .from(usersTable).where(eq(usersTable.id, actorId));
+  if (actor?.role !== "admin" || actor.suspendedAt) {
+    res.status(403).json({ error: "관리자만 가입 차단 설정을 변경할 수 있습니다." }); return;
+  }
+  next();
+}
+
+router.get("/admin/registration-policy", requirePolicyAdmin, async (req, res): Promise<void> => {
+  try { res.json(await getRegistrationPolicy()); }
+  catch (error) {
+    req.log.error({ err: error }, "가입 차단 설정 조회 실패");
+    res.status(503).json({ error: "가입 차단 설정을 불러오지 못했습니다." });
+  }
+});
+
+router.patch("/admin/registration-policy", requirePolicyAdmin, async (req, res): Promise<void> => {
+  if (typeof req.body?.blocked !== "boolean") {
+    res.status(400).json({ error: "blocked는 true 또는 false여야 합니다." }); return;
+  }
+  try {
+    const policy = await setRegistrationPolicy(req.body.blocked);
+    req.log.info({ blocked: policy.blocked, adminId: req.session.adminId ?? req.session.userId }, "관리자가 신규 가입 차단 설정을 변경했습니다");
+    res.json(policy);
+  } catch (error) {
+    req.log.error({ err: error }, "가입 차단 설정 저장 실패");
+    res.status(503).json({ error: "가입 차단 설정을 저장하지 못했습니다." });
+  }
+});
+
 // ── 백그라운드 크롤 작업 상태 저장소 ─────────────────────────────────────
 interface CrawlLog {
   type: string; message: string;
   gameIndex?: number; gameName?: string;
   page?: number; totalPages?: number; pageSaved?: number;
   completedSteps?: number; totalSteps?: number;
-  totalSaved?: number; totalFailed?: number; detailFetched?: number;
+  totalSaved?: number; totalFailed?: number; detailFetched?: number; detailFailed?: number;
   ts: number;
 }
 interface CrawlJob {
@@ -97,7 +134,7 @@ interface CrawlJob {
   status: "running" | "done" | "failed";
   totalGames: number; totalPages: number; totalSteps: number;
   games: string[];
-  completedSteps: number; totalSaved: number; totalFailed: number; detailFetched: number;
+  completedSteps: number; totalSaved: number; totalFailed: number; detailFetched: number; detailFailed: number;
   logs: CrawlLog[];
   startedAt: number; finishedAt?: number;
 }
@@ -110,11 +147,12 @@ function jobPush(job: CrawlJob, data: Omit<CrawlLog, "ts">) {
   if (data.totalSaved != null) job.totalSaved = data.totalSaved;
   if (data.totalFailed != null) job.totalFailed = data.totalFailed;
   if (data.detailFetched != null) job.detailFetched = data.detailFetched;
+  if (data.detailFailed != null) job.detailFailed = data.detailFailed;
 }
 
-async function runCrawlJob(
+export async function runCrawlJob(
   job: CrawlJob, gameIds: number[], pages: number,
-  apiKey: string, crawlDetail: boolean
+  provider: CrawlProvider, crawlDetail: boolean
 ): Promise<void> {
   const targetGames = gameIds.length > 0
     ? GAME_LIST.filter(g => gameIds.includes(g.id))
@@ -129,10 +167,7 @@ async function runCrawlJob(
   let totalUpserted = 0, totalFailed = 0, detailFetched = 0, detailFailed = 0, completedSteps = 0;
   const push = (data: Omit<CrawlLog, "ts">) => jobPush(job, data);
 
-  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
-  push({ type: "progress", message: `🌐 세션 초기화 중... (session #${sessionNumber})`, completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
-  try { await initSession(apiKey, sessionNumber); } catch { /* 세션 초기화 실패 시 계속 */ }
-  push({ type: "session_ok", message: `✓ 세션 초기화 완료`, completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
+  push({ type: "progress", message: "🌐 목록 수집 시작", completedSteps: 0, totalSteps, totalSaved: 0, totalFailed: 0 });
 
   for (const cat of categories) {
     const catLabel = cat === "sell" ? "팝니다" : "삽니다";
@@ -147,12 +182,20 @@ async function runCrawlJob(
           completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
           message: `  ${page}/${maxPages}페이지 크롤 중... (${catLabel})` });
 
-        const { html, error } = await fetchPageHtml(game.id, page, apiKey, sessionNumber, cat);
+        const { html, error } = await fetchPageHtml(game.id, page, provider, cat);
         if (!html) {
           completedSteps++;
+          const fetchFailure = error ?? "HTML 없음";
           push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
             completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed: ++totalFailed,
-            message: `  ✗ [${catLabel}] ${game.name} ${page}페이지 - 실패 (${error ?? "HTML 없음"})` });
+            message: `  ✗ [${catLabel}] ${game.name} ${page}페이지 - 실패 (${fetchFailure})` });
+          if (fetchFailure.includes("크레딧 소진")) {
+            job.status = "failed";
+            job.finishedAt = Date.now();
+            push({ type: "fail", completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+              message: `${provider.kind === "firecrawl" ? "Firecrawl" : "ScraperAPI"} 크레딧이 소진되어 남은 요청을 중단했습니다.` });
+            return;
+          }
           continue;
         }
 
@@ -162,25 +205,38 @@ async function runCrawlJob(
 
         if (products.length === 0) {
           completedSteps++;
-          push({ type: "warn", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
-            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
-            message: `  ⚠ [${catLabel}] ${game.name} ${page}페이지 - 상품 없음 (${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount})` });
-          const idx = html.indexOf("data-tid=");
-          if (idx >= 0) {
-            const snip = html.slice(Math.max(0, idx - 20), idx + 300).replace(/\s+/g, " ");
-            push({ type: "debug", message: `  🔍 data-tid 주변: ${snip}`, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed });
-          }
+          const failureMessage = `  ✗ [${catLabel}] ${game.name} ${page}페이지 - 상품 파싱 실패 (목록 아님/0개, ${html.length}바이트, list_item:${listItemCount}, data-tid:${dataTidCount})`;
+          push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed: ++totalFailed,
+            message: failureMessage });
           continue;
         }
 
+        const unclassifiedCount = products.filter(p => p.isPremium === null).length;
+        const classifiedProducts = products.filter(p => p.isPremium !== null);
+        if (unclassifiedCount > 0) totalFailed += unclassifiedCount;
+        if (classifiedProducts.length === 0) {
+          completedSteps++;
+          push({ type: "fail", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+            message: `  ✗ [${catLabel}] ${game.name} ${page}페이지 - 목록 구역 판별 실패 (${unclassifiedCount}개 분류 불가, DB 저장 안 함)` });
+          continue;
+        }
+        if (unclassifiedCount > 0) {
+          push({ type: "warn", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+            completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed,
+            message: `  ⚠ [${catLabel}] ${game.name} ${page}페이지 - 목록 구역 미분류 ${unclassifiedCount}개 제외` });
+        }
+
         let pageSaved = 0;
-        for (const p of products) {
+        for (const p of classifiedProducts) {
           try {
             await db.insert(productsTable).values({
               itemmaniaid: p.itemmaniaid, title: p.title, price: p.price,
               category: p.category, itemCategory: p.itemCategory,
               gameName: p.gameName, serverName: p.serverName,
               sellerGrade: p.sellerGrade ?? null,
+              ...(p.isPremium !== null && { isPremium: p.isPremium }),
               detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
               ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
             }).onConflictDoUpdate({
@@ -188,13 +244,14 @@ async function runCrawlJob(
               set: { title: p.title, price: p.price, gameName: p.gameName,
                 serverName: p.serverName, itemCategory: p.itemCategory,
                 sellerGrade: p.sellerGrade ?? null,
-                detailUrl: p.detailUrl, status: "active", crawledAt: new Date() },
+                ...(p.isPremium !== null && { isPremium: p.isPremium }),
+                detailUrl: p.detailUrl, crawledAt: new Date() },
             });
             totalUpserted++; pageSaved++;
           } catch { totalFailed++; }
 
           if (crawlDetail) {
-            const dhtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
+            const { html: dhtml, error: detailError } = await fetchDetailHtml(p.itemmaniaid, provider, cat);
             if (dhtml) {
               const detail = parseDetailFromHtml(dhtml);
               try {
@@ -202,31 +259,43 @@ async function runCrawlJob(
                   .set({ description: detail.description, thumbnailUrl: detail.thumbnailUrl, sellerName: detail.sellerName })
                   .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
                 detailFetched++;
-              } catch { detailFailed++; }
-            } else { detailFailed++; }
+                } catch { detailFailed++; totalFailed++; }
+              } else {
+                detailFailed++;
+                totalFailed++;
+                if (detailError?.includes("크레딧 소진")) {
+                  job.status = "failed";
+                  job.finishedAt = Date.now();
+                  push({ type: "fail", completedSteps, totalSteps, totalSaved: totalUpserted,
+                    totalFailed, detailFetched, detailFailed,
+                    message: `${provider.kind === "firecrawl" ? "Firecrawl" : "ScraperAPI"} 크레딧이 소진되어 상세 수집을 중단했습니다. (${detailError})` });
+                  return;
+                }
+              }
             await new Promise(r => setTimeout(r, 300));
           }
         }
 
         completedSteps++;
-        push({ type: "ok", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
+        push({ type: unclassifiedCount > 0 ? "warn" : "ok", gameIndex: gi, gameName: game.name, page, totalPages: maxPages,
           pageSaved, completedSteps, totalSteps, totalSaved: totalUpserted, totalFailed, detailFetched,
-          message: `  ✓ [${catLabel}] ${game.name} ${page}페이지 - ${pageSaved}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
+          message: `  ${unclassifiedCount > 0 ? "⚠" : "✓"} [${catLabel}] ${game.name} ${page}페이지 - ${pageSaved}개 저장${unclassifiedCount > 0 ? ` / 미분류 ${unclassifiedCount}개 제외` : ""}${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}` });
 
         if (page < maxPages) await new Promise(r => setTimeout(r, 500));
       }
     }
   }
 
-  job.status = "done";
+  job.status = (totalUpserted === 0 && totalFailed > 0) || detailFailed > 0 ? "failed" : "done";
   job.finishedAt = Date.now();
-  push({ type: "done", completedSteps: totalSteps, totalSteps,
-    totalSaved: totalUpserted, totalFailed, detailFetched,
-    message: `✅ 완료! 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개` : ""}` });
+  push({ type: job.status === "failed" ? "fail" : "done", completedSteps: totalSteps, totalSteps,
+    totalSaved: totalUpserted, totalFailed, detailFetched, detailFailed,
+    message: `${job.status === "failed" ? (totalUpserted === 0 ? "❌ 저장 상품 없이 실패" : "⚠ 일부 상세 수집 실패") : "✅ 완료"} 총 ${totalUpserted}개 저장 / ${totalFailed}개 실패${crawlDetail ? ` / 상세 ${detailFetched}개 성공, ${detailFailed}개 실패` : ""}` });
 }
 
 // 전체 회원 목록
 router.get("/admin/users", async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
   const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10)));
   const offset = (page - 1) * limit;
@@ -241,11 +310,15 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       role: usersTable.role,
       grade: usersTable.grade,
       creditScore: usersTable.creditScore,
+      signupIp: usersTable.signupIp,
+      lastLoginIp: usersTable.lastLoginIp,
+      suspendedAt: usersTable.suspendedAt,
       balance: walletsTable.balance,
       createdAt: usersTable.createdAt,
     })
     .from(usersTable)
     .leftJoin(walletsTable, eq(usersTable.id, walletsTable.userId))
+    .orderBy(desc(usersTable.id))
     .limit(limit)
     .offset(offset);
 
@@ -258,9 +331,48 @@ router.get("/admin/users", async (req, res): Promise<void> => {
     role: u.role,
     grade: u.grade ?? null,
     creditScore: u.creditScore ?? 0,
+    signupIp: u.signupIp,
+    lastLoginIp: u.lastLoginIp,
+    suspendedAt: u.suspendedAt,
     balance: u.balance !== null ? Number(u.balance) : null,
     createdAt: u.createdAt,
   })));
+});
+
+// 회원 계정 자체를 차단하거나 해제한다. IP 차단과 별도로 적용된다.
+router.patch("/admin/users/:id/suspension", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1 || typeof req.body?.suspended !== "boolean") {
+    res.status(400).json({ error: "회원과 차단 상태를 확인해 주세요." });
+    return;
+  }
+  const origin = req.get("origin");
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.get("host")) {
+        res.status(403).json({ error: "허용되지 않은 요청입니다." });
+        return;
+      }
+    } catch {
+      res.status(403).json({ error: "허용되지 않은 요청입니다." });
+      return;
+    }
+  }
+  const [target] = await db.select({ id: usersTable.id, role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, id));
+  if (!target) {
+    res.status(404).json({ error: "회원을 찾을 수 없습니다." });
+    return;
+  }
+  if (target.role === "admin") {
+    res.status(403).json({ error: "관리자 계정은 차단할 수 없습니다." });
+    return;
+  }
+  const suspendedAt = req.body.suspended ? new Date() : null;
+  await db.update(usersTable).set({ suspendedAt }).where(eq(usersTable.id, id));
+  invalidateAccountSuspension(id);
+  res.set("Cache-Control", "no-store");
+  res.json({ id, suspendedAt });
 });
 
 // 전체 주문 목록
@@ -538,7 +650,10 @@ router.get("/admin/products", async (req, res): Promise<void> => {
 
   const where = and(
     category ? eq(productsTable.category, category as "sell" | "buy") : undefined,
-    status   ? eq(productsTable.status,   status   as "active" | "sold" | "inactive") : undefined,
+    // Archived trade listings remain available under the explicit inactive filter
+    // for audit/history, but should disappear from the normal admin list.
+    status   ? eq(productsTable.status, status as "active" | "sold" | "inactive")
+             : sql`${productsTable.status} <> 'inactive'`,
   );
 
   const [{ total }] = await db
@@ -621,19 +736,63 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
 });
 
 // 상품 삭제
+const productHasTradeHistory = sql`(
+  EXISTS (SELECT 1 FROM chat_rooms WHERE chat_rooms.product_id = ${productsTable.id})
+  OR EXISTS (SELECT 1 FROM orders WHERE orders.product_id = ${productsTable.id})
+)`;
+
 router.delete("/admin/products/no-grade", async (_req, res): Promise<void> => {
-  const deleted = await db.delete(productsTable)
-    .where(sql`seller_grade IS NULL`)
-    .returning({ id: productsTable.id });
-  res.json({ ok: true, deleted: deleted.length });
+  try {
+    const result = await db.transaction(async tx => {
+      // Product locks serialize this cleanup against chat/order creation.
+      await tx.select({ id: productsTable.id }).from(productsTable)
+        .where(sql`${productsTable.sellerGrade} IS NULL`).for("update");
+      const archived = await tx.update(productsTable).set({ status: "inactive" })
+        .where(and(sql`${productsTable.sellerGrade} IS NULL`, productHasTradeHistory))
+        .returning({ id: productsTable.id });
+      const deleted = await tx.delete(productsTable)
+        .where(and(sql`${productsTable.sellerGrade} IS NULL`, sql`NOT ${productHasTradeHistory}`))
+        .returning({ id: productsTable.id });
+      return { deleted: deleted.length, archived: archived.length };
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    logger.error({ err: error }, "등급 없는 상품 삭제 실패");
+    res.status(500).json({ error: "상품을 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
 });
 
 router.delete("/admin/products/:id", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!existing) { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
-  await db.delete(productsTable).where(eq(productsTable.id, id));
-  res.json({ ok: true });
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    res.status(400).json({ error: "올바른 상품 ID가 아닙니다." });
+    return;
+  }
+  try {
+    const result = await db.transaction(async tx => {
+      const [product] = await tx.select({ id: productsTable.id })
+        .from(productsTable).where(eq(productsTable.id, id)).for("update");
+      if (!product) return null;
+      const [linkedChat] = await tx.select({ id: chatRoomsTable.id }).from(chatRoomsTable)
+        .where(eq(chatRoomsTable.productId, id)).limit(1);
+      const [linkedOrder] = await tx.select({ id: ordersTable.id }).from(ordersTable)
+        .where(eq(ordersTable.productId, id)).limit(1);
+      if (linkedChat || linkedOrder) {
+        await tx.update(productsTable).set({ status: "inactive" }).where(eq(productsTable.id, id));
+        return { archived: true };
+      }
+      await tx.delete(productsTable).where(eq(productsTable.id, id));
+      return { archived: false };
+    });
+    if (!result) {
+      res.status(404).json({ error: "상품을 찾을 수 없습니다." });
+      return;
+    }
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    logger.error({ err: error, productId: id }, "상품 삭제 실패");
+    res.status(500).json({ error: "상품을 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
 });
 
 // 전체 채팅 거래 내역
@@ -641,6 +800,7 @@ router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
   const rooms = await db
     .select({
       id: chatRoomsTable.id,
+      orderId: chatRoomsTable.orderId,
       sellerId: chatRoomsTable.sellerId,
       buyerId: chatRoomsTable.buyerId,
       productId: chatRoomsTable.productId,
@@ -656,6 +816,7 @@ router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
 
   res.json(rooms.map(r => ({
     id: r.id,
+    canDelete: r.orderId === null,
     sellerId: r.sellerId,
     buyerId: r.buyerId,
     sellerNickname: r.sellerNickname ?? null,
@@ -665,6 +826,48 @@ router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
     status:         r.status,
     createdAt:      r.createdAt,
   })));
+});
+
+// Deletion is deliberately limited to rooms without an order. Keep all order,
+// escrow and payment history intact even when a room is removed by an admin.
+router.delete("/admin/chat-rooms/:id", async (req, res): Promise<void> => {
+  // The shared admin guard also permits the crawler key; it must not authorize
+  // irreversible deletion.
+  const adminSession =
+    (!!req.session?.adminId && req.session.adminRole === "admin") ||
+    (!!req.session?.userId && req.session.userRole === "admin");
+  if (!adminSession) {
+    res.status(403).json({ error: "관리자 로그인이 필요합니다." });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    res.status(400).json({ error: "올바른 채팅방 ID가 아닙니다." });
+    return;
+  }
+  try {
+    const outcome = await db.transaction(async tx => {
+      // Serializes against a buyer starting payment on this room.
+      const [room] = await tx.select({ orderId: chatRoomsTable.orderId })
+        .from(chatRoomsTable).where(eq(chatRoomsTable.id, id)).for("update");
+      if (!room) return "missing";
+      if (room.orderId !== null) return "order-linked";
+      await tx.delete(chatMessagesTable).where(eq(chatMessagesTable.roomId, id));
+      await tx.delete(chatRoomsTable).where(and(eq(chatRoomsTable.id, id), isNull(chatRoomsTable.orderId)));
+      return "deleted";
+    });
+    if (outcome === "missing") {
+      res.status(404).json({ error: "이미 삭제되었거나 존재하지 않는 채팅방입니다." });
+    } else if (outcome === "order-linked") {
+      res.status(409).json({ error: "주문에 연결된 채팅방은 거래 기록 보호를 위해 삭제할 수 없습니다." });
+    } else {
+      req.log.info({ chatRoomId: id }, "관리자가 주문 없는 채팅방을 삭제했습니다");
+      res.json({ ok: true });
+    }
+  } catch (error) {
+    req.log.error({ err: error, chatRoomId: id }, "채팅방 삭제 실패");
+    res.status(500).json({ error: "채팅방을 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
 });
 
 // 대시보드 통계
@@ -689,7 +892,7 @@ router.get("/admin/stats", async (_req, res): Promise<void> => {
 // ─── 크롤러 설정 ───────────────────────────────────────────────────────────────
 const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 2696, name: "로스트아크",         slug: "lostark" },
-  { id: 8458, name: "메이플스토리",       slug: "maplestory" },
+  { id: 138,  name: "메이플스토리",       slug: "maplestory" },
   { id: 5233, name: "메이플스토리월드",   slug: "maplestory-world" },
   { id: 281,  name: "던전앤파이터",       slug: "dnf" },
   { id: 5913, name: "리니지클래식",       slug: "lineage-classic" },
@@ -700,53 +903,6 @@ const GAME_LIST: { id: number; name: string; slug: string }[] = [
   { id: 101,  name: "거상",               slug: "geosang" },
   { id: 5990, name: "메이플랜드",         slug: "mapleland" },
 ];
-
-function scraperUrl(targetUrl: string, apiKey: string, sessionNumber: number): string {
-  return `https://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render=true&premium=true&country_code=kr&session_number=${sessionNumber}`;
-}
-
-async function scraperFetch(url: string, apiKey: string | undefined, sessionNumber: number, timeoutMs = 90000): Promise<{text: string | null; status: number | null; error: string | null}> {
-  const fetchUrl = apiKey ? scraperUrl(url, apiKey, sessionNumber) : url;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const resp = await fetch(fetchUrl, {
-      signal: ctrl.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
-        "Referer": "https://www.itemmania.com/",
-      },
-    });
-    if (!resp.ok) return {text: null, status: resp.status, error: `HTTP ${resp.status}`};
-    const text = await resp.text();
-    if (!text || text.trim().length < 200) return {text: null, status: resp.status, error: `빈 응답 (${text.trim().length}바이트)`};
-    return {text, status: resp.status, error: null};
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const isTimeout = msg.includes("abort") || msg.includes("timeout");
-    return {text: null, status: null, error: isTimeout ? "타임아웃" : msg.slice(0, 80)};
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function initSession(apiKey: string, sessionNumber: number): Promise<void> {
-  await scraperFetch("https://www.itemmania.com/", apiKey, sessionNumber, 30000);
-}
-
-async function fetchPageHtml(gameId: number, page: number, apiKey: string | undefined, sessionNumber: number, category: "sell" | "buy" = "sell"): Promise<{html: string | null; statusCode: number | null; error: string | null}> {
-  const url = `https://www.itemmania.com/${category}/list.html?search_game=${gameId}&search_goods=all&page=${page}`;
-  const {text, status, error} = await scraperFetch(url, apiKey, sessionNumber);
-  return {html: text, statusCode: status, error};
-}
-
-async function fetchDetailHtml(tid: string, apiKey: string | undefined, sessionNumber: number): Promise<string | null> {
-  const url = `https://www.itemmania.com/sell/application.html?id=${tid}`;
-  const {text} = await scraperFetch(url, apiKey, sessionNumber);
-  return text;
-}
 
 function parseDetailFromHtml(html: string): {
   description: string | null;
@@ -829,11 +985,13 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
   itemCategory: string;
   detailUrl: string;
   sellerGrade: string | null;
+  isPremium: boolean | null;
   description: string | null;
   originalCreatedAt: Date | null;
 }> {
   const $ = cheerio.load(html);
   const products: ReturnType<typeof parseProductsFromHtml> = [];
+  const seenIds = new Set<string>();
   const gameFallbackName = GAME_LIST.find(g => g.id === gameId)?.name || "";
   const GRADE_CLASS_MAP: Record<string, string> = {
     vip: "vip", platinum: "platinum", gold: "gold", silver: "silver", bronze: "bronze",
@@ -842,7 +1000,7 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
   // 전략 1: li[data-tid] — 실제 data-tid 속성이 있는 모든 요소
   $("[data-tid]").each((_i, el) => {
     const tid = $(el).attr("data-tid");
-    if (!tid || $(el).hasClass("skeleton-item")) return;
+    if (!tid || seenIds.has(tid) || $(el).hasClass("skeleton-item") || $(el).hasClass("block_item") || $(el).closest(".block_item").length) return;
     const gameName = $(el).find("[data-search=game]").first().text().trim();
     const serverName = $(el).find("[data-search=server]").first().attr("data-title")
       || $(el).find("[data-search=server]").first().text().trim();
@@ -856,6 +1014,8 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
     const priceMatch = priceRaw.match(/^([0-9,]+)/);
     const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
     if (!title) return;
+    const premiumSection = $(el).closest(".search_list_premium").length > 0;
+    const normalSection = $(el).closest(".search_list_normal").length > 0;
     // 판매자 등급 파싱: credit_mark_new 클래스에서 추출
     let sellerGrade: string | null = null;
     const markEl = $(el).find(".credit_mark_new, .credit_mark").first();
@@ -870,16 +1030,18 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
     // 원본 등록 시간 파싱
     const regDateText = $(el).find(".col.reg_date, .reg_date").first().text().trim();
     const originalCreatedAt = parseRegDate(regDateText);
+    seenIds.add(tid);
     products.push({
       itemmaniaid: tid,
       title,
       price,
-      gameName: gameName || gameFallbackName,
+      gameName: gameFallbackName || gameName,
       serverName: serverName || "",
       category: category,
       itemCategory: itemCategory || "",
       detailUrl: `https://www.itemmania.com/${category}/application.html?id=${tid}`,
       sellerGrade,
+      isPremium: premiumSection ? true : normalSection ? false : null,
       description: quantityText,
       originalCreatedAt,
     });
@@ -920,12 +1082,13 @@ function parseProductsFromHtml(html: string, gameId: number, category: "sell" | 
           itemmaniaid: tid,
           title,
           price,
-          gameName: String(it["game_name"] || it["gameName"] || gameFallbackName),
+          gameName: gameFallbackName || String(it["game_name"] || it["gameName"] || ""),
           serverName: String(it["server_name"] || it["serverName"] || ""),
           category: category,
           itemCategory: String(it["goods_kind"] || it["itemCategory"] || ""),
           detailUrl: `https://www.itemmania.com/${category}/application.html?id=${tid}`,
           sellerGrade: null,
+          isPremium: null,
           description: null,
           originalCreatedAt: null,
         });
@@ -945,101 +1108,24 @@ router.post("/admin/crawl", async (req, res): Promise<void> => {
     crawlDetail?: boolean;
   };
 
-  const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
-  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
-  const targetGames = gameIds && gameIds.length > 0
-    ? GAME_LIST.filter(g => gameIds.includes(g.id))
-    : GAME_LIST.slice(0, 3);
-
-  const maxPages = Math.min(Math.max(1, pages), 20);
-  let totalUpserted = 0;
-  let totalFailed = 0;
-  let detailFetched = 0;
-  let detailFailed = 0;
-  const log: string[] = [];
-
-  if (apiKey) await initSession(apiKey, sessionNumber);
-
-  for (const game of targetGames) {
-    for (let page = 1; page <= maxPages; page++) {
-      const {html, error} = await fetchPageHtml(game.id, page, apiKey, sessionNumber);
-      if (!html) {
-        log.push(`[실패] ${game.name} ${page}페이지 - ${error ?? "HTML 없음"}`);
-        totalFailed++;
-        continue;
-      }
-
-      const products = parseProductsFromHtml(html, game.id);
-      if (products.length === 0) {
-        log.push(`[경고] ${game.name} ${page}페이지 - 상품 없음 (HTML ${html.length}바이트, list_item: ${(html.match(/list_item/g) || []).length}개)`);
-        continue;
-      }
-
-      for (const p of products) {
-        try {
-          await db.insert(productsTable).values({
-            itemmaniaid: p.itemmaniaid,
-            title: p.title,
-            price: p.price,
-            category: p.category,
-            itemCategory: p.itemCategory,
-            gameName: p.gameName,
-            serverName: p.serverName,
-            sellerGrade: p.sellerGrade ?? null,
-            detailUrl: p.detailUrl,
-            status: "active",
-            crawledAt: new Date(),
-            ...(p.originalCreatedAt && { createdAt: p.originalCreatedAt }),
-          }).onConflictDoUpdate({
-            target: productsTable.itemmaniaid,
-            set: {
-              title: p.title,
-              price: p.price,
-              gameName: p.gameName,
-              serverName: p.serverName,
-              itemCategory: p.itemCategory,
-              sellerGrade: p.sellerGrade ?? null,
-              detailUrl: p.detailUrl,
-              status: "active",
-              crawledAt: new Date(),
-            },
-          });
-          totalUpserted++;
-        } catch {
-          totalFailed++;
-          continue;
-        }
-
-        if (crawlDetail) {
-          const detailHtml = await fetchDetailHtml(p.itemmaniaid, apiKey, sessionNumber);
-          if (detailHtml) {
-            const detail = parseDetailFromHtml(detailHtml);
-            try {
-              await db.update(productsTable)
-                .set({
-                  description: detail.description,
-                  thumbnailUrl: detail.thumbnailUrl,
-                  sellerName: detail.sellerName,
-                })
-                .where(eq(productsTable.itemmaniaid, p.itemmaniaid));
-              detailFetched++;
-            } catch {
-              detailFailed++;
-            }
-          } else {
-            detailFailed++;
-          }
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
-
-      log.push(`[완료] ${game.name} ${page}페이지 - ${products.length}개 저장${crawlDetail ? ` (상세 ${detailFetched}개)` : ""}`);
-
-      if (page < maxPages) await new Promise(r => setTimeout(r, 500));
-    }
+  const provider = resolveCrawlProvider(scraperApiKey);
+  if (!provider) {
+    res.status(400).json({ error: "Firecrawl 연결이 없습니다. FIRECRAWL_API_KEY를 Secrets에 등록하세요." });
+    return;
   }
-
-  res.json({ ok: true, upserted: totalUpserted, failed: totalFailed, detailFetched, detailFailed, log });
+  const job: CrawlJob = {
+    id: `sync_${Date.now()}`, status: "running",
+    totalGames: 0, totalPages: 0, totalSteps: 1,
+    games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0,
+    detailFetched: 0, detailFailed: 0, logs: [], startedAt: Date.now(),
+  };
+  await runCrawlJob(job, gameIds ?? [], pages, provider, crawlDetail);
+  res.json({
+    ok: job.status === "done" && job.totalFailed === 0,
+    upserted: job.totalSaved, failed: job.totalFailed,
+    detailFetched: job.detailFetched, detailFailed: job.detailFailed,
+    log: job.logs.map(entry => entry.message),
+  });
 });
 
 // 크롤링 SSE 스트리밍 (실시간 진행상황)
@@ -1048,21 +1134,21 @@ router.post("/admin/crawl/start", async (req, res): Promise<void> => {
   const { gameIds = [], pages = 1, scraperApiKey, crawlDetail = false } = req.body as {
     gameIds?: number[]; pages?: number; scraperApiKey?: string; crawlDetail?: boolean;
   };
-  const apiKey: string | undefined = scraperApiKey || process.env.SCRAPER_API_KEY;
-  if (!apiKey) {
-    res.status(400).json({ error: "ScraperAPI 키가 없습니다. 키를 입력하거나 환경변수 SCRAPER_API_KEY를 설정하세요." });
+  const provider = resolveCrawlProvider(scraperApiKey);
+  if (!provider) {
+    res.status(400).json({ error: "Firecrawl 연결이 없습니다. FIRECRAWL_API_KEY를 Secrets에 등록하세요." });
     return;
   }
   const jobId = `crawl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const job: CrawlJob = {
     id: jobId, status: "running",
     totalGames: 0, totalPages: 0, totalSteps: 1,
-    games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0,
+    games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0, detailFailed: 0,
     logs: [], startedAt: Date.now(),
   };
   crawlJobs.set(jobId, job);
   // 백그라운드 실행 (await 없음 — 연결과 무관하게 계속 실행)
-  runCrawlJob(job, gameIds, pages, apiKey, crawlDetail).catch(err => {
+  runCrawlJob(job, gameIds, pages, provider, crawlDetail).catch(err => {
     job.status = "failed";
     job.finishedAt = Date.now();
     jobPush(job, { type: "fail", message: `❌ 치명적 오류: ${err?.message ?? err}`, completedSteps: job.completedSteps, totalSteps: job.totalSteps, totalSaved: job.totalSaved, totalFailed: job.totalFailed });
@@ -1081,7 +1167,7 @@ router.get("/admin/crawl/status/:jobId", (req, res): void => {
     totalGames: job.totalGames, totalPages: job.totalPages, totalSteps: job.totalSteps,
     games: job.games,
     completedSteps: job.completedSteps, totalSaved: job.totalSaved,
-    totalFailed: job.totalFailed, detailFetched: job.detailFetched,
+    totalFailed: job.totalFailed, detailFetched: job.detailFetched, detailFailed: job.detailFailed,
     startedAt: job.startedAt, finishedAt: job.finishedAt,
     logs: newLogs,
   });
@@ -1092,16 +1178,14 @@ router.get("/admin/crawl/status/:jobId", (req, res): void => {
 router.get("/admin/crawl/discover", async (req, res): Promise<void> => {
   const scraperApiKey = String(req.query.scraperApiKey ?? "");
   const gameId = parseInt(String(req.query.gameId ?? "138"), 10);
-  const apiKey = scraperApiKey || process.env.SCRAPER_API_KEY;
-
-  if (!apiKey) {
-    res.status(400).json({ error: "ScraperAPI 키가 없습니다" });
+  const provider = resolveCrawlProvider(scraperApiKey);
+  if (!provider) {
+    res.status(400).json({ error: "Firecrawl 연결이 없습니다" });
     return;
   }
 
-  const sessionNumber = Math.floor(Math.random() * 9000) + 1000;
   const listUrl = `https://www.itemmania.com/sell/list.html?search_game=${gameId}&search_goods=all&page=1`;
-  const { text: html, error } = await scraperFetch(listUrl, apiKey, sessionNumber);
+  const { text: html, error } = await fetchCrawlHtml(listUrl, provider);
 
   if (!html) {
     res.status(500).json({ error: `HTML 가져오기 실패: ${error}` });
@@ -1121,9 +1205,9 @@ router.get("/admin/crawl/discover", async (req, res): Promise<void> => {
 
   // JS 파일 가져와서 API 패턴 탐색
   const jsFindings: Array<{ url: string; patterns: string[] }> = [];
-  for (const src of externalSrcs.slice(0, 4)) {
+  for (const src of (provider.kind === "scraperapi" ? externalSrcs.slice(0, 4) : [])) {
     const jsUrl = src.startsWith("http") ? src : `https://www.itemmania.com${src}`;
-    const { text: jsText } = await scraperFetch(jsUrl, apiKey, sessionNumber, 20000);
+    const { text: jsText } = await scraperFetch(jsUrl, provider.key, 20000);
     if (!jsText || jsText.length < 100) continue;
 
     const patterns = [
@@ -1150,8 +1234,8 @@ router.get("/admin/crawl/discover", async (req, res): Promise<void> => {
 
 // 크롤링 대상 게임 목록
 router.get("/admin/crawl/games", (_req, res): void => {
-  const hasApiKey = !!process.env.SCRAPER_API_KEY;
-  res.json({ games: GAME_LIST, hasApiKey });
+  const provider = resolveCrawlProvider();
+  res.json({ games: GAME_LIST, hasApiKey: !!provider, provider: provider?.kind ?? null });
 });
 
 // 로컬 크롤러 배치 upsert (itemmaniaid 기준 중복 방지)
@@ -1176,6 +1260,7 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
       thumbnailUrl?: string;
       sellerName?: string;
       sellerGrade?: string;
+      isPremium?: boolean | null;
       originalCreatedAt?: string;
     }>;
   };
@@ -1189,7 +1274,13 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
   let failed = 0;
 
   for (const p of products) {
-    if (!p.itemmaniaid || !p.title) { failed++; continue; }
+    // Batch imports are external Itemmania listings, never local user_ listings.
+    if (!/^\d+$/.test(p.itemmaniaid) || !p.title) { failed++; continue; }
+    if (p.isPremium === null) {
+      const [existing] = await db.select({ id: productsTable.id }).from(productsTable)
+        .where(eq(productsTable.itemmaniaid, p.itemmaniaid)).limit(1);
+      if (!existing) { failed++; continue; }
+    }
     const createdAt = p.originalCreatedAt ? new Date(p.originalCreatedAt) : undefined;
     const validCreatedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : undefined;
     try {
@@ -1206,6 +1297,7 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
         thumbnailUrl: p.thumbnailUrl || null,
         sellerName: p.sellerName || null,
         sellerGrade: p.sellerGrade || null,
+        ...(p.isPremium !== undefined && p.isPremium !== null && { isPremium: p.isPremium }),
         status: "active",
         crawledAt: new Date(),
         ...(validCreatedAt && { createdAt: validCreatedAt }),
@@ -1219,10 +1311,10 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
           itemCategory: p.itemCategory || null,
           detailUrl: p.detailUrl || null,
           sellerGrade: p.sellerGrade || null,
+          ...(p.isPremium !== undefined && p.isPremium !== null && { isPremium: p.isPremium }),
           ...(p.description !== undefined && { description: p.description }),
           ...(p.thumbnailUrl !== undefined && { thumbnailUrl: p.thumbnailUrl }),
           ...(p.sellerName !== undefined && { sellerName: p.sellerName }),
-          status: "active",
           crawledAt: new Date(),
         },
       });
@@ -1239,6 +1331,7 @@ router.post("/admin/crawl/batch", async (req, res): Promise<void> => {
 interface LiveListItem {
   tid: string;
   dbId?: number;
+  isPremium: boolean | null;
   title: string;
   price: number;
   gameName: string;
@@ -1259,6 +1352,7 @@ const liveListCache = new Map<string, LiveListCacheEntry>();
 function parseLiveItemsFromHtml(html: string, gameId: number): LiveListItem[] {
   const $ = cheerio.load(html);
   const results: LiveListItem[] = [];
+  const seenIds = new Set<string>();
   const gameFallbackName = GAME_LIST.find(g => g.id === gameId)?.name ?? "";
   const GRADE_CLASS_MAP: Record<string, string> = {
     vip: "vip", platinum: "platinum", gold: "gold", silver: "silver", bronze: "bronze",
@@ -1266,7 +1360,9 @@ function parseLiveItemsFromHtml(html: string, gameId: number): LiveListItem[] {
 
   $("[data-tid]").each((_i, el) => {
     const tid = $(el).attr("data-tid");
-    if (!tid || $(el).hasClass("skeleton-item")) return;
+    if (!tid || seenIds.has(tid) || $(el).hasClass("skeleton-item")) return;
+    const premiumSection = $(el).closest(".search_list_premium").length > 0;
+    const normalSection = $(el).closest(".search_list_normal").length > 0;
     const gameName = $(el).find("[data-search=game]").first().text().trim() || gameFallbackName;
     const serverName = $(el).find("[data-search=server]").first().attr("data-title")
       || $(el).find("[data-search=server]").first().text().trim()
@@ -1292,7 +1388,12 @@ function parseLiveItemsFromHtml(html: string, gameId: number): LiveListItem[] {
     const originalCreatedAt = parseRegDate(regDateText);
     const timestamp = originalCreatedAt ? originalCreatedAt.getTime() : 0;
     const quantityText = $(el).find(".col.quantity, .quantity_box, .trade_quantity").first().text().trim() || null;
-    results.push({ tid, title, price, gameName, serverName, itemCategory, sellerGrade, description: quantityText, timestamp });
+    seenIds.add(tid);
+    results.push({
+      tid, title, price, gameName, serverName, itemCategory, sellerGrade,
+      isPremium: premiumSection ? true : normalSection ? false : null,
+      description: quantityText, timestamp,
+    });
   });
 
   return results;
@@ -1317,7 +1418,18 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
   const cacheKey = `${gameCode}-${type}-${page}`;
   const cached = liveListCache.get(cacheKey);
   if (cached && cached.expireAt > Date.now()) {
-    res.json({ items: cached.items, premiumItems: cached.premiumItems, total: cached.total });
+    const ids = [...cached.items, ...cached.premiumItems]
+      .map(item => item.dbId)
+      .filter((id): id is number => typeof id === "number");
+    const activeRows = ids.length ? await db.select({ id: productsTable.id })
+      .from(productsTable)
+      .where(and(inArray(productsTable.id, ids), eq(productsTable.status, "active"))) : [];
+    const activeIds = new Set(activeRows.map(row => row.id));
+    res.json({
+      items: cached.items.filter(item => item.dbId && activeIds.has(item.dbId)),
+      premiumItems: cached.premiumItems.filter(item => item.dbId && activeIds.has(item.dbId)),
+      total: cached.total,
+    });
     return;
   }
 
@@ -1331,14 +1443,23 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
 
   const html = result.html;
   const $c = cheerio.load(html);
+  if (!$c(".search_list_premium, .search_list_normal").length) {
+    res.json({ items: [], premiumItems: [], total: 0, error: "반환 HTML에 상품 목록 영역이 없습니다." });
+    return;
+  }
   const countText = $c("#premium_count").text().trim();
   const total = parseInt(countText.replace(/[^0-9]/g, ""), 10) || 0;
 
   const parsed = parseLiveItemsFromHtml(html, gameId);
+  const classifiedItems = parsed.filter(p => p.isPremium !== null);
+  if (classifiedItems.length === 0) {
+    res.json({ items: [], premiumItems: [], total, error: "목록 구역이 확인되지 않아 상품을 분류할 수 없습니다." });
+    return;
+  }
 
   // live-list 항목을 DB에 upsert → dbId 매핑 확보
   const tidToDbId = new Map<string, number>();
-  for (const p of parsed) {
+  for (const p of classifiedItems) {
     try {
       const [row] = await db.insert(productsTable).values({
         itemmaniaid: p.tid,
@@ -1349,6 +1470,7 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
         serverName: p.serverName,
         itemCategory: p.itemCategory,
         sellerGrade: p.sellerGrade ?? null,
+        ...(p.isPremium !== null && { isPremium: p.isPremium }),
         description: p.description ?? null,
         status: "active",
         crawledAt: new Date(),
@@ -1358,17 +1480,19 @@ router.get("/admin/live-list", async (req, res): Promise<void> => {
         set: {
           title: p.title, price: p.price, gameName: p.gameName,
           serverName: p.serverName, itemCategory: p.itemCategory,
-          sellerGrade: p.sellerGrade ?? null, status: "active", crawledAt: new Date(),
+          sellerGrade: p.sellerGrade ?? null,
+          ...(p.isPremium !== null && { isPremium: p.isPremium }),
+          crawledAt: new Date(),
         },
-      }).returning({ id: productsTable.id });
-      if (row) tidToDbId.set(p.tid, row.id);
+      }).returning({ id: productsTable.id, status: productsTable.status });
+      if (row?.status === "active") tidToDbId.set(p.tid, row.id);
     } catch { /* 저장 실패해도 계속 */ }
   }
 
-  const withDbId = parsed.map(p => ({ ...p, dbId: tidToDbId.get(p.tid) }));
-  const PREMIUM_GRADES = new Set(["vip", "platinum"]);
-  const premiumItems = withDbId.filter(p => p.sellerGrade !== null && PREMIUM_GRADES.has(p.sellerGrade!));
-  const normalItems  = withDbId.filter(p => p.sellerGrade === null || !PREMIUM_GRADES.has(p.sellerGrade!));
+  const withDbId = parsed.filter(p => tidToDbId.has(p.tid))
+    .map(p => ({ ...p, dbId: tidToDbId.get(p.tid) }));
+  const premiumItems = withDbId.filter(p => p.isPremium === true);
+  const normalItems = withDbId.filter(p => p.isPremium === false);
 
   const entry: LiveListCacheEntry = { items: normalItems, premiumItems, total, expireAt: Date.now() + 5 * 60 * 1000 };
   liveListCache.set(cacheKey, entry);
@@ -1416,7 +1540,7 @@ router.get("/admin/crawl/auto-script", (req, res): void => {
 
 // ── 스냅샷 파일로부터 즉시 상품 가져오기 ──────────────────────────────────
 router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
-  const results: Array<{ gameName: string; parsed: number; saved: number; error?: string }> = [];
+  const results: Array<{ gameName: string; parsed: number; saved: number; failed?: number; error?: string }> = [];
   let totalSaved = 0;
 
   for (const entry of SNAPSHOT_GAME_MAP) {
@@ -1428,11 +1552,14 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
     try {
       const html = readFileSync(filePath, "utf-8");
       const $ = cheerio.load(html);
-      const items: Array<{ itemmaniaid: string; title: string; price: number; gameName: string; serverName: string; itemCategory: string; detailUrl: string }> = [];
+      const items: Array<{ itemmaniaid: string; title: string; price: number; gameName: string; serverName: string; itemCategory: string; detailUrl: string; isPremium: boolean | null }> = [];
+      const seenIds = new Set<string>();
 
       $("[data-tid]").each((_i, el) => {
         const tid = $(el).attr("data-tid");
-        if (!tid || $(el).hasClass("skeleton-item")) return;
+        if (!tid || seenIds.has(tid) || $(el).hasClass("skeleton-item")) return;
+        const premiumSection = $(el).closest(".search_list_premium").length > 0;
+        const normalSection = $(el).closest(".search_list_normal").length > 0;
         const gName = $(el).find("[data-search=game]").first().text().trim() || entry.gameName;
         const sName = $(el).find("[data-search=server]").first().attr("data-title")
           || $(el).find("[data-search=server]").first().text().trim() || "";
@@ -1445,6 +1572,7 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
           || $(el).find(".price").first().text().trim();
         const priceMatch = priceRaw.match(/^([0-9,]+)/);
         const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
+        seenIds.add(tid);
         items.push({
           itemmaniaid: tid,
           title,
@@ -1453,11 +1581,21 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
           serverName: sName,
           itemCategory: iCat,
           detailUrl: `https://www.itemmania.com/sell/application.html?id=${tid}`,
+          isPremium: premiumSection ? true : normalSection ? false : null,
         });
       });
 
+      const classifiedItems = items.filter(p => p.isPremium !== null);
+      const unclassifiedCount = items.length - classifiedItems.length;
+      if (classifiedItems.length === 0) {
+        results.push({ gameName: entry.gameName, parsed: items.length, saved: 0, failed: unclassifiedCount,
+          error: "목록 구역을 판별할 수 없어 신규 상품 저장을 건너뛰었습니다." });
+        continue;
+      }
+
       let saved = 0;
-      for (const p of items) {
+      let failed = unclassifiedCount;
+      for (const p of classifiedItems) {
         try {
           await db.insert(productsTable).values({
             itemmaniaid: p.itemmaniaid,
@@ -1468,6 +1606,7 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
             itemCategory: p.itemCategory,
             category: "sell",
             detailUrl: p.detailUrl,
+            ...(p.isPremium !== null && { isPremium: p.isPremium }),
             status: "active",
             crawledAt: new Date(),
           }).onConflictDoUpdate({
@@ -1479,15 +1618,21 @@ router.post("/admin/crawl/from-snapshots", async (req, res): Promise<void> => {
               serverName: p.serverName,
               itemCategory: p.itemCategory,
               detailUrl: p.detailUrl,
-              status: "active",
+              ...(p.isPremium !== null && { isPremium: p.isPremium }),
               crawledAt: new Date(),
             },
           });
           saved++;
-        } catch { /* skip */ }
+        } catch { failed++; }
       }
       totalSaved += saved;
-      results.push({ gameName: entry.gameName, parsed: items.length, saved });
+      results.push({
+        gameName: entry.gameName,
+        parsed: items.length,
+        saved,
+        failed,
+        ...(unclassifiedCount > 0 && { error: "분류되지 않은 행은 저장하지 않았습니다." }),
+      });
     } catch (e) {
       results.push({ gameName: entry.gameName, parsed: 0, saved: 0, error: String(e) });
     }
@@ -1567,6 +1712,20 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
   const scriptSrcs = $("script[src]").map((_i, el) => $(el).attr("src") || "").get().filter(s => s.includes("itemmania") || s.includes("list") || s.includes("goods")).slice(0, 5);
 
   const products = parseProductsFromHtml(html, gameId, category);
+  if (products.length === 0) {
+    res.status(422).json({ error: "상품 목록을 찾지 못했습니다. 원본 HTML의 게임/목록 영역을 확인하세요.", parsed: 0 });
+    return;
+  }
+  const classifiedProducts = products.filter(p => p.isPremium !== null);
+  const unclassifiedCount = products.length - classifiedProducts.length;
+  if (classifiedProducts.length === 0) {
+    res.status(422).json({
+      error: "상품 목록 구역을 판별할 수 없습니다. 신규 상품은 저장하지 않았습니다.",
+      parsed: products.length,
+      failed: unclassifiedCount,
+    });
+    return;
+  }
 
   // gameName 오버라이드 (클라이언트가 게임명을 명시한 경우)
   if (overrideName) {
@@ -1576,8 +1735,8 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
   }
 
   let saved = 0;
-  let failed = 0;
-  for (const p of products) {
+  let failed = unclassifiedCount;
+  for (const p of classifiedProducts) {
     try {
       await db.insert(productsTable).values({
         itemmaniaid: p.itemmaniaid,
@@ -1588,6 +1747,7 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
         gameName: p.gameName,
         serverName: p.serverName,
         sellerGrade: p.sellerGrade ?? null,
+        ...(p.isPremium !== null && { isPremium: p.isPremium }),
         detailUrl: p.detailUrl,
         status: "active",
         crawledAt: new Date(),
@@ -1598,32 +1758,37 @@ router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {
           title: p.title, price: p.price,
           gameName: p.gameName, serverName: p.serverName,
           itemCategory: p.itemCategory, sellerGrade: p.sellerGrade ?? null,
-          detailUrl: p.detailUrl, status: "active", crawledAt: new Date(),
+          ...(p.isPremium !== null && { isPremium: p.isPremium }),
+          detailUrl: p.detailUrl, crawledAt: new Date(),
         },
       });
       saved++;
     } catch { failed++; }
   }
 
-  res.json({ parsed: products.length, saved, failed, debug: { dataTidCount, hasNextData, htmlLen: html.length, htmlSnippet, apiMatches, fetchUrls, scriptSrcs } });
+  res.json({ parsed: products.length, classified: classifiedProducts.length, saved, failed, debug: { dataTidCount, hasNextData, htmlLen: html.length, htmlSnippet, apiMatches, fetchUrls, scriptSrcs } });
 });
 
 // ── 자동 크롤 스케줄러 ──────────────────────────────────────────────────────
-// SCRAPER_API_KEY 환경변수가 있을 때만 활성화됨.
-// AUTO_CRAWL_SCHEDULE: cron 표현식 (기본 "*/30 * * * *" = 30분마다)
-// AUTO_CRAWL_PAGES   : 페이지 수 (기본 2)
+// Firecrawl 무료 요금제 기본값: 하루 한 번, 11개 게임 양쪽 목록 1페이지씩(월 약 660페이지).
+// 명시적 AUTO_CRAWL_SCHEDULE / AUTO_CRAWL_PAGES 설정은 이 기본값을 덮어쓴다.
 let _schedulerTask: ReturnType<typeof cron.schedule> | null = null;
 let _schedulerRunning = false;
 
 export function startAutoScheduler(): void {
-  const apiKey = process.env.SCRAPER_API_KEY;
-  if (!apiKey) {
-    logger.info("AUTO_CRAWL: SCRAPER_API_KEY 없음 — 자동 크롤 비활성화");
+  if (process.env.AUTO_CRAWL_ENABLED === "0") {
+    logger.info("AUTO_CRAWL: 설정에 따라 자동 크롤 비활성화");
+    return;
+  }
+  const provider = resolveCrawlProvider();
+  if (!provider) {
+    logger.info("AUTO_CRAWL: 수집 공급자 연결 없음 — 자동 크롤 비활성화");
     return;
   }
 
-  const schedule = process.env.AUTO_CRAWL_SCHEDULE ?? "*/30 * * * *";
-  const pages    = Math.max(1, parseInt(process.env.AUTO_CRAWL_PAGES ?? "10", 10));
+  const schedule = process.env.AUTO_CRAWL_SCHEDULE ?? (provider.kind === "firecrawl" ? "0 1 * * *" : "*/30 * * * *");
+  const pages = Math.max(1, parseInt(process.env.AUTO_CRAWL_PAGES ?? (provider.kind === "firecrawl" ? "1" : "10"), 10));
+  const scheduledGameIds = provider.kind === "firecrawl" ? GAME_LIST.map(game => game.id) : [];
 
   if (_schedulerTask) _schedulerTask.stop();
 
@@ -1633,19 +1798,19 @@ export function startAutoScheduler(): void {
       return;
     }
     _schedulerRunning = true;
-    logger.info({ schedule, pages }, "AUTO_CRAWL: 크롤 시작");
+    logger.info({ schedule, pages, provider: provider.kind }, "AUTO_CRAWL: 크롤 시작");
 
     const jobId = `auto_${Date.now()}`;
     const job: CrawlJob = {
       id: jobId, status: "running",
       totalGames: 0, totalPages: 0, totalSteps: 1,
-      games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0,
+      games: [], completedSteps: 0, totalSaved: 0, totalFailed: 0, detailFetched: 0, detailFailed: 0,
       logs: [], startedAt: Date.now(),
     };
     crawlJobs.set(jobId, job);
 
     try {
-      await runCrawlJob(job, [], pages, apiKey, false);
+      await runCrawlJob(job, scheduledGameIds, pages, provider, false);
       logger.info({ saved: job.totalSaved, failed: job.totalFailed }, "AUTO_CRAWL: 완료");
     } catch (err) {
       logger.error({ err }, "AUTO_CRAWL: 치명적 오류");
@@ -1656,7 +1821,7 @@ export function startAutoScheduler(): void {
     }
   });
 
-  logger.info({ schedule, pages }, "AUTO_CRAWL: 스케줄러 등록 완료");
+  logger.info({ schedule, pages, provider: provider.kind }, "AUTO_CRAWL: 스케줄러 등록 완료");
 }
 
 export default router;

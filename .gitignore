@@ -47,3 +47,19 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+playwright-report/
+test-results/
+
+# Private runtime settings and operational backups (never publish)
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.backup
+backups/
+private-backups/

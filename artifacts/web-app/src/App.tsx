@@ -19,7 +19,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/mypage" component={MyPage} />
       <Route path="/chat/:roomId" component={Chat} />
-      <Route path="/admin" component={Admin} />
+      <Route path="/banana777" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

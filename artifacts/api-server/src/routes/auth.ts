@@ -1,16 +1,23 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
-import { db, usersTable, walletsTable } from "@workspace/db";
+import { db, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { notifyAdmin } from "./notifications";
+import { clientIp } from "../lib/ip-blocks";
+import { createMemberAccount, getRegistrationPolicy, RegistrationBlockedError } from "../lib/registration-policy";
+
+function memberIp(req: Parameters<typeof clientIp>[0]): string | null {
+  const ip = clientIp(req);
+  return ip === "127.0.0.1" || ip === "::1" ? null : ip;
+}
 
 const router: IRouter = Router();
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { email, password, nickname, phone } = req.body;
+  const { email, password, nickname, phone } = req.body ?? {};
 
-  if (!email || !password || !nickname) {
+  if (typeof email !== "string" || typeof password !== "string" || typeof nickname !== "string" || !email || !password || !nickname) {
     res.status(400).json({ error: "이메일, 비밀번호, 닉네임은 필수입니다." });
     return;
   }
@@ -29,27 +36,41 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  const [user] = await db.insert(usersTable).values({
-    email,
-    nickname,
-    phone: phone ?? null,
-    passwordHash,
-    role: "user",
-    grade: "bronze",
-    creditScore: 220,
-  }).returning();
-
-  // 지갑 자동 생성
-  await db.insert(walletsTable).values({ userId: user.id, balance: 0 });
+  let user: typeof usersTable.$inferSelect;
+  try {
+    if ((await getRegistrationPolicy()).blocked) throw new RegistrationBlockedError();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await createMemberAccount({
+      email,
+      nickname,
+      phone: phone ?? null,
+      passwordHash,
+      role: "user",
+      grade: "bronze",
+      creditScore: 220,
+      signupIp: memberIp(req),
+    });
+    if (!result.created) {
+      res.status(409).json({ error: "이미 사용 중인 이메일입니다." });
+      return;
+    }
+    user = result.user;
+  } catch (error) {
+    if (error instanceof RegistrationBlockedError) {
+      res.status(403).json({ code: "REGISTRATION_DISABLED", error: error.message });
+    } else {
+      req.log.error({ err: error }, "회원가입 설정 확인 또는 계정 생성 실패");
+      res.status(503).json({ error: "현재 회원가입을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요." });
+    }
+    return;
+  }
 
   req.session.userId = user.id;
   req.session.userRole = user.role;
 
   notifyAdmin("신규 회원가입", {
     body: `${user.nickname} (${user.email})`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.status(201).json({
@@ -63,44 +84,70 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { email, password } = req.body;
+  const { email, password } = req.body ?? {};
 
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
     res.status(400).json({ error: "이메일과 비밀번호를 입력하세요." });
     return;
   }
 
   let [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  let autoCreated = false;
 
   if (!user) {
     // 계정이 없으면 자동 생성 (아이디/비번으로 첫 로그인 시 회원 등록)
-    const passwordHash = await bcrypt.hash(password, 12);
-    const nickname = email.includes("@") ? email.split("@")[0] : email;
-    const [created] = await db.insert(usersTable).values({
-      email,
-      nickname,
-      phone: null,
-      passwordHash,
-      role: "user",
-      grade: "bronze",
-      creditScore: 220,
-    }).returning();
-    await db.insert(walletsTable).values({ userId: created.id, balance: 0 });
-    user = created;
-  } else {
+    try {
+      if ((await getRegistrationPolicy()).blocked) throw new RegistrationBlockedError();
+      const passwordHash = await bcrypt.hash(password, 12);
+      const nickname = email.includes("@") ? email.split("@")[0] : email;
+      const result = await createMemberAccount({
+        email,
+        nickname,
+        phone: null,
+        passwordHash,
+        role: "user",
+        grade: "bronze",
+        creditScore: 220,
+        signupIp: memberIp(req),
+        lastLoginIp: memberIp(req),
+      });
+      user = result.user;
+      autoCreated = result.created;
+    } catch (error) {
+      if (error instanceof RegistrationBlockedError) {
+        res.status(403).json({ code: "REGISTRATION_DISABLED", error: error.message });
+      } else {
+        req.log.error({ err: error }, "자동 회원가입 설정 확인 또는 계정 생성 실패");
+        res.status(503).json({ error: "현재 신규 계정 생성을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요." });
+      }
+      return;
+    }
+  }
+  if (!autoCreated) {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       res.status(401).json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." });
       return;
     }
+    if (user.suspendedAt) {
+      res.status(403).json({ error: "차단된 계정입니다. 관리자에게 문의해 주세요." });
+      return;
+    }
+    const ip = memberIp(req);
+    if (ip) await db.update(usersTable).set({ lastLoginIp: ip }).where(eq(usersTable.id, user.id));
   }
 
   req.session.userId = user.id;
   req.session.userRole = user.role;
+  if (req.body.autoLogin === false) {
+    // 모바일에서 자동 로그인을 끄면 브라우저를 닫을 때 사라지는 세션 쿠키를 사용한다.
+    req.session.cookie.expires = null;
+    req.session.cookie.originalMaxAge = null;
+  }
 
   notifyAdmin("회원 로그인", {
     body: `${user.nickname} (${user.email})`,
-    link: "/tkfwkwpqkf",
+    link: "/banana777",
   }).catch(() => {});
 
   res.json({

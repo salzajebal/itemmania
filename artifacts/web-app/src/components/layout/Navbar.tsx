@@ -31,7 +31,7 @@ export function Navbar() {
               </span>
             </div>
             {user.role === "admin" && (
-              <Link href="/admin">
+              <Link href="/banana777">
                 <Button variant="ghost" size="sm" className="hover:bg-primary-foreground/10" data-testid="link-admin">
                   관리자
                 </Button>

@@ -1,10 +1,14 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, notificationsTable, usersTable } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
+import { requireAdmin, requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 
 const router: IRouter = Router();
+
+function currentLink(link: string | null): string | null {
+  return link === "/admin" || link === "/admin/" ? "/banana777" : link;
+}
 
 // 알림 생성 헬퍼 (내부 사용)
 export async function createNotification(
@@ -22,7 +26,7 @@ export async function createNotification(
     type: notif.type,
     title: notif.title,
     body: notif.body,
-    link: notif.link,
+    link: currentLink(notif.link),
     createdAt: notif.createdAt,
   });
 }
@@ -40,8 +44,7 @@ export async function notifyAdmin(
 }
 
 // 내 알림 목록 (최근 30개)
-router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.session.userId!;
+async function sendNotifications(userId: number, res: Response): Promise<void> {
   const rows = await db
     .select()
     .from(notificationsTable)
@@ -50,7 +53,15 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
     .limit(30);
 
   const unreadCount = rows.filter(r => !r.isRead).length;
-  res.json({ notifications: rows, unreadCount });
+  res.json({ notifications: rows.map(row => ({ ...row, link: currentLink(row.link) })), unreadCount });
+}
+
+router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
+  await sendNotifications(req.session.userId!, res);
+});
+
+router.get("/admin/notifications", requireAdmin, async (req, res): Promise<void> => {
+  await sendNotifications(req.session.adminId ?? req.session.userId!, res);
 });
 
 // 단일 알림 읽음 처리
