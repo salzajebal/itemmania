@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm, copyFile, readFile, readdir, writeFile } from "node:fs/promises";
+import { rm, copyFile, readFile, readdir, writeFile, cp, access } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -22,6 +22,12 @@ async function generateAdminScriptContent() {
 
 async function buildAll() {
   await generateAdminScriptContent();
+  for (const kind of ["widget", "admin"]) {
+    const content = await readFile(path.resolve(artifactDir, `src/support-${kind}.js`), "utf8");
+    await writeFile(path.resolve(artifactDir, `src/support-${kind}-content.ts`),
+      "// AUTO-GENERATED — edit support-" + kind + ".js instead\n" +
+      `export const SUPPORT_${kind.toUpperCase()}_SCRIPT = ` + JSON.stringify(content) + ";\n");
+  }
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
@@ -149,10 +155,13 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 }
 
 buildAll()
-  .then(() => copyFile(
-    path.resolve(artifactDir, "src/admin-script.js"),
-    path.resolve(artifactDir, "dist/admin-script.js"),
-  ))
+  .then(async () => {
+    await copyFile(path.resolve(artifactDir, "src/admin-script.js"), path.resolve(artifactDir, "dist/admin-script.js"));
+    const subsets = path.resolve(artifactDir, "../../generated-artifacts/font-subsets");
+    try { await access(path.join(subsets, "manifest.json")); }
+    catch { console.info("Font subsets not generated; original captured fonts will be used."); return; }
+    await cp(subsets, path.resolve(artifactDir, "dist/font-subsets"), { recursive: true });
+  })
   .catch((err) => {
     console.error(err);
     process.exit(1);

@@ -10,10 +10,12 @@ import gamesRouter from "./games";
 import eventsRouter from "./events";
 import notificationsRouter from "./notifications";
 import ipBlocksRouter from "./ip-blocks";
+import supportRouter from "./support";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(supportRouter);
 router.use(authRouter);
 router.use(walletRouter);
 router.use(ordersRouter);

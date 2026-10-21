@@ -23,6 +23,139 @@ tags:
   - name: admin
     description: 관리자
 paths:
+  /support/summary:
+    get:
+      operationId: getSupportSummary
+      tags: [support]
+      responses:
+        '200':
+          description: Own conversation unread count
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportSummary' }
+  /support/messages:
+    get:
+      operationId: getSupportMessages
+      tags: [support]
+      parameters:
+        - { name: afterId, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: beforeId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Own conversation, at most 100 ascending messages
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportHistory' }
+    post:
+      operationId: sendSupportMessage
+      tags: [support]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupportMessageInput' }
+      responses:
+        '200':
+          description: Persisted message, idempotent per clientId
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportSendResult' }
+  /support/read:
+    post:
+      operationId: readSupportMessages
+      tags: [support]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupportReadInput' }
+      responses:
+        '200': { description: Read watermark updated }
+  /support/events:
+    get:
+      operationId: streamSupportEvents
+      tags: [support]
+      responses:
+        '200': { description: Private SSE connected/support/unauthorized events }
+  /admin/support/conversations:
+    get:
+      operationId: listSupportConversations
+      tags: [support]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: beforeId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Native administrator conversation inbox
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportConversationPage' }
+  /admin/support/{userId}:
+    delete:
+      operationId: removeSupportConversation
+      tags: [support]
+      description: Native administrator only. Permanently removes customer support messages and conversation, never trade chats or financial records. Rejects a stale last-message precondition.
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupportRemovalInput' }
+      responses:
+        '200':
+          description: Conversation and messages permanently removed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportRemovalResult' }
+        '401': { description: Native administrator login required }
+        '409': { description: New messages arrived; review conversation again }
+  /admin/support/{userId}/messages:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      operationId: getAdminSupportMessages
+      tags: [support]
+      description: Latest 100 ascending messages. Optional afterId or beforeId query cursor; only one direction per request.
+      responses:
+        '200':
+          description: Member conversation history
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportHistory' }
+    post:
+      operationId: sendAdminSupportMessage
+      tags: [support]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupportMessageInput' }
+      responses:
+        '200':
+          description: Persisted operator reply
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupportSendResult' }
+  /admin/support/{userId}/read:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      operationId: readAdminSupportMessages
+      tags: [support]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupportReadInput' }
+      responses:
+        '200': { description: Operator read watermark updated }
+  /admin/support/events:
+    get:
+      operationId: streamAdminSupportEvents
+      tags: [support]
+      responses:
+        '200': { description: Native administrator SSE connected/support/unauthorized events }
   /healthz:
     get:
       operationId: healthCheck
@@ -93,6 +226,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/password:
+    post:
+      operationId: changeMemberPassword
+      tags: [auth]
+      summary: 현재 비밀번호 확인 후 회원 비밀번호 변경 및 회원 세션 해제
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberPasswordInput"
+      responses:
+        "200":
+          description: 변경 완료, 새 비밀번호로 재로그인 필요
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberPasswordChanged"
+        "400":
+          description: 비밀번호 확인 또는 입력 오류
+        "401":
+          description: 회원 로그인 필요
+        "403":
+          description: 관리자 계정에는 사용할 수 없음
+        "409":
+          description: 삭제 또는 차단된 계정
+
   /auth/logout:
     post:
       operationId: logout
@@ -105,6 +265,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/me:
+    get:
+      operationId: getAdminMe
+      tags: [admin]
+      summary: 관리자 전용 세션으로 로그인 상태 확인
+      responses:
+        "200":
+          description: 관리자 정보
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: 관리자 미인증
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: 관리자 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/me:
     get:
@@ -124,6 +309,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/profile:
+    get:
+      operationId: getMemberProfile
+      tags: [auth]
+      summary: 로그인한 회원 본인의 개인정보 조회
+      responses:
+        "200":
+          description: 본인 개인정보 (캐시 금지)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberProfile"
+        "401":
+          description: 회원 로그인 필요
+        "403":
+          description: 이용할 수 없는 계정
+    patch:
+      operationId: updateMemberProfile
+      tags: [auth]
+      summary: 회원 본인의 이름·휴대폰·계좌정보 저장
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberProfile"
+      responses:
+        "200":
+          description: 저장된 본인 개인정보
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberProfile"
+        "400":
+          description: 잘못된 개인정보 형식
+        "401":
+          description: 회원 로그인 필요
+        "403":
+          description: 이용할 수 없는 계정
+        "409":
+          description: 이미 사용 중인 휴대폰 번호
 
   # ─── Wallet ──────────────────────────────────────────────────────────────
   /wallet:
@@ -438,6 +665,13 @@ paths:
       operationId: listChatRooms
       tags: [chat]
       summary: 내 채팅방 목록
+      parameters:
+        - name: includeDismissed
+          in: query
+          description: 마이룸 거래 조회용. 본인이 닫은 채팅도 포함하며 참여자 범위는 유지합니다.
+          schema:
+            type: string
+            enum: ["1"]
       responses:
         "200":
           description: 채팅방 목록
@@ -480,6 +714,35 @@ paths:
                 $ref: "#/components/schemas/ChatRoomUpdateResult"
         "403":
           description: 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /chat/rooms/{roomId}/dismiss:
+    post:
+      operationId: dismissChatRoom
+      tags: [Chat]
+      summary: Close this participant's chat list entry without cancelling a trade
+      parameters:
+        - in: path
+          name: roomId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The room is hidden from this participant's list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+        "403":
+          description: Not a participant
           content:
             application/json:
               schema:
@@ -618,6 +881,12 @@ paths:
       tags: [admin]
       summary: 전체 회원 목록
       parameters:
+        - name: includeDeleted
+          in: query
+          schema:
+            type: integer
+            enum: [0, 1]
+            default: 0
         - name: page
           in: query
           schema:
@@ -639,6 +908,115 @@ paths:
                   $ref: "#/components/schemas/AdminUser"
         "403":
           description: 권한 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}:
+    delete:
+      operationId: adminRemoveMember
+      tags: [admin]
+      summary: 회원 비활성화 및 목록 삭제 (잔액·거래·대화 보존)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 삭제 처리 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, archived, message]
+                properties:
+                  ok:
+                    type: boolean
+                  archived:
+                    type: boolean
+                  message:
+                    type: string
+        "409":
+          description: 진행 중인 거래 또는 출금
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}/password-reset:
+    post:
+      operationId: adminResetMemberPassword
+      tags: [admin]
+      summary: 관리자 재인증 후 회원 임시 비밀번호 발급 (한 번만 반환, 저장하지 않음)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberPasswordResetInput"
+      responses:
+        "200":
+          description: 임시 비밀번호 발급 및 대상 회원 세션 해제
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberPasswordResetResult"
+        "400":
+          description: 회원 본인 확인 또는 입력 오류
+        "401":
+          description: 관리자 로그인 필요
+        "403":
+          description: 권한 없음 또는 관리자 재인증 실패
+        "404":
+          description: 회원 없음
+        "409":
+          description: 삭제 또는 차단된 계정
+
+  /admin/users/{userId}/balance:
+    patch:
+      operationId: adminChangeMemberBalance
+      tags: [admin]
+      summary: 회원 마일리지 추가 또는 최종 잔액 직접 설정
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberBalanceRequest"
+      responses:
+        "200":
+          description: 실제 저장된 최종 잔액
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [balance]
+                properties:
+                  balance:
+                    type: integer
+        "400":
+          description: 잘못된 금액
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: 삭제된 회원
           content:
             application/json:
               schema:
@@ -697,6 +1075,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: includeDeleted
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
       responses:
         "200":
           description: 주문 목록
@@ -705,13 +1088,83 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Order"
+                  $ref: "#/components/schemas/AdminOrder"
         "403":
           description: 권한 없음
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/orders/{id}:
+    delete:
+      operationId: adminDeleteOrder
+      tags: [admin]
+      summary: 완료 또는 취소된 주문을 관리자 목록에서 삭제하고 정산 기록 보존
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 관리자 목록 삭제 완료; 실제 주문 및 연결 기록 보존
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, preserved]
+                properties:
+                  ok:
+                    type: boolean
+                  preserved:
+                    type: boolean
+        "400":
+          description: 잘못된 주문 ID
+        "401":
+          description: 관리자 세션 인증 실패
+        "403":
+          description: 관리자 로그인 필요
+        "404":
+          description: 주문 없음
+        "409":
+          description: 진행 중인 주문은 삭제 불가
+
+  /admin/orders/{id}/list-entry:
+    delete:
+      operationId: adminHideOrder
+      tags: [admin]
+      summary: 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거하고 원본 기록 보존
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 목록 제거 완료; 주문·정산·대화 원본은 보존
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, preserved]
+                properties:
+                  ok:
+                    type: boolean
+                  preserved:
+                    type: boolean
+        "400":
+          description: 잘못된 주문 ID
+        "401":
+          description: 관리자 세션 인증 실패
+        "403":
+          description: 관리자 로그인 필요
+        "404":
+          description: 주문 없음
+        "409":
+          description: 먼저 완료 또는 취소 후 관리자 목록 삭제가 필요
 
   /admin/withdrawals:
     get:
@@ -740,6 +1193,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/products/{id}/list-entry:
+    delete:
+      operationId: adminHideInactiveProduct
+      tags: [admin]
+      summary: 비활성 상품을 관리자 목록에서만 삭제
+      description: Requires an active administrator session. Inactive listings only; retain the original product, orders, chats and settlement evidence. Idempotent without changing business timestamps.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        "200":
+          description: 관리자 목록에서 제외됨
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InactiveProductRemovalResult"
+        "400":
+          description: 올바르지 않은 상품 ID
+        "401":
+          description: 관리자 로그인 필요
+        "403":
+          description: 권한 없음
+        "404":
+          description: 상품 없음
+        "409":
+          description: 비활성 상품만 목록에서 삭제 가능
   /admin/products:
     get:
       operationId: adminListProducts
@@ -766,6 +1250,12 @@ paths:
       operationId: adminListChatRooms
       tags: [admin]
       summary: 전체 채팅 거래 내역
+      parameters:
+        - name: includeDeleted
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
       responses:
         "200":
           description: 채팅방 목록
@@ -786,7 +1276,7 @@ paths:
     delete:
       operationId: adminDeleteChatRoom
       tags: [admin]
-      summary: 주문에 연결되지 않은 채팅방과 메시지 영구 삭제
+      summary: 종료된 주문 연결 채팅 또는 주문 없는 문의를 관리자 목록에서 삭제하고 메시지 보존
       parameters:
         - name: id
           in: path
@@ -795,25 +1285,94 @@ paths:
             type: integer
       responses:
         "200":
-          description: 삭제 완료
+          description: 관리자 목록 삭제 완료; 대화 및 정산 기록 보존
           content:
             application/json:
               schema:
                 type: object
-                required: [ok]
+                required: [ok, preserved]
                 properties:
                   ok:
                     type: boolean
+                  preserved:
+                    type: boolean
         "400":
           description: 잘못된 채팅방 ID
+        "401":
+          description: 관리자 세션 인증 실패
         "403":
           description: 관리자 권한 없음
         "404":
           description: 채팅방 없음
         "409":
-          description: 주문에 연결된 채팅방은 삭제 불가
+          description: 진행 중인 주문에 연결된 채팅방은 삭제 불가
+
+  /admin/chat-rooms/{id}/list-entry:
+    delete:
+      operationId: adminHideChatRoom
+      tags: [admin]
+      summary: 삭제된 채팅거래를 관리자 목록에서 제거하고 대화·거래·정산 원본 보존
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 목록 제거 완료; 원본 기록 보존
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, preserved]
+                properties:
+                  ok:
+                    type: boolean
+                  preserved:
+                    type: boolean
+        "400":
+          description: 잘못된 채팅방 ID
+        "401":
+          description: 관리자 세션 인증 실패
+        "403":
+          description: 관리자 로그인 필요
+        "404":
+          description: 채팅방 없음
+        "409":
+          description: 먼저 종료 후 관리자 목록 삭제가 필요
 
   /admin/withdrawals/{id}:
+    delete:
+      operationId: adminRemoveWithdrawal
+      tags: [admin]
+      summary: 처리된 출금 신청을 관리자 목록에서만 삭제
+      description: Active administrator session required. Pending withdrawals cannot be removed. Preserve member history, status, amounts and balances. Repeated deletion is idempotent.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        "200":
+          description: 관리자 목록에서 삭제됨
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalListRemovalResult"
+        "400":
+          description: 올바르지 않은 출금 ID
+        "401":
+          description: 관리자 로그인 필요
+        "403":
+          description: 권한 없음
+        "404":
+          description: 출금 신청 없음
+        "409":
+          description: 대기 중인 출금은 삭제할 수 없음
     patch:
       operationId: adminUpdateWithdrawal
       tags: [admin]
@@ -846,6 +1405,155 @@ paths:
 
 components:
   schemas:
+    InactiveProductRemovalResult:
+      type: object
+      required: [ok, hidden, preserved]
+      properties:
+        ok:
+          type: boolean
+        hidden:
+          type: boolean
+        preserved:
+          type: boolean
+    WithdrawalListRemovalResult:
+      type: object
+      required: [ok, preserved]
+      properties:
+        ok:
+          type: boolean
+        preserved:
+          type: boolean
+    MemberPasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          maxLength: 128
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 16
+    MemberPasswordChanged:
+      type: object
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+    MemberPasswordResetInput:
+      type: object
+      required: [identityVerified, adminPassword]
+      properties:
+        identityVerified:
+          type: boolean
+          description: 관리자에 의한 회원 본인 확인 완료
+        adminPassword:
+          type: string
+          format: password
+          maxLength: 128
+    MemberPasswordResetResult:
+      type: object
+      required: [userId, temporaryPassword]
+      properties:
+        userId:
+          type: integer
+        temporaryPassword:
+          type: string
+          format: password
+          description: 발급 시에만 반환하는 16자 임시 비밀번호
+    SupportMessageInput:
+      type: object
+      required: [body, clientId]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 2000 }
+        clientId: { type: string, minLength: 1, maxLength: 80 }
+        expectedUserId: { type: integer, minimum: 1, description: Optional identity-change precondition, never the owner source }
+        expectedConversationId: { type: integer, minimum: 0, description: Optional first-message generation; prevents replay into a deleted conversation }
+    SupportRemovalInput:
+      type: object
+      required: [lastMessageId]
+      properties:
+        lastMessageId: { type: integer, minimum: 0 }
+    SupportRemovalResult:
+      type: object
+      required: [ok, deletedMessages]
+      properties:
+        ok: { type: boolean }
+        deletedMessages: { type: integer }
+    SupportReadInput:
+      type: object
+      required: [messageId]
+      properties:
+        messageId: { type: integer, minimum: 0 }
+    SupportSummary:
+      type: object
+      required: [unreadCount, latestMessageId, conversationId]
+      properties:
+        unreadCount: { type: integer }
+        latestMessageId: { type: integer }
+        conversationId: { type: integer, description: First message ID of the current conversation or zero }
+    SupportMessage:
+      type: object
+      required: [id, userId, sender, senderName, body, createdAt]
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        sender: { type: string, enum: [member, admin] }
+        senderName: { type: string }
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+    SupportSendResult:
+      type: object
+      required: [message]
+      properties:
+        message: { $ref: '#/components/schemas/SupportMessage' }
+    SupportMember:
+      type: object
+      required: [id, nickname, deletedAt, suspendedAt]
+      properties:
+        id: { type: integer }
+        nickname: { type: string }
+        deletedAt: { type: [string, 'null'], format: date-time }
+        suspendedAt: { type: [string, 'null'], format: date-time }
+    SupportHistory:
+      type: object
+      required: [messages, hasMore, latestMessageId, unreadCount, member, conversationId]
+      properties:
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/SupportMessage' }
+        hasMore: { type: boolean }
+        latestMessageId: { type: integer }
+        unreadCount: { type: integer }
+        member: { $ref: '#/components/schemas/SupportMember' }
+        conversationId: { type: integer }
+    SupportConversation:
+      type: object
+      required: [userId, nickname, email, deletedAt, suspendedAt, lastMessageId, lastMessagePreview, updatedAt, unreadCount]
+      properties:
+        userId: { type: integer }
+        nickname: { type: string }
+        email: { type: string }
+        deletedAt: { type: [string, 'null'], format: date-time }
+        suspendedAt: { type: [string, 'null'], format: date-time }
+        lastMessageId: { type: integer }
+        latestMemberMessageId: { type: integer }
+        lastMessagePreview: { type: string }
+        updatedAt: { type: string, format: date-time }
+        unreadCount: { type: integer }
+    SupportConversationPage:
+      type: object
+      required: [conversations, hasMore, latestMemberMessageId]
+      properties:
+        conversations:
+          type: array
+          items: { $ref: '#/components/schemas/SupportConversation' }
+        hasMore: { type: boolean }
+        latestMemberMessageId: { type: integer }
     HealthStatus:
       type: object
       required: [status]
@@ -1008,6 +1716,9 @@ components:
           type: ["string", "null"]
         description:
           type: ["string", "null"]
+        quantityLabel:
+          type: string
+          description: 등록한 수량·범위·단위. 과거 수량이 저장되지 않은 물품은 '-'로 표시.
         thumbnailUrl:
           type: ["string", "null"]
         detailUrl:
@@ -1015,6 +1726,10 @@ components:
         status:
           type: string
           enum: [active, sold, inactive]
+        viewCount:
+          type: integer
+          minimum: 0
+          description: 서버에 누적 저장된 상세 페이지 조회수
         crawledAt:
           type: string
           format: date-time
@@ -1102,10 +1817,20 @@ components:
 
     ChatRoomDetail:
       type: object
-      required: [id, buyerId, sellerId, status, buyerNickname, sellerNickname]
+      required: [id, buyerId, sellerId, status, buyerNickname, sellerNickname, createdAt, tradeInfo]
       properties:
         id:
           type: integer
+        orderId:
+          type: ["integer", "null"]
+        orderCreatedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        tradeInfo:
+          type: string
         buyerId:
           type: integer
         sellerId:
@@ -1118,7 +1843,22 @@ components:
           type: ["string", "null"]
         productPrice:
           type: ["integer", "null"]
+        productCreatedAt:
+          type: ["string", "null"]
+          format: date-time
+        productItemmaniaId:
+          type: ["string", "null"]
+        productItemCategory:
+          type: ["string", "null"]
+        productDescription:
+          type: ["string", "null"]
+        productCategory:
+          type: ["string", "null"]
         characterName:
+          type: ["string", "null"]
+        buyerCharacterName:
+          type: ["string", "null"]
+        sellerCharacterName:
           type: ["string", "null"]
         goodsType:
           type: ["string", "null"]
@@ -1126,6 +1866,30 @@ components:
           type: string
         sellerNickname:
           type: string
+        buyerName:
+          type: ["string", "null"]
+        buyerPhone:
+          type: ["string", "null"]
+        sellerName:
+          type: ["string", "null"]
+        sellerPhone:
+          type: ["string", "null"]
+        buyerGrade:
+          type: ["string", "null"]
+        sellerGrade:
+          type: ["string", "null"]
+        buyerCreditScore:
+          type: ["integer", "null"]
+        sellerCreditScore:
+          type: ["integer", "null"]
+        buyerAuthStates:
+          type: ["object", "null"]
+          additionalProperties:
+            type: boolean
+        sellerAuthStates:
+          type: ["object", "null"]
+          additionalProperties:
+            type: boolean
         gameName:
           type: ["string", "null"]
         serverName:
@@ -1210,15 +1974,42 @@ components:
           type: string
           format: date-time
 
+    AdminOrder:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          required: [canDelete, canHide, adminDeletedAt, adminDeletedBy]
+          properties:
+            canDelete:
+              type: boolean
+            canHide:
+              type: boolean
+              description: 이미 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거할 수 있는지 여부
+            adminDeletedAt:
+              type: ["string", "null"]
+              format: date-time
+            adminDeletedBy:
+              type: ["string", "null"]
+
     AdminChatRoom:
       type: object
-      required: [id, canDelete, sellerId, buyerId, status, createdAt]
+      required: [id, canDelete, canHide, sellerId, buyerId, status, createdAt]
       properties:
         id:
           type: integer
         canDelete:
           type: boolean
-          description: 주문에 연결되지 않아 삭제할 수 있는 채팅방인지 여부
+          description: 종료된 주문 연결 거래 또는 주문 없는 문의로 관리자 목록 삭제가 가능한지 여부
+        canHide:
+          type: boolean
+          description: 이미 삭제된 거래를 삭제 항목 포함 목록에서도 제거할 수 있는지 여부
+        orderId:
+          type: ["integer", "null"]
+        adminDeletedAt:
+          type: ["string", "null"]
+          format: date-time
+        adminDeletedBy:
+          type: ["string", "null"]
         sellerId:
           type: integer
         buyerId:
@@ -1238,6 +2029,27 @@ components:
           format: date-time
 
     # ─── Admin ────────────────────────────────────────────────────────────
+    MemberProfile:
+      type: object
+      additionalProperties: false
+      required: [name, phone, bankName, bankAccountNumber, bankAccountHolder]
+      properties:
+        name:
+          type: ["string", "null"]
+          maxLength: 50
+        phone:
+          type: ["string", "null"]
+          maxLength: 30
+        bankName:
+          type: ["string", "null"]
+          maxLength: 40
+        bankAccountNumber:
+          type: ["string", "null"]
+          maxLength: 40
+        bankAccountHolder:
+          type: ["string", "null"]
+          maxLength: 50
+
     RegistrationPolicy:
       type: object
       required: [blocked]
@@ -1273,11 +2085,25 @@ components:
         suspendedAt:
           type: ["string", "null"]
           format: date-time
+        deletedAt:
+          type: ["string", "null"]
+          format: date-time
         balance:
           type: ["integer", "null"]
         createdAt:
           type: string
           format: date-time
+    MemberBalanceRequest:
+      type: object
+      required: [amount, mode]
+      properties:
+        amount:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        mode:
+          type: string
+          enum: [add, set]
     AdminSuspensionRequest:
       type: object
       required: [suspended]

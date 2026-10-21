@@ -3,12 +3,14 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import multer from "multer";
 import { Router, type IRouter } from "express";
-import { eq, and, or, ne, lt, desc, sql, gte } from "drizzle-orm";
+import { eq, and, or, ne, lt, desc, sql, gte, isNull } from "drizzle-orm";
 import { db, chatRoomsTable, chatMessagesTable, usersTable, productsTable, walletsTable, ordersTable, escrowLedgerTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { pushToUser } from "../lib/sse";
 import { createNotification, notifyAdmin } from "./notifications";
 import { localProductSellerId } from "./product-ownership";
+import { normalizeTradeCharacterName, tradeCharacterNames, publicListingDescription } from "../lib/trade-character-names";
+import { chatTradeInfo } from "../lib/chat-trade-info";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,7 +96,10 @@ router.get("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
     .from(chatRoomsTable)
     .where(
       and(
-        or(eq(chatRoomsTable.buyerId, userId), eq(chatRoomsTable.sellerId, userId)),
+        req.query.includeDismissed === "1" ? or(eq(chatRoomsTable.buyerId, userId), eq(chatRoomsTable.sellerId, userId)) : or(
+          and(eq(chatRoomsTable.buyerId, userId), isNull(chatRoomsTable.buyerDismissedAt)),
+          and(eq(chatRoomsTable.sellerId, userId), isNull(chatRoomsTable.sellerDismissedAt))
+        ),
         ne(chatRoomsTable.status, "cancelled")
       )
     );
@@ -136,11 +141,18 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
 
   let result: { room: typeof chatRoomsTable.$inferSelect; created: boolean };
   try {
+    const applicantCharacterName = normalizeTradeCharacterName(characterName);
     result = await db.transaction(async tx => {
+      const participants = await tx.select({ id: usersTable.id }).from(usersTable)
+        .where(and(sql`${usersTable.id} IN (${resolvedBuyerId}, ${resolvedSellerId})`, isNull(usersTable.deletedAt)))
+        .for("key share");
+      if (participants.length !== 2) throw new Error("삭제되었거나 존재하지 않는 회원과는 새 채팅을 시작할 수 없습니다.");
+      let listing: typeof productsTable.$inferSelect | undefined;
       // Lock a stable parent row before lookup+insert so parallel requests cannot create
       // two open rooms for the same buyer/listing. No schema migration is required.
       if (productId) {
         const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId)).for("update");
+        listing = product;
         const ownerId = product && localProductSellerId(product);
         if (!ownerId || product?.status !== "active" ||
             (sellerId !== undefined && (product.category !== "sell" || ownerId !== resolvedSellerId)) ||
@@ -154,10 +166,26 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
       if (productId) conditions.push(eq(chatRoomsTable.productId, productId));
       const existingRooms = await tx.select().from(chatRoomsTable).where(and(...conditions)).orderBy(desc(chatRoomsTable.id));
       const existing = existingRooms.find(room => !["ended", "cancelled", "rejected"].includes(room.status));
-      if (existing) return { room: existing, created: false };
+      if (existing) {
+        let names = tradeCharacterNames(existing, listing);
+        const ownField = userId === resolvedBuyerId ? "buyerCharacterName" : "sellerCharacterName";
+        if (!names[ownField] && applicantCharacterName) names[ownField] = applicantCharacterName;
+        names = tradeCharacterNames({ ...existing, ...names }, listing);
+        const [updated] = await tx.update(chatRoomsTable).set({
+          ...names,
+          buyerDismissedAt: null, sellerDismissedAt: null,
+          goodsType: existing.goodsType ?? goodsType ?? null,
+        }).where(eq(chatRoomsTable.id, existing.id)).returning();
+        return { room: updated, created: false };
+      }
+      let names = tradeCharacterNames({}, listing);
+      if (userId === resolvedBuyerId) names.buyerCharacterName = applicantCharacterName;
+      else names.sellerCharacterName = applicantCharacterName;
+      names = tradeCharacterNames(names, listing);
       const [room] = await tx.insert(chatRoomsTable).values({
         buyerId: resolvedBuyerId, sellerId: resolvedSellerId, productId: productId ?? null,
-        characterName: characterName ?? null, goodsType: goodsType ?? null,
+        characterName: applicantCharacterName, goodsType: goodsType ?? null,
+        ...names,
       }).returning();
       return { room, created: true };
     });
@@ -167,9 +195,6 @@ router.post("/chat/rooms", requireAuth, async (req, res): Promise<void> => {
   }
   const { room, created } = result;
   if (!created) {
-    if (characterName && !room.characterName) {
-      await db.update(chatRoomsTable).set({ characterName, goodsType: goodsType ?? null }).where(eq(chatRoomsTable.id, room.id));
-    }
     res.json({ id: room.id, created: false });
     return;
   }
@@ -495,6 +520,25 @@ router.patch("/chat/rooms/:roomId", requireAuth, async (req, res): Promise<void>
   res.json({ id: roomId, status });
 });
 
+// Closing a chat is personal list visibility, never a trade cancellation.
+router.post("/chat/rooms/:roomId/dismiss", requireAuth, async (req, res): Promise<void> => {
+  const roomId = Number(req.params.roomId);
+  if (!Number.isSafeInteger(roomId) || roomId <= 0) {
+    res.status(400).json({ error: "올바른 채팅방 번호가 아닙니다." }); return;
+  }
+  const userId = req.session.userId!;
+  const [room] = await db.select().from(chatRoomsTable).where(eq(chatRoomsTable.id, roomId));
+  if (!room) { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
+  if (userId !== room.buyerId && userId !== room.sellerId) {
+    res.status(403).json({ error: "접근 권한이 없습니다." }); return;
+  }
+  await db.update(chatRoomsTable).set(userId === room.buyerId
+    ? { buyerDismissedAt: new Date() } : { sellerDismissedAt: new Date() }
+  ).where(eq(chatRoomsTable.id, roomId));
+  pushToUser(userId, "chat_dismissed", { roomId });
+  res.json({ success: true });
+});
+
 // 메시지 목록
 router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promise<void> => {
   const roomId = parseInt(req.params.roomId as string, 10);
@@ -516,31 +560,46 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
     .orderBy(desc(chatMessagesTable.id))
     .limit(50);
 
-  const [buyer] = await db.select({ nickname: usersTable.nickname, name: usersTable.name, phone: usersTable.phone, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, room.buyerId));
-  const [seller] = await db.select({ nickname: usersTable.nickname, grade: usersTable.grade }).from(usersTable).where(eq(usersTable.id, room.sellerId));
+  const memberFields = { nickname: usersTable.nickname, name: usersTable.name, phone: usersTable.phone, grade: usersTable.grade,
+    creditScore: usersTable.creditScore, authStates: usersTable.authStates };
+  const [buyer] = await db.select(memberFields).from(usersTable).where(eq(usersTable.id, room.buyerId));
+  const [seller] = await db.select(memberFields).from(usersTable).where(eq(usersTable.id, room.sellerId));
 
    let productTitle: string | null = null;
    let productPrice: number | null = null;
    let gameName: string | null = null;
    let serverName: string | null = null;
    let productCategory: string | null = null;
+   let productCreatedAt: Date | null = null;
+   let productItemmaniaId: string | null = null;
+   let productItemCategory: string | null = null;
+   let productDescription: string | null = null;
+   let characterListing: { category: string | null; description: string | null; registeredCharacterName: string | null; characterNameInDescription: boolean } | undefined;
   if (room.productId) {
-     const [prod] = await db.select({ title: productsTable.title, price: productsTable.price, gameName: productsTable.gameName, serverName: productsTable.serverName, category: productsTable.category }).from(productsTable).where(eq(productsTable.id, room.productId));
+     const [prod] = await db.select({ title: productsTable.title, price: productsTable.price, gameName: productsTable.gameName, serverName: productsTable.serverName, category: productsTable.category, description: productsTable.description, registeredCharacterName: productsTable.registeredCharacterName, characterNameInDescription: productsTable.characterNameInDescription,
+       createdAt: productsTable.createdAt, itemmaniaid: productsTable.itemmaniaid, itemCategory: productsTable.itemCategory }).from(productsTable).where(eq(productsTable.id, room.productId));
     productTitle = prod?.title ?? null;
     productPrice = prod?.price ?? null;
      gameName = prod?.gameName ?? null;
      serverName = prod?.serverName ?? null;
      productCategory = prod?.category ?? null;
+     productCreatedAt = prod?.createdAt ?? null;
+     productItemmaniaId = prod?.itemmaniaid ?? null;
+     productItemCategory = prod?.itemCategory ?? null;
+     productDescription = prod ? publicListingDescription(prod) : null;
+     characterListing = prod;
   }
 
   // 구매자 실명/전화번호: 판매자 또는 어드민에게만 노출
   const isSeller = userId === room.sellerId || req.session.userRole === "admin";
-  const buyerName = isSeller ? (buyer?.name ?? null) : null;
-  const buyerPhone = isSeller ? (buyer?.phone ?? null) : null;
+  const buyerName = isSeller || userId === room.buyerId ? (buyer?.name ?? null) : null;
+  const buyerPhone = isSeller || userId === room.buyerId ? (buyer?.phone ?? null) : null;
+  const applied = Boolean(room.orderId || room.characterName || room.buyerCharacterName || room.sellerCharacterName);
 
   const [linkedOrder] = room.orderId
     ? await db.select({
         status: ordersTable.status, amount: ordersTable.amount, productTitle: ordersTable.productTitle,
+        createdAt: ordersTable.createdAt,
       }).from(ordersTable).where(eq(ordersTable.id, room.orderId))
     : [];
   res.json({
@@ -552,19 +611,33 @@ router.get("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promis
       status: room.status,
       productTitle: linkedOrder?.productTitle ?? productTitle,
       productPrice: linkedOrder ? Number(linkedOrder.amount) : productPrice,
+      productCreatedAt,
+      productItemmaniaId,
+      productItemCategory,
+      productDescription,
        gameName,
        serverName,
        productCategory,
       orderId: room.orderId ?? null,
       orderStatus: linkedOrder?.status ?? null,
+       createdAt: room.createdAt,
+       orderCreatedAt: linkedOrder?.createdAt ?? null,
+       tradeInfo: chatTradeInfo(room, linkedOrder),
       characterName: room.characterName ?? null,
+      ...tradeCharacterNames(room, characterListing),
       goodsType: room.goodsType ?? null,
       buyerNickname: buyer?.nickname ?? String(room.buyerId),
       sellerNickname: seller?.nickname ?? String(room.sellerId),
       buyerGrade: buyer?.grade ?? null,
       sellerGrade: seller?.grade ?? null,
+      buyerCreditScore: buyer?.creditScore ?? null,
+      sellerCreditScore: seller?.creditScore ?? null,
+      buyerAuthStates: buyer?.authStates ?? null,
+      sellerAuthStates: seller?.authStates ?? null,
       buyerName,
       buyerPhone,
+      sellerName: applied || userId === room.sellerId ? seller?.name ?? null : null,
+      sellerPhone: applied || userId === room.sellerId ? seller?.phone ?? null : null,
     },
     messages: messages.reverse().map(m => ({
       id: m.id,
@@ -594,6 +667,8 @@ router.post("/chat/rooms/:roomId/upload", requireAuth, upload.single("image"), a
       if (locked.status === "pending") {
         await tx.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
       }
+      await tx.update(chatRoomsTable).set({ buyerDismissedAt: null, sellerDismissedAt: null })
+        .where(eq(chatRoomsTable.id, roomId));
       const [created] = await tx.insert(chatMessagesTable).values({
         roomId, senderId: userId, content: `[img]${imageUrl}`,
       }).returning();
@@ -644,6 +719,8 @@ router.post("/chat/rooms/:roomId/messages", requireAuth, async (req, res): Promi
       if (locked.status === "pending") {
         await tx.update(chatRoomsTable).set({ status: "active" }).where(eq(chatRoomsTable.id, roomId));
       }
+      await tx.update(chatRoomsTable).set({ buyerDismissedAt: null, sellerDismissedAt: null })
+        .where(eq(chatRoomsTable.id, roomId));
       const [created] = await tx.insert(chatMessagesTable).values({
         roomId, senderId: userId, content: content.trim(),
       }).returning();

@@ -20,10 +20,17 @@ export interface Product {
   sellerName?: string | null;
   /** @nullable */
   description?: string | null;
+  /** 등록한 수량·범위·단위. 과거 수량이 저장되지 않은 물품은 '-'로 표시. */
+  quantityLabel?: string;
   /** @nullable */
   thumbnailUrl?: string | null;
   /** @nullable */
   detailUrl?: string | null;
   status: ProductStatus;
+  /**
+     * 서버에 누적 저장된 상세 페이지 조회수
+     * @minimum 0
+     */
+  viewCount?: number;
   crawledAt: Date;
 }

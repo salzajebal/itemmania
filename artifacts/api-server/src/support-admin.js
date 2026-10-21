@@ -1,0 +1,150 @@
+(function(){
+var MAX=2000;
+var A={inited:false,convs:[],hasMore:false,sel:null,msgs:[],mHasMore:false,member:null,pending:null,busy:false,selGen:0,es:null,timer:null,readId:0,conn:'연결 중',loadingList:false,err:''};
+var sound={enabled:false,ctx:null,high:0,primed:false,last:0};
+try{sound.enabled=localStorage.getItem('support-admin-sound')==='on'}catch(e){}
+function soundLabel(){var b=$('saSound');if(b){b.textContent=sound.enabled&&sound.ctx&&sound.ctx.state==='running'?'알림 소리 끄기':'알림 소리 켜기';b.setAttribute('aria-pressed',String(sound.enabled&&!!sound.ctx&&sound.ctx.state==='running'))}}
+function tone(){
+ if(!sound.enabled||!sound.ctx||sound.ctx.state!=='running'||Date.now()-sound.last<600)return;
+ sound.last=Date.now();
+ try{[660,880].forEach(function(h,i){var o=sound.ctx.createOscillator(),g=sound.ctx.createGain(),t=sound.ctx.currentTime+i*.16;o.frequency.value=h;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.015);g.gain.exponentialRampToValueAtTime(.001,t+.14);o.connect(g);g.connect(sound.ctx.destination);o.start(t);o.stop(t+.15);o.onended=function(){o.disconnect();g.disconnect()}})}catch(e){}
+}
+function enableSound(){
+ var C=window.AudioContext||window.webkitAudioContext;if(!C){alert('이 브라우저는 알림 소리를 지원하지 않습니다.');return}
+ try{if(!sound.ctx)sound.ctx=new C();sound.ctx.resume().then(function(){sound.enabled=true;try{localStorage.setItem('support-admin-sound','on')}catch(e){}soundLabel();tone()}).catch(function(){soundLabel();alert('소리를 활성화하지 못했습니다. 브라우저의 사이트 소리 설정을 확인해 주세요.')})}catch(e){alert('브라우저의 사이트 소리 설정을 확인해 주세요.')}
+}
+function incoming(id){if(id>sound.high){sound.high=id;if(sound.primed)tone()}}
+function resetDetail(){A.selGen++;A.msgs=[];A.mHasMore=false;A.readId=0;A.pending=null;A.busy=false;A.loadingOlder=false;A.conversationId=null;if(A.sel&&A.member)renderDetail()}
+function generation(d){if(A.conversationId!=null&&A.conversationId!==d.conversationId){resetDetail();return true}A.conversationId=d.conversationId;return false}
+function $(i){return document.getElementById(i)}
+function kst(s){try{return new Date(s).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})+' KST'}catch(e){return''}}
+function api(p,o){o=o||{};o.credentials='include';o.cache='no-store';if(o.body)o.headers={'Content-Type':'application/json'};
+ return fetch(p,o).then(function(r){if(!r.ok){var e=new Error('HTTP '+r.status);e.status=r.status;throw e}return r.json()})}
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function active(){var p=$('tab-support');return p&&p.classList.contains('active')&&!document.hidden}
+function lastId(){return A.msgs.length?A.msgs[A.msgs.length-1].id:0}
+function build(){
+ var r=$('supportAdminRoot');if(!r)return false;
+ r.innerHTML='<style>#supportAdminRoot .sa{display:grid;grid-template-columns:340px 1fr;height:640px;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden}'+
+ '#supportAdminRoot .sl{border-right:1px solid #eee;display:flex;flex-direction:column;min-height:0}#supportAdminRoot .sl-h{padding:12px 14px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center;font-weight:700}'+
+ '#supportAdminRoot .sl-b{overflow-y:auto;flex:1}#supportAdminRoot .ci{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #f1f1f1;padding:11px 14px;cursor:pointer;font-family:inherit}'+
+ '#supportAdminRoot .ci:hover{background:#f7fafd}#supportAdminRoot .ci.sel{background:#e8f4fe;box-shadow:inset 3px 0 0 #159EFD}'+
+ '#supportAdminRoot .ci b{font-size:14px}#supportAdminRoot .ci small{display:block;color:#888;font-size:11px;margin-top:2px}#supportAdminRoot .ci p{font-size:12px;color:#555;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}'+
+ '#supportAdminRoot .un{background:#d92d20;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;margin-left:6px}#supportAdminRoot .tag{background:#fee;color:#b42318;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px}'+
+ '#supportAdminRoot .sd{display:flex;flex-direction:column;min-height:0}#supportAdminRoot .sd-h{padding:12px 16px;border-bottom:1px solid #eee;font-weight:700}#supportAdminRoot .sd-h small{font-weight:400;color:#888;margin-left:8px}'+
+ '#supportAdminRoot .ml{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px;background:#f6f8fb}'+
+ '#supportAdminRoot .mm{max-width:70%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}'+
+ '#supportAdminRoot .mm.admin{align-self:flex-end;background:#159EFD;color:#fff}#supportAdminRoot .mm.member{align-self:flex-start;background:#fff;border:1px solid #dde3e8}'+
+ '#supportAdminRoot .mm i{display:block;font-style:normal;font-size:10px;opacity:.65;margin-top:3px}#supportAdminRoot .empty{margin:auto;color:#999;text-align:center;font-size:14px;line-height:1.7;padding:20px}'+
+ '#supportAdminRoot form{display:flex;gap:8px;padding:10px;border-top:1px solid #eee}#supportAdminRoot textarea{flex:1;height:58px;resize:none;border:1.5px solid #ddd;border-radius:8px;padding:8px;font:14px inherit}'+
+ '#supportAdminRoot .er{background:#fee;color:#b42318;font-size:12px;padding:8px 14px}#supportAdminRoot .more{margin:6px auto;padding:6px 14px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:12px}'+
+ '@media(max-width:800px){#supportAdminRoot .sa{grid-template-columns:1fr;height:auto}#supportAdminRoot .sl-b{max-height:260px}#supportAdminRoot .sd{height:520px}}</style>'+
+ '<div class="sa"><div class="sl"><div class="sl-h"><span>대화 목록</span><span id="saConn" style="font-weight:400;font-size:11px;color:#888;flex:1"></span><button class="refresh-btn" type="button" id="saRef">새로고침</button></div><button type="button" class="refresh-btn" id="saSound" title="한 번 켜면 다른 관리자 탭에서도 새 고객 메시지에 소리가 납니다.">알림 소리 켜기</button><div class="sl-b" id="saList"></div></div>'+
+ '<div class="sd"><div class="sd-h" id="saHead">대화를 선택하세요</div><div class="er" id="saErr" hidden></div><div class="ml" id="saMsgs"><div class="empty">왼쪽 목록에서 회원을 선택하면<br>1:1 대화가 표시됩니다.</div></div>'+
+ '<form id="saForm"><textarea id="saTa" maxlength="2000" placeholder="답변 입력" aria-label="답변 입력" disabled></textarea><button class="primary-btn" id="saSend" disabled>전송</button></form></div></div>';
+ $('saRef').onclick=function(){loadList(true);if(A.sel)refreshDetail(true)};
+ $('saSound').onclick=function(){if(sound.enabled&&sound.ctx&&sound.ctx.state==='running'){sound.enabled=false;try{localStorage.setItem('support-admin-sound','off')}catch(e){}soundLabel()}else enableSound()};soundLabel();
+ $('saForm').addEventListener('submit',send);
+ $('saTa').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('saForm').requestSubmit()}});
+ return true}
+function renderList(){
+ var b=$('saList');if(!b)return;b.textContent='';$('saConn').textContent=A.conn;
+ if(A.loadingList&&!A.convs.length){b.appendChild(el('div','empty','불러오는 중...'));return}
+ if(A.err&&!A.convs.length){var d=el('div','empty',A.err);b.appendChild(d);return}
+ if(!A.convs.length){b.appendChild(el('div','empty','접수된 문의가 없습니다.'));return}
+ A.convs.forEach(function(c){
+  var i=el('button','ci'+(c.userId===A.sel?' sel':''));i.type='button';
+  var n=el('b',null,c.nickname||('회원 '+c.userId));i.appendChild(n);
+  if(c.unreadCount>0)i.appendChild(el('span','un',String(c.unreadCount)));
+  if(c.deletedAt)i.appendChild(el('span','tag','탈퇴'));if(c.suspendedAt)i.appendChild(el('span','tag','정지'));
+  i.appendChild(el('small',null,(c.email||'')+' · '+kst(c.updatedAt)));i.appendChild(el('p',null,c.lastMessagePreview||''));
+  i.onclick=function(){select(c.userId)};b.appendChild(i)});
+ if(A.hasMore){var m=el('button','more','대화 더 보기');m.type='button';m.onclick=function(){loadList(false)};b.appendChild(m)}}
+function loadList(reset){
+ A.loadingList=true;var q='?limit=50';
+ if(!reset&&A.convs.length){var minId=Math.min.apply(null,A.convs.map(function(c){return c.lastMessageId}));q+='&beforeId='+minId}
+ var useReset=reset||!A.convs.length;
+ api('/api/admin/support/conversations'+q).then(function(d){
+  var got=d.conversations||[];
+  if(useReset){
+   /* 새로고침: 첫 페이지를 갱신하되 이미 불러온 이전 페이지 항목은 보존 */
+   var map={};got.forEach(function(c){map[c.userId]=1});
+   var keep=reset&&A.convs.length>50?A.convs.filter(function(c){return !map[c.userId]&&c.lastMessageId<Math.min.apply(null,got.map(function(x){return x.lastMessageId}).concat([1e15]))}):[];
+   A.convs=got.concat(keep);if(!keep.length)A.hasMore=!!d.hasMore}
+  else{var ex={};A.convs.forEach(function(c){ex[c.userId]=1});got.forEach(function(c){if(!ex[c.userId])A.convs.push(c)});A.hasMore=!!d.hasMore}
+   incoming(d.latestMemberMessageId||0);sound.primed=true;
+   A.convs.sort(function(a,b){return b.lastMessageId-a.lastMessageId});A.err=''})
+ .catch(function(e){A.err=e.status===401||e.status===403?'관리자 권한이 필요합니다.':'목록을 불러오지 못했습니다.'})
+ .then(function(){A.loadingList=false;renderList()})}
+function setErr(t){var e=$('saErr');if(!e)return;e.hidden=!t;e.textContent=t||''}
+function renderDetail(forceBottom){
+ var h=$('saHead'),l=$('saMsgs'),ta=$('saTa'),sb=$('saSend');if(!h)return;
+ if(!A.sel){return}
+ var m=A.member||{},ro=!!(m.deletedAt||m.suspendedAt);
+ h.textContent='';h.appendChild(document.createTextNode(m.nickname||('회원 '+A.sel)));
+ h.appendChild(el('small',null,ro?(m.deletedAt?'탈퇴 회원 - 읽기 전용':'정지 회원 - 읽기 전용'):'회원 ID '+A.sel+' · '+A.conn));
+  var del=el('button','danger-btn','문의·대화 전체 삭제');del.type='button';del.style.marginLeft='12px';del.disabled=A.busy||A.deleting||!lastId();del.onclick=deleteConversation;h.appendChild(del);
+  ta.disabled=ro||A.busy||A.deleting||A.conversationId==null;sb.disabled=ta.disabled;ta.placeholder=ro?'답변할 수 없는 계정입니다.':'답변 입력';
+ var bot=l.scrollHeight-l.scrollTop-l.clientHeight<60,ph=l.scrollHeight,pt=l.scrollTop;l.textContent='';
+ if(A.mHasMore){var o=el('button','more',A.loadingOlder?'불러오는 중...':'이전 대화 더보기');o.type='button';o.disabled=!!A.loadingOlder;o.onclick=older;l.appendChild(o)}
+ if(!A.msgs.length)l.appendChild(el('div','empty','대화 내역이 없습니다.'));
+ A.msgs.forEach(function(x){var d=el('div','mm '+(x.sender==='admin'?'admin':'member'));d.appendChild(document.createTextNode(x.body));d.appendChild(el('i',null,(x.sender==='admin'?(x.senderName||'고객센터'):(x.senderName||m.nickname||'회원'))+' · '+kst(x.createdAt)));l.appendChild(d)});
+ if(A.pending&&A.pending.userId===A.sel){var p=el('div','mm admin',A.pending.text);p.style.opacity='.6';p.appendChild(el('i',null,A.busy?'전송 중...':'전송 실패 - 다시 전송'));l.appendChild(p)}
+ if(A.loadingOlder)l.scrollTop=pt+(l.scrollHeight-ph);else if(bot||forceBottom)l.scrollTop=l.scrollHeight;
+ markRead()}
+function merge(list){var s={};A.msgs.forEach(function(m){s[m.id]=1});list.forEach(function(m){if(!s[m.id])A.msgs.push(m)});A.msgs.sort(function(a,b){return a.id-b.id})}
+function select(uid){
+ if(A.sel===uid)return;
+  resetDetail();A.sel=uid;A.member=null;
+ var ta=$('saTa');ta.value='';setErr('');renderList();$('saHead').textContent='불러오는 중...';$('saMsgs').textContent='';
+ var g=A.selGen;
+  api('/api/admin/support/'+uid+'/messages').then(function(d){if(g!==A.selGen)return;A.conversationId=d.conversationId;A.msgs=d.messages||[];A.mHasMore=!!d.hasMore;A.member=d.member;renderDetail(true)})
+ .catch(function(){if(g!==A.selGen)return;setErr('대화를 불러오지 못했습니다.');$('saHead').textContent='오류'})}
+function refreshDetail(){
+ if(!A.sel||!A.member&&!A.msgs.length&&false)return;var g=A.selGen,uid=A.sel;
+  if(!A.msgs.length){return api('/api/admin/support/'+uid+'/messages').then(function(d){if(g!==A.selGen)return;generation(d);A.conversationId=d.conversationId;A.msgs=d.messages||[];A.mHasMore=!!d.hasMore;A.member=d.member;setErr('');renderDetail(true)}).catch(function(){})}
+  function step(){return api('/api/admin/support/'+uid+'/messages?afterId='+lastId()).then(function(d){if(g!==A.selGen)return;if(generation(d)){return refreshDetail()}var n=(d.messages||[]).length;merge(d.messages||[]);if(d.member)A.member=d.member;setErr('');if(d.hasMore&&n)return step();renderDetail()})}
+ return step().catch(function(){if(g===A.selGen)setErr('새 메시지를 확인하지 못했습니다.')})}
+function older(){
+ if(A.loadingOlder||!A.msgs.length)return;var g=A.selGen,uid=A.sel;A.loadingOlder=true;renderDetail();
+  api('/api/admin/support/'+uid+'/messages?beforeId='+A.msgs[0].id).then(function(d){if(g!==A.selGen)return;if(generation(d))return refreshDetail();merge(d.messages||[]);A.mHasMore=!!d.hasMore}).catch(function(){if(g===A.selGen)setErr('이전 대화를 불러오지 못했습니다.')}).then(function(){if(g===A.selGen){A.loadingOlder=false;renderDetail()}})}
+function markRead(){
+ if(!A.sel||!active())return;var id=lastId();if(!id||id<=A.readId)return;
+ var g=A.selGen,uid=A.sel,hasUnread=A.msgs.some(function(m){return m.sender==='member'&&m.id>A.readId});if(!hasUnread&&A.readId)return;
+ A.readId=id;
+ api('/api/admin/support/'+uid+'/read',{method:'POST',body:JSON.stringify({messageId:id})}).then(function(){
+  if(g!==A.selGen)return;A.convs.forEach(function(c){if(c.userId===uid)c.unreadCount=0});renderList()}).catch(function(){if(g===A.selGen&&A.readId===id)A.readId=id-1})}
+function send(e){
+  e.preventDefault();if(A.busy||A.deleting||A.conversationId==null||!A.sel||!A.member||A.member.deletedAt||A.member.suspendedAt)return;
+ var ta=$('saTa'),text=ta.value.trim(),uid=A.sel;
+ if(A.pending&&A.pending.userId===uid&&(!text||text===A.pending.text))text=A.pending.text;else A.pending=null;
+ if(!text||text.length>MAX){setErr(text?'2000자 이하로 입력하세요.':'');return}
+ if(!A.pending)A.pending={userId:uid,text:text,clientId:crypto.randomUUID()};
+ var p=A.pending,g=A.selGen;A.busy=true;setErr('');renderDetail(true);
+  api('/api/admin/support/'+uid+'/messages',{method:'POST',body:JSON.stringify({body:p.text,clientId:p.clientId,expectedConversationId:A.conversationId})}).then(function(d){
+   if(g!==A.selGen)return;A.pending=null;A.busy=false;$('saTa').value='';if(d&&d.message){if(A.conversationId===0)A.conversationId=d.message.id;merge([d.message])}renderDetail(true);loadList(true)})
+ .catch(function(){if(g!==A.selGen)return;A.busy=false;$('saTa').value=p.text;setErr('전송 실패. 내용은 보존되었습니다. 다시 전송하면 중복되지 않습니다.');renderDetail()})}
+function deleteConversation(){
+ if(A.busy||A.deleting||!A.sel||!lastId())return;
+ if(!confirm('이 회원의 고객센터 문의와 모든 대화 내용을 실제로 삭제합니다. 복구할 수 없습니다. 삭제하시겠습니까?'))return;
+ var uid=A.sel,g=A.selGen,id=lastId();A.deleting=true;renderDetail();
+ api('/api/admin/support/'+uid,{method:'DELETE',body:JSON.stringify({lastMessageId:id})}).then(function(){
+  if(A.sel===uid){resetDetail();A.sel=null;A.member=null;$('saHead').textContent='문의가 삭제되었습니다.';$('saMsgs').textContent='';$('saTa').value='';$('saTa').disabled=true;$('saSend').disabled=true;setErr('')}
+  A.convs=A.convs.filter(function(c){return c.userId!==uid});renderList();loadList(true)
+ }).catch(function(e){if(g===A.selGen){setErr(e.status===409?'새 메시지 또는 대화 변경이 있습니다. 다시 확인한 후 삭제해 주세요.':'삭제하지 못했습니다. 다시 시도해 주세요.');refreshDetail()}})
+ .then(function(){A.deleting=false;if(A.sel)renderDetail()});
+}
+function stream(){
+ if(A.es||!window.EventSource)return;
+ var es=new EventSource('/api/admin/support/events',{withCredentials:true});A.es=es;
+ es.addEventListener('connected',function(){A.conn='실시간 연결됨';loadList(true);refreshDetail();renderList()});
+  es.addEventListener('support',function(ev){var d={};try{d=JSON.parse(ev.data)}catch(x){}if(d.kind==='member')incoming(d.messageId);if(d.kind==='deleted'){A.convs=A.convs.filter(function(c){return c.userId!==d.userId});if(A.sel===d.userId){resetDetail();refreshDetail()}renderList()}loadList(true);if(A.sel&&(!d.userId||d.userId===A.sel))refreshDetail()});
+ es.onerror=function(){A.conn='재연결 중 (주기적 확인)';renderList()}}
+function tick(){A.timer=null;if(!document.hidden){loadList(true);if(active())refreshDetail()}A.timer=setTimeout(tick,5000)}
+window.initializeSupportAdmin=function(){
+ if(!A.inited){if(!build())return;A.inited=true;loadList(true);stream();A.timer=setTimeout(tick,5000);
+   document.addEventListener('visibilitychange',function(){if(!document.hidden)loadList(true);if(active()){markRead();refreshDetail()}});
+   document.addEventListener('pointerdown',function(e){if(sound.enabled&&(!sound.ctx||sound.ctx.state!=='running')&&e.target.id!=='saSound')enableSound()},{once:true})}
+ else{loadList(true);refreshDetail();markRead()}};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',window.initializeSupportAdmin);else window.initializeSupportAdmin();
+})();

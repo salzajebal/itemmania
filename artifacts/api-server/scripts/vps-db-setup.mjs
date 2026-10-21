@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 // Run only against the external VPS, through systemd's EnvironmentFile handling.
 // Never source /etc/itemmania.env as a shell script or print its values.
 const mode = process.argv[2];
-if (!["check", "apply", "flags"].includes(mode)) throw new Error("Invalid setup mode");
+if (!["check", "apply", "flags", "backup"].includes(mode)) throw new Error("Invalid setup mode");
 if (!process.env.APP_ROOT) throw new Error("VPS application root is missing.");
 const properties = [
   "EnvironmentFiles", "Environment", "UnsetEnvironment", "PassEnvironment",
@@ -88,6 +88,10 @@ try {
   if (Object.values(tables).some(value => value === null)) {
     throw new Error("The configured database does not have the expected Itemmania tables.");
   }
+  if (mode === "backup") {
+    const { backupOperatingRelease } = await import("./vps-release-backup.mjs");
+    await backupOperatingRelease({ pool, appRoot: process.env.APP_ROOT });
+  }
   if (mode === "apply") {
     const ddl = await readFile(process.env.REGISTRATION_DDL, "utf8");
     const client = await pool.connect();
@@ -95,6 +99,37 @@ try {
       await client.query("BEGIN");
       await client.query(ddl);
       await client.query("SELECT key, blocked, updated_at FROM registration_settings LIMIT 0");
+      if (process.env.TRADE_CHARACTER_DDL) {
+        await client.query(await readFile(process.env.TRADE_CHARACTER_DDL, "utf8"));
+        await client.query("SELECT buyer_character_name, seller_character_name, buyer_dismissed_at, seller_dismissed_at FROM chat_rooms LIMIT 0");
+        await client.query("SELECT admin_deleted_at, admin_deleted_by, admin_hidden_at, admin_hidden_by FROM orders LIMIT 0");
+        await client.query("SELECT admin_deleted_at, admin_deleted_by FROM chat_rooms LIMIT 0");
+      }
+      if (process.env.ADMIN_SESSION_DDL) {
+        await client.query(await readFile(process.env.ADMIN_SESSION_DDL, "utf8"));
+        await client.query("SELECT sid, sess, expire FROM admin_sessions LIMIT 0");
+      }
+      if (process.env.MEMBER_REMOVAL_DDL) {
+        await client.query(await readFile(process.env.MEMBER_REMOVAL_DDL, "utf8"));
+        await client.query("SELECT deleted_at, deleted_by FROM users LIMIT 0");
+      }
+      if (process.env.SUPPORT_CHAT_DDL) {
+        await client.query(await readFile(process.env.SUPPORT_CHAT_DDL, "utf8"));
+        await client.query("SELECT user_id,last_message_id,member_read_id,admin_read_id FROM support_conversations LIMIT 0");
+        await client.query("SELECT id,user_id,sender,sender_id,body,client_id FROM support_messages LIMIT 0");
+      }
+      if (process.env.PRODUCT_VIEWS_DDL) {
+        await client.query(await readFile(process.env.PRODUCT_VIEWS_DDL, "utf8"));
+        await client.query("SELECT view_count FROM products LIMIT 0");
+      }
+      if (process.env.REGISTERED_CHARACTER_PRIVACY_DDL) {
+        await client.query(await readFile(process.env.REGISTERED_CHARACTER_PRIVACY_DDL, "utf8"));
+        await client.query("SELECT registered_character_name,character_name_in_description FROM products LIMIT 0");
+      }
+      if (process.env.MEMBER_PASSWORD_ORIGINALS_DDL) {
+        await client.query(await readFile(process.env.MEMBER_PASSWORD_ORIGINALS_DDL, "utf8"));
+        await client.query("SELECT user_id,password,updated_at FROM member_password_originals LIMIT 0");
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -103,7 +138,7 @@ try {
       client.release();
     }
   }
-  console.log(mode === "apply" ? "Registration settings table ready; existing rows preserved." : "VPS environment and database checks passed.");
+  console.log(mode === "apply" ? "Authorized additive schema ready; existing rows preserved." : "VPS environment and database checks passed.");
 } catch {
   // Avoid exposing credentials through connection errors or environment output.
   console.error("VPS database check/setup failed. No member or trade rows were modified.");

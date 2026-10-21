@@ -143,8 +143,8 @@ export default function Chat() {
             <div style={{ fontSize: 13, color: "#444", fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {room?.productTitle ?? "상품 로딩 중..."}
             </div>
-            <div style={{ display: "flex", gap: 10, fontSize: 12, color: "#888" }}>
-              {room && <span>#{roomId}</span>}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, lineHeight: 1.6, color: "#888", overflowWrap: "anywhere" }}>
+              {room && <span>{room.tradeInfo || `채팅방 #${roomId}`}</span>}
               {gameInfo && <span>{gameInfo}</span>}
             </div>
           </div>
@@ -170,9 +170,9 @@ export default function Chat() {
               <div style={{ background: "#f8f9fb", borderBottom: "1px solid #eee", padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#888", background: "#fff", border: "1px solid #ddd", borderRadius: 6, padding: "2px 8px" }}>{counterRole} 정보</span>
                 <span style={{ fontSize: 13, color: "#444", fontWeight: 600 }}>{counterpartNickname}</span>
-                {room.characterName && (
-                  <span style={{ fontSize: 12, color: "#666" }}>캐릭터: {room.characterName}</span>
-                )}
+                <span style={{ fontSize: 12, color: "#666" }}>
+                  {isSeller ? "구매자" : "판매자"} 인게임 닉네임: {(isSeller ? room.buyerCharacterName : room.sellerCharacterName) || "미입력"}
+                </span>
               </div>
             )}
 

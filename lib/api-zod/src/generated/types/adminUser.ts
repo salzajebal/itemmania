@@ -21,6 +21,8 @@ export interface AdminUser {
   /** @nullable */
   suspendedAt?: Date | null;
   /** @nullable */
+  deletedAt?: Date | null;
+  /** @nullable */
   balance?: number | null;
   createdAt: Date;
 }

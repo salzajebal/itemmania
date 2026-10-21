@@ -53,17 +53,25 @@ async function check(name, overrides = {}, mode = "check", valid = false, envCha
   if (!valid) assert.equal(queries, "", `${name}: failure must precede database access`);
   if (valid && mode === "apply") {
     const statements = queries.trim().split("\n").map(line => JSON.parse(line));
-    assert.equal(statements.length, 5);
+    const includesPasswordSchema = Boolean(envChanges.MEMBER_PASSWORD_ORIGINALS_DDL);
+    assert.equal(statements.length, includesPasswordSchema ? 7 : 5);
     assert.equal(statements[1], "BEGIN");
     assert.match(statements[2], /CREATE TABLE IF NOT EXISTS registration_settings/);
-    assert.equal(statements[4], "COMMIT");
-    assert.ok(statements.every(sql => !/\b(?:INSERT|UPDATE|DELETE|DROP)\b/i.test(sql)));
+    assert.equal(statements.at(-1), "COMMIT");
+    if (includesPasswordSchema) {
+      assert.match(statements[4], /CREATE TABLE IF NOT EXISTS public\.member_password_originals/);
+      assert.equal(statements[5], "SELECT user_id,password,updated_at FROM member_password_originals LIMIT 0");
+    }
+    assert.ok(statements.every(sql => !/\b(?:INSERT|UPDATE|DELETE|DROP)\b/i.test(sql.replace(/ON DELETE CASCADE/g, ""))));
   }
   count++;
 }
 try {
   await check("supported configuration", {}, "check", true);
   await check("authorized additive DDL only", {}, "apply", true);
+  await check("authorized member password table only", {}, "apply", true, {
+    MEMBER_PASSWORD_ORIGINALS_DDL: path.resolve("artifacts/api-server/scripts/vps-member-password-originals.sql"),
+  });
   await check("later environment file", { EnvironmentFiles: unit.EnvironmentFiles + " /etc/other.env (ignore_errors=no)" });
   await check("initialization enabled", {}, "apply", false, { ALLOW_STARTUP_DB_SYNC: "1" });
   await check("different live database", {}, "apply", false, { DATABASE_URL: "postgres://other.invalid/test" });

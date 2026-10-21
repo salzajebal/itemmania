@@ -1,5 +1,8 @@
+import { listingQuantityLabel } from "../lib/listing-quantity";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { listingTimeMarkup } from "../lib/listing-time";
+import { PRODUCT_MEMBER_ONLINE_BADGE, PRODUCT_MEMBER_ONLINE_STYLE } from "../lib/product-member-status";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -35,13 +38,13 @@ export function renderMobileSellDetail(product: Record<string, unknown>, user: R
   const category = text(product.itemCategory);
   const originalDescription = text(product.description).replace(/\r\n?/g, "\n");
   const lines = originalDescription.split("\n");
-  let quantity = "", tradeType = "";
+  let quantity = listingQuantityLabel(product), tradeType = "";
   // Registration writes these as leading metadata lines; never consume freeform text further down.
   while (lines.length) {
     const line = lines[0].trim();
     const q = line.match(/^수량\s*:\s*(.+)$/);
     const t = line.match(/^거래\s*유형\s*:\s*(.+)$/);
-    if (q && !quantity) quantity = q[1].trim();
+    if (q) { /* explicit registration metadata is already resolved above */ }
     else if (t && !tradeType) tradeType = t[1].trim();
     else break;
     lines.shift();
@@ -50,11 +53,8 @@ export function renderMobileSellDetail(product: Record<string, unknown>, user: R
   const rawPrice = Number(product.price);
   const price = Number.isFinite(rawPrice) && rawPrice >= 0
     ? `${rawPrice.toLocaleString("ko-KR")}원` : "";
-  const created = product.createdAt instanceof Date ? product.createdAt : new Date(String(product.createdAt ?? ""));
-  const date = Number.isNaN(created.getTime()) ? "" : new Intl.DateTimeFormat("sv-SE", {
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-    hour12: false, timeZone: "Asia/Seoul",
-  }).format(created).replace("T", " ");
+  const date = listingTimeMarkup(product.createdAt, false, true);
+  const viewCount = Number(product.viewCount ?? 0).toLocaleString("ko-KR");
   const breadcrumb = [game, server, category].filter(Boolean).map(escapeHtml).join(' <span aria-hidden="true">&gt;</span> ');
   const grade = text(product.sellerGrade);
   const score = product.sellerCreditScore !== null && product.sellerCreditScore !== undefined &&
@@ -96,6 +96,8 @@ button,input{font:inherit}button{cursor:pointer}a{text-decoration:none;color:inh
 .msd-warning{margin:12px 0 0;padding:18px 17px 20px;border:1px solid #6baabb;border-radius:11px;box-shadow:0 1px 5px #47a2bd15}.msd-warning h2{margin:0 0 4px;font-size:17px;color:#459abd}.msd-warning h2::before{content:"✓";font-size:24px;line-height:14px;margin-right:4px}.msd-warning p{margin:0 0 2px;padding-left:12px;font-size:15px;line-height:1.38}.msd-warning p::before{content:"-";margin-left:-12px;margin-right:5px}
 .msd-section{margin-top:39px}.msd-section h2{font-size:18px;margin:0 0 13px;font-weight:750}.msd-seller-notice{border:2px solid #c2c2c2;border-radius:10px;background:#f5f5f5;padding:14px 16px 16px;font-size:15px;line-height:1.42}.msd-seller-notice p{margin:0 0 5px}.msd-seller-notice p:last-child{margin-bottom:0}.msd-seller-notice strong{font-weight:700}.msd-muted-tag{display:inline-block;vertical-align:middle;border-radius:20px;background:#b9b9b9;color:#fff;font-size:12px;font-weight:700;padding:4px 9px;margin-right:6px;white-space:nowrap}
 .msd-seller-profile{margin-top:14px;border-radius:11px;background:#f2f2f2;padding:17px 18px}.msd-grade-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.msd-grade-icon{width:35px;height:36px;clip-path:polygon(50% 0,95% 25%,95% 75%,50% 100%,5% 75%,5% 25%);background:#8170b7;color:white;display:grid;place-items:center;font-weight:800}.msd-grade{font-size:21px;font-weight:750;color:#7960b2}.msd-score{font-size:16px}.msd-name{font-size:15px;color:#555}.msd-chips{margin-top:10px;display:flex;gap:5px;flex-wrap:wrap}.msd-chip{border:1px solid #b4b4b4;border-radius:10px;background:#fff;padding:5px 12px;font-size:14px;white-space:nowrap}
+${PRODUCT_MEMBER_ONLINE_STYLE}
+.msd-member-status{margin-top:5px}
 .msd-description{border:1px solid #555;border-radius:11px;padding:16px 18px;font-size:17px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;min-height:110px}.msd-empty{color:#777;font-size:15px}
 .msd-mycard{border:1px solid #555;border-radius:10px;padding:20px 23px 24px;font-size:17px;line-height:1.65}.msd-mycard p{margin:0 0 5px}.msd-mycard p:last-child{margin-bottom:0}.msd-edit{display:inline-block;margin-left:8px;border:1px solid #d7d7d7;border-radius:5px;padding:1px 8px;font-size:13px;line-height:22px;vertical-align:middle}.msd-safety{display:flex;gap:10px;align-items:center;background:#f1f9fe;border-radius:10px;padding:16px;margin-top:14px;line-height:1.35}.msd-shield{color:#3e91d5;font-size:26px}.msd-consent{margin:34px 0 69px;padding:17px 16px 18px;border:2px dashed #c8b172;border-radius:13px;background:#fffbf1;font-size:14px;line-height:1.65}.msd-consent h2{margin:0 0 12px;color:#a56026;font-size:16px}.msd-new{background:#ed6661;color:#fff;border-radius:4px;font-size:12px;padding:3px 7px;margin-right:4px}.msd-consent-line{background:#fff;border-radius:9px;padding:12px 10px;display:flex;align-items:flex-start;gap:7px}.msd-consent-line input{width:20px;height:20px;flex:none;margin:2px 2px 0 0;accent-color:#169cda}.msd-select{border:1px solid #aaa;border-radius:3px;font-size:13px;line-height:20px;padding:0 5px}.msd-consent b{color:#ae6831}.msd-consent p{margin:15px 0 8px}.msd-consent details{border-top:1px dashed #d8ccae;padding-top:9px;color:#a55f25}.msd-consent summary{cursor:pointer;font-weight:650}.msd-consent details p{margin:5px 0 0;color:#555}
 .msd-footer{border-top:1px solid #eee}.msd-policies{min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:4px;padding:0 12px;border-bottom:1px solid #eee;font-size:13px;white-space:nowrap}.msd-policies a:nth-child(2){color:#3887ab;font-weight:700}.msd-footer-body{padding:23px 12px 22px}.msd-support{font-size:23px;font-weight:800}.msd-hours{font-size:14px;color:#777}.msd-company{margin-top:30px;font-weight:700}.msd-copyright{color:#4086aa;margin:17px 0;font-size:14px}.msd-disclaimer{border-top:1px solid #e6e6e6;padding-top:17px;font-size:13px;line-height:1.5}.msd-desktop{display:inline-block;margin-top:11px;padding:5px 12px;border:1px solid #ddd;border-radius:18px;font-size:13px}
@@ -107,13 +109,13 @@ button,input{font:inherit}button{cursor:pointer}a{text-decoration:none;color:inh
 </style></head><body><div class="msd-page${isBuy ? " is-buy" : ""}"><header class="msd-header"><button id="msd-back" class="msd-back" aria-label="뒤로 가기">${backIcon}</button><h1>${escapeHtml(game ? game + " 상세설명" : (isBuy ? "구매 상세설명" : "판매 상세설명"))}</h1></header>
 <main class="msd-main"><div class="msd-sale-line"><strong>${isBuy ? "삽니다" : "팝니다"}</strong><button type="button" id="msd-copy" class="msd-copy" aria-label="상품 링크 복사">링크복사 ${linkIcon}</button></div>
 <div class="msd-crumb"><p>${breadcrumb || "판매 상품"}</p><button type="button" id="msd-heart-top" class="msd-heart" aria-label="찜하기" aria-pressed="false">${heartIcon}</button></div>
-<div class="msd-meta"><span class="msd-id">${Number.isSafeInteger(id) && id > 0 ? "#" + id : ""}</span>${date ? `<span class="msd-date">${escapeHtml(date)}</span>` : ""}</div>
+<div class="msd-meta"><span class="msd-id">${Number.isSafeInteger(id) && id > 0 ? "#" + id : ""}</span><div>${date} <span class="msd-views">조회 <span class="trade_view_cnt">${viewCount}</span></span></div></div>
 <h2 class="msd-title">${escapeHtml(title)}</h2><dl class="msd-details">${row(isBuy ? "구매수량" : "판매수량", quantity)}${row("거래유형", tradeType)}${row(isBuy ? "구매금액" : "판매금액", price)}</dl>
 <aside class="msd-warning"><h2>${isBuy ? "판매신청 전 주의사항" : "구매신청 전 주의사항"}</h2>${isBuy ? "<p>고의적인 취소 또는 직거래 유도 시 사이트 이용 제한을 받게 됩니다.</p><p>거래 교환 창 스크린샷과 완료 스크린샷을 보유하시기 바랍니다.</p><p>연간 기준으로 4,800만원 이상 판매 시 과세 대상에 포함될 수 있습니다.</p>" : "<p>판매자로부터 물품 받은 후 게임머니(아이템)에 문제가 있는지 다른 것으로 바꿔 주겠다며 물품을 요구하는 경우가 있습니다.</p><p>절대 물품을 돌려주지 마시고 고객센터로 문의 주시기 바랍니다.</p>"}</aside>
 <section id="msd-member-info" class="msd-section"><h2>${isBuy ? "구매자 정보" : "판매자 정보"}</h2><div class="msd-seller-notice"><p><span class="msd-muted-tag">정보제공 동의 없음</span><strong>이 ${isBuy ? "구매자" : "판매자"}의 거래 종료 후 본인 정보 제공 동의는 확인되지 않았습니다.</strong></p><p>상대방의 동의가 확인되지 않은 경우 개인정보는 제공되지 않습니다.</p><p>※ 수사기관·법원 또는 소비자분쟁조정기구의 요청이 있을 경우에는 관련 법령에 따라 해당 기관에 제공될 수 있습니다.</p></div>
-${grade || score || sellerName || chips ? `<div class="msd-seller-profile"><div class="msd-grade-line">${grade ? `<span class="msd-grade-icon" aria-hidden="true">${escapeHtml(grade.charAt(0).toUpperCase())}</span><strong class="msd-grade">${escapeHtml(grade.toUpperCase())}</strong>` : ""}${score ? `<span class="msd-score">${escapeHtml(score)}점</span>` : ""}${sellerName ? `<span class="msd-name">${escapeHtml(sellerName)}</span>` : ""}</div>${chips ? `<div class="msd-chips">${chips}</div>` : ""}</div>` : ""}</section>
+<div class="msd-seller-profile"><div class="msd-grade-line">${grade ? `<span class="msd-grade-icon" aria-hidden="true">${escapeHtml(grade.charAt(0).toUpperCase())}</span><strong class="msd-grade">${escapeHtml(grade.toUpperCase())}</strong>` : ""}${score ? `<span class="msd-score">${escapeHtml(score)}점</span>` : ""}${sellerName ? `<span class="msd-name">${escapeHtml(sellerName)}</span>` : ""}</div><div class="msd-member-status">${PRODUCT_MEMBER_ONLINE_BADGE}</div>${chips ? `<div class="msd-chips">${chips}</div>` : ""}</div></section>
 <section id="msd-description" class="msd-section"><h2>상세설명</h2><div class="msd-description">${description ? escapeHtml(description) : '<span class="msd-empty">등록된 상세설명이 없습니다.</span>'}</div></section>
-<section id="msd-my-info" class="msd-section"><h2>내 거래정보</h2><div class="msd-mycard">${user ? `${myName ? `<p>${escapeHtml(myName)}</p>` : ""}${myPhone ? `<p>${escapeHtml(myPhone)}</p>` : ""}<div class="msd-safety"><span class="msd-shield" aria-hidden="true">⬡</span><span>개인정보 보호 및 사고예방을 위해 거래는 안전한 채팅에서 진행해 주세요.</span></div>` : '<p>로그인 후 내 거래정보를 확인할 수 있습니다.</p><a class="msd-edit" href="/login" data-preview-link>로그인</a>'}</div></section>
+<section id="msd-my-info" class="msd-section"><h2>내 거래정보</h2><div class="msd-mycard">${user ? `${myName ? `<p>${escapeHtml(myName)}</p>` : ""}${myPhone ? `<p>${escapeHtml(myPhone)}</p>` : ""}<label for="msd-character" style="display:block;margin-top:12px;font-size:14px">${isBuy ? "판매자" : "구매자"} 인게임 닉네임</label><input id="msd-character" type="text" maxlength="100" autocomplete="off" placeholder="이번 거래에 사용할 인게임 닉네임" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccd7df;border-radius:6px;font-size:16px"><div class="msd-safety"><span class="msd-shield" aria-hidden="true">⬡</span><span>개인정보 보호 및 사고예방을 위해 거래는 안전한 채팅에서 진행해 주세요.</span></div>` : '<p>로그인 후 내 거래정보를 확인할 수 있습니다.</p><a class="msd-edit" href="/login" data-preview-link>로그인</a>'}</div></section>
  <section id="msd-consent" class="msd-consent" aria-label="거래 후 정보 제공 안내"><h2><span class="msd-new">NEW</span>거래 후 분쟁 대비 · 개인정보 제공 안내</h2><label class="msd-consent-line"><input type="checkbox" id="msd-consent"><span><span class="msd-select">선택</span> 거래 종료 후 분쟁에 대비해, <b>${isBuy ? "구매자" : "판매자"}에게 내 정보(이름·연락처·캐릭터명) 제공</b>에 관한 안내를 확인합니다.</span></label><p>이 화면에서의 선택은 저장되거나 전달되지 않습니다. 정보 제공에 동의하지 않아도 거래 이용에는 제한이 없습니다. 상대방 정보를 확인할 수 있는지는 <b>상대방의 동의 여부</b>에 따릅니다.</p><details><summary>▶ 동의 내용 자세히 보기</summary><p>실제 개인정보 제공 또는 거래 상태 변경에 반영되지 않습니다.</p></details></section></main>
 <footer id="msd-footer" class="msd-footer"><nav class="msd-policies" aria-label="정책"><a href="/customer" data-preview-link>이용약관</a><a href="/customer" data-preview-link>개인정보 처리방침</a><a href="/customer" data-preview-link>청소년 보호정책</a><a href="/customer" data-preview-link>고객센터</a></nav><div class="msd-footer-body"><div class="msd-footer-contact"><div><div class="msd-support">1544-8278</div><div class="msd-hours">365일 24시간 연중무휴</div></div><div class="msd-footer-marks"><img src="${ismsBadge}" alt="ISMS"><img src="${danalBadge}" alt="안전거래 인증"></div></div><div class="msd-company">(주)아이엠아이 ﹀</div><div class="msd-copyright">Copyright © IMI. All rights reserved.</div><div class="msd-disclaimer">아이템매니아는 통신판매중개자이며 통신판매의 당사자가 아닙니다. 따라서 아이템매니아는 상품 거래정보 및 거래에 대하여 책임을 지지 않습니다.</div><a class="msd-desktop" href="/?desktop=1">PC버전</a></div></footer></div>
 <div id="msd-message" class="msd-message" role="status" aria-live="polite"></div>
@@ -134,16 +136,20 @@ function toggleFavorite(){try{localStorage.setItem(key,localStorage.getItem(key)
 var menu=document.getElementById('msd-menu'),panel=document.getElementById('msd-menu-panel');menu.addEventListener('click',function(){panel.hidden=!panel.hidden;menu.setAttribute('aria-expanded',String(!panel.hidden))});
 document.addEventListener('keydown',function(event){if(event.key==='Escape'){panel.hidden=true;menu.setAttribute('aria-expanded','false')}});
 var chat=document.getElementById('msd-chat'),buy=document.getElementById('msd-purchase'),pending=false;
-async function openChat(){if(pending||chat.disabled||buy.disabled)return;pending=true;chat.setAttribute('aria-busy','true');buy.setAttribute('aria-busy','true');
+async function openChat(event){if(pending||chat.disabled||buy.disabled)return;pending=true;chat.setAttribute('aria-busy','true');buy.setAttribute('aria-busy','true');
 try{var auth=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});if(auth.status===401){location.href='/login?returnUrl='+encodeURIComponent(location.pathname+location.search);return}if(!auth.ok)throw Error('로그인 상태를 확인할 수 없습니다.');
 var me=await auth.json();if(Number(me.id)===listing.sellerId){chat.disabled=buy.disabled=true;say('내가 등록한 상품입니다.');return}
 if(!Number.isSafeInteger(listing.id)||!Number.isSafeInteger(listing.sellerId))throw Error('거래할 수 없는 상품입니다.');
 var roomRequest=listing.isBuy?{buyerId:Number(listing.sellerId),productId:Number(listing.id)}:{productId:Number(listing.id),sellerId:Number(listing.sellerId)};
+var characterInput=document.getElementById('msd-character');
+roomRequest.characterName=characterInput?characterInput.value.trim():undefined;
+if(listing.isBuy&&event&&event.currentTarget===buy&&!roomRequest.characterName){if(characterInput)characterInput.focus();throw Error('캐릭터명을 입력한 후 판매신청해 주세요.')}
+if(listing.isBuy&&(!event||event.currentTarget!==buy))delete roomRequest.characterName;
 var response=await fetch('/api/chat/rooms',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(roomRequest)});
 if(response.status===401){location.href='/login?returnUrl='+encodeURIComponent(location.pathname+location.search);return}
 var result=await response.json().catch(function(){return {}});if(!response.ok)throw Error(result.error||'채팅방을 열지 못했습니다.');
 if(!Number.isSafeInteger(Number(result.id))||Number(result.id)<1)throw Error('채팅방 정보를 확인할 수 없습니다.');
-location.href=withPreview('/myroom/chat/new_chat.html?roomId='+encodeURIComponent(result.id));
+location.href=withPreview('/myroom/'+(listing.isBuy?'sell/sell_ing.html':'buy/buy_ing.html')+'?roomId='+encodeURIComponent(result.id));
 }catch(error){say(error instanceof Error?error.message:'잠시 후 다시 시도해 주세요.')}finally{pending=false;chat.removeAttribute('aria-busy');buy.removeAttribute('aria-busy')}}
 chat.addEventListener('click',openChat);buy.addEventListener('click',openChat);
 })();</script></body></html>`;

@@ -1,4 +1,5 @@
 import { mobileMenuMarkup, mobileMenuScript, mobileMenuStyles } from "./mobile-menu";
+import { listingQuantityLabel } from "../lib/listing-quantity";
 
 export type ListingProduct = {
   id: string;
@@ -245,6 +246,7 @@ html,body{margin:0;width:100%;min-width:0;min-height:100%;background:#fff;overfl
 ${mobileMenuMarkup()}</div>
 <script type="application/json" id="mpl-data">${safeJson({ items, servers: game.servers, code: game.code, gameName: game.name, side })}</script>
 <script>(function(){
+var listingQuantityLabel=${listingQuantityLabel.toString()};
 var payload=JSON.parse(document.getElementById('mpl-data').textContent),params=new URLSearchParams(location.search),categories=['','게임머니','아이템','계정','기타'],aliases={money:'게임머니',item:'아이템',account:'계정',other:'기타'};
 var selected=aliases[params.get('itemCategory')]||params.get('itemCategory')||'';if(categories.indexOf(selected)<0)selected='';
 var server=params.get('search_server')||'',sort=params.get('sort')||'recent',min=Number(params.get('minPrice'))||0,max=Number(params.get('maxPrice'))||0,onlineOnly=params.get('online')==='1';
@@ -321,7 +323,7 @@ if(titleFilter)query.set('keyword',titleFilter);if(gradeMin!=='all')query.set('g
  function requestProducts(extra){var q=new URLSearchParams(query);Object.keys(extra).forEach(function(key){q.set(key,String(extra[key]))});return fetch('/api/products?'+q.toString(),{credentials:'include'}).then(function(r){if(!r.ok)throw Error('products');return r.json()}).then(function(data){return Array.isArray(data)?data:Array.isArray(data.items)?data.items:[]})}
  Promise.all(['active','sold'].map(function(state){return requestProducts({premium:1,limit:10,status:state})})).then(function(responses){
    var knownPremium=new Set(premiumProducts.map(function(p){return String(p.dbId||p.id)}));
-   responses.flat().forEach(function(p){if(!p||!p.title||!p.id||p.isPremium!==true)return;var key=String(p.id);if(knownPremium.has(key))return;knownPremium.add(key);var date=Date.parse(p.createdAt||p.crawledAt||'')||Date.now(),delta=Math.max(0,Date.now()-date),minutes=Math.floor(delta/60000),time=minutes<1?'방금 전':minutes<60?minutes+'분 전':minutes<1440?Math.floor(minutes/60)+'시간 전':new Date(date).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}).replace(/\\. /g,'-').replace('.','');premiumProducts.push({id:String(p.itemmaniaid||p.id),dbId:Number(p.id),title:String(p.title),sellerName:String(p.sellerName||''),sellerGrade:p.sellerGrade||undefined,isPremium:true,gameName:String(p.gameName||payload.gameName),serverName:String(p.serverName||''),itemCategory:String(p.itemCategory||''),goodsType:String(p.title||'').includes('홍정')?'hongjeong':String(p.title||'').includes('분할')?'split':'general',tradeState:p.status==='sold'?'ended':'waiting',price:Number(p.price)||0,quantity:String(p.description||''),time:time,timestamp:date,source:'api'})});
+   responses.flat().forEach(function(p){if(!p||!p.title||!p.id||p.isPremium!==true)return;var key=String(p.id);if(knownPremium.has(key))return;knownPremium.add(key);var date=Date.parse(p.createdAt||p.crawledAt||'')||Date.now(),delta=Math.max(0,Date.now()-date),minutes=Math.floor(delta/60000),time=minutes<1?'방금 전':minutes<60?minutes+'분 전':minutes<1440?Math.floor(minutes/60)+'시간 전':new Date(date).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}).replace(/\\. /g,'-').replace('.','');premiumProducts.push({id:String(p.itemmaniaid||p.id),dbId:Number(p.id),title:String(p.title),sellerName:String(p.sellerName||''),sellerGrade:p.sellerGrade||undefined,isPremium:true,gameName:String(p.gameName||payload.gameName),serverName:String(p.serverName||''),itemCategory:String(p.itemCategory||''),goodsType:String(p.title||'').includes('홍정')?'hongjeong':String(p.title||'').includes('분할')?'split':'general',tradeState:p.status==='sold'?'ended':'waiting',price:Number(p.price)||0,quantity:listingQuantityLabel(p),time:time,timestamp:date,source:'api'})});
    premiumLoading=false;render();
  }).catch(function(){premiumLoading=false;premiumFailed=true;render()});
  Promise.all(['active','sold'].map(function(state){return requestProducts({premium:0,status:state,limit:50})})).then(function(responses){
@@ -331,7 +333,7 @@ if(titleFilter)query.set('keyword',titleFilter);if(gradeMin!=='all')query.set('g
   var date=Date.parse(p.createdAt||p.crawledAt||'')||Date.now(),delta=Math.max(0,Date.now()-date),minutes=Math.floor(delta/60000),time=minutes<1?'방금 전':minutes<60?minutes+'분 전':minutes<1440?Math.floor(minutes/60)+'시간 전':new Date(date).toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}).replace(/\\. /g,'-').replace('.','');
   var kind=String(p.title||'')+' '+String(p.description||'');
    if(p.isPremium===true)return;
-   var fresh={id:external,dbId:Number(p.id),title:String(p.title),sellerName:String(p.sellerName||''),sellerGrade:p.sellerGrade||undefined,isPremium:false,featured:false,gameName:String(p.gameName||payload.gameName),serverName:String(p.serverName||''),itemCategory:String(p.itemCategory||''),goodsType:kind.includes('홍정')?'hongjeong':kind.includes('분할')?'split':'general',tradeState:p.status==='sold'?'ended':'waiting',price:Number(p.price)||0,quantity:String(p.description||''),time:time,timestamp:date,source:'api'};
+   var fresh={id:external,dbId:Number(p.id),title:String(p.title),sellerName:String(p.sellerName||''),sellerGrade:p.sellerGrade||undefined,isPremium:false,featured:false,gameName:String(p.gameName||payload.gameName),serverName:String(p.serverName||''),itemCategory:String(p.itemCategory||''),goodsType:kind.includes('홍정')?'hongjeong':kind.includes('분할')?'split':'general',tradeState:p.status==='sold'?'ended':'waiting',price:Number(p.price)||0,quantity:listingQuantityLabel(p),time:time,timestamp:date,source:'api'};
   var existing=products.find(function(candidate){return String(candidate.id)===external||String(candidate.dbId||'')===internal});
   if(existing){Object.assign(existing,fresh);return}
   if(known.has(external)||known.has(internal))return;known.add(external);known.add(internal);products.push(fresh);

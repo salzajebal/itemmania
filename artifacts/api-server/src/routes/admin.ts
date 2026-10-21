@@ -1,9 +1,11 @@
+import { canRemoveAdminOrder, canHideAdminOrder, canRemoveAdminChat, canHideAdminChat } from "../lib/admin-removal-policy";
+import { changeMemberBalance, removeMember, MemberActionError } from "../lib/admin-member-actions";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq, sql, desc, or, inArray, and, isNull } from "drizzle-orm";
 import cron from "node-cron";
 import { db, usersTable, ordersTable, withdrawalsTable, walletsTable, productsTable, chatRoomsTable, chatMessagesTable } from "@workspace/db";
 import type { AuthStates } from "@workspace/db";
-import { pushToUser } from "../lib/sse";
+import { pushToUser, disconnectSSEClients } from "../lib/sse";
 import { invalidateAccountSuspension } from "../lib/account-suspension";
 import { logger } from "../lib/logger";
 import * as cheerio from "cheerio";
@@ -13,6 +15,14 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createHmac } from "crypto";
 import { getRegistrationPolicy, setRegistrationPolicy } from "../lib/registration-policy";
+import multer from "multer";
+import { loginLogoStatus, loginLogoBytes, updateLoginLogo, logoImageType, normalizeLoginBrandName, updateLoginBrandName } from "../lib/login-branding";
+import bcrypt from "bcryptjs";
+import { MemberPasswordError, resetMemberPassword } from "../lib/member-passwords";
+import { memberPasswordOriginalsTable } from "@workspace/db";
+import { AdminHideOrderParams, AdminHideOrderResponse, AdminHideChatRoomParams, AdminHideChatRoomResponse } from "@workspace/api-zod";
+import { AdminRemoveWithdrawalParams, AdminRemoveWithdrawalResponse } from "@workspace/api-zod";
+import { AdminHideInactiveProductParams, AdminHideInactiveProductResponse } from "@workspace/api-zod";
 
 // SESSION_SECRET 기반 고정 크롤 키 (재시작해도 동일)
 const CRAWL_KEY = createHmac("sha256", process.env.SESSION_SECRET || "itemmania-default")
@@ -43,6 +53,14 @@ const SNAPSHOT_GAME_MAP: Array<{ file: string; gameId: number; gameName: string 
 ];
 
 const router: IRouter = Router();
+
+router.get("/member-login/logo", async (_req, res): Promise<void> => {
+  const logo = await loginLogoBytes();
+  res.set("Cache-Control", "no-store");
+  res.set("X-Content-Type-Options", "nosniff");
+  if (!logo) { res.sendStatus(404); return; }
+  res.type(logo.mime).send(logo.bytes);
+});
 
 // ── 어드민 전역 인증 미들웨어 ─────────────────────────────────────────────
 // /admin/ 경로에만 적용 — 다른 라우터 경로(events, games 등)는 즉시 통과
@@ -90,10 +108,10 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
 async function requirePolicyAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   const actorId = req.session?.adminId ?? req.session?.userId;
   if (!actorId) { res.status(401).json({ error: "관리자 로그인이 필요합니다." }); return; }
-  const [actor] = await db.select({ role: usersTable.role, suspendedAt: usersTable.suspendedAt })
+  const [actor] = await db.select({ role: usersTable.role, suspendedAt: usersTable.suspendedAt, deletedAt: usersTable.deletedAt })
     .from(usersTable).where(eq(usersTable.id, actorId));
-  if (actor?.role !== "admin" || actor.suspendedAt) {
-    res.status(403).json({ error: "관리자만 가입 차단 설정을 변경할 수 있습니다." }); return;
+  if (actor?.role !== "admin" || actor.suspendedAt || actor.deletedAt) {
+    res.status(403).json({ error: "관리자만 이 작업을 수행할 수 있습니다." }); return;
   }
   next();
 }
@@ -313,11 +331,13 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       signupIp: usersTable.signupIp,
       lastLoginIp: usersTable.lastLoginIp,
       suspendedAt: usersTable.suspendedAt,
+      deletedAt: usersTable.deletedAt,
       balance: walletsTable.balance,
       createdAt: usersTable.createdAt,
     })
     .from(usersTable)
     .leftJoin(walletsTable, eq(usersTable.id, walletsTable.userId))
+    .where(req.query.includeDeleted === "1" ? undefined : isNull(usersTable.deletedAt))
     .orderBy(desc(usersTable.id))
     .limit(limit)
     .offset(offset);
@@ -334,6 +354,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
     signupIp: u.signupIp,
     lastLoginIp: u.lastLoginIp,
     suspendedAt: u.suspendedAt,
+    deletedAt: u.deletedAt,
     balance: u.balance !== null ? Number(u.balance) : null,
     createdAt: u.createdAt,
   })));
@@ -358,7 +379,7 @@ router.patch("/admin/users/:id/suspension", async (req, res): Promise<void> => {
       return;
     }
   }
-  const [target] = await db.select({ id: usersTable.id, role: usersTable.role })
+  const [target] = await db.select({ id: usersTable.id, role: usersTable.role, deletedAt: usersTable.deletedAt })
     .from(usersTable).where(eq(usersTable.id, id));
   if (!target) {
     res.status(404).json({ error: "회원을 찾을 수 없습니다." });
@@ -368,6 +389,7 @@ router.patch("/admin/users/:id/suspension", async (req, res): Promise<void> => {
     res.status(403).json({ error: "관리자 계정은 차단할 수 없습니다." });
     return;
   }
+  if (target.deletedAt) { res.status(409).json({ error: "삭제된 회원은 기록 조회만 가능합니다." }); return; }
   const suspendedAt = req.body.suspended ? new Date() : null;
   await db.update(usersTable).set({ suspendedAt }).where(eq(usersTable.id, id));
   invalidateAccountSuspension(id);
@@ -382,12 +404,18 @@ router.get("/admin/orders", async (req, res): Promise<void> => {
   const offset = (page - 1) * limit;
   const { status } = req.query;
 
-  let query = db.select().from(ordersTable).$dynamic();
+  const filters = [isNull(ordersTable.adminHiddenAt)];
+  if (req.query.includeDeleted !== "1") filters.push(isNull(ordersTable.adminDeletedAt));
   if (status && typeof status === "string") {
-    query = query.where(eq(ordersTable.status, status as typeof ordersTable.$inferSelect["status"]));
+    if (!["pending", "shipped", "confirmed", "completed", "cancelled", "disputed"].includes(status)) {
+      res.status(400).json({ error: "올바른 주문 상태가 아닙니다." }); return;
+    }
+    filters.push(eq(ordersTable.status, status as typeof ordersTable.$inferSelect["status"]));
   }
-  const orders = await query.limit(limit).offset(offset);
+  const orders = await db.select().from(ordersTable).where(and(...filters))
+    .orderBy(desc(ordersTable.id)).limit(limit).offset(offset);
 
+  res.set("Cache-Control", "no-store");
   res.json(orders.map(o => ({
     id: o.id,
     buyerId: o.buyerId,
@@ -395,6 +423,11 @@ router.get("/admin/orders", async (req, res): Promise<void> => {
     productId: o.productId,
     productTitle: o.productTitle,
     amount: Number(o.amount),
+    feeAmount: Number(o.feeAmount),
+    canDelete: canRemoveAdminOrder(o),
+    canHide: canHideAdminOrder(o),
+    adminDeletedAt: o.adminDeletedAt,
+    adminDeletedBy: o.adminDeletedBy,
     status: o.status,
     cancelReason: o.cancelReason,
     createdAt: o.createdAt,
@@ -402,14 +435,83 @@ router.get("/admin/orders", async (req, res): Promise<void> => {
   })));
 });
 
+router.delete("/admin/orders/:id", async (req, res): Promise<void> => {
+  const adminSession =
+    (!!req.session?.adminId && req.session.adminRole === "admin") ||
+    (!!req.session?.userId && req.session.userRole === "admin");
+  if (!adminSession) { res.status(403).json({ error: "관리자 로그인이 필요합니다." }); return; }
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error: "올바른 주문 ID가 아닙니다." }); return; }
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
+  try {
+    const outcome = await db.transaction(async tx => {
+      const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, id)).for("update");
+      if (!order) return "missing";
+      if (order.adminDeletedAt) return "removed";
+      if (!canRemoveAdminOrder(order)) return "active";
+      await tx.update(ordersTable).set({
+        adminDeletedAt: new Date(), adminDeletedBy: actor, updatedAt: sql`${ordersTable.updatedAt}`,
+      }).where(eq(ordersTable.id, id));
+      return "removed";
+    });
+    if (outcome === "missing") { res.status(404).json({ error: "주문을 찾을 수 없습니다." }); return; }
+    if (outcome === "active") { res.status(409).json({ error: "진행 중인 주문은 삭제할 수 없습니다. 완료 또는 취소 후 삭제해 주세요." }); return; }
+    req.log.info({ orderId: id, actor }, "관리자 주문 목록 삭제; 정산 및 연결 기록 보존");
+    res.json({ ok: true, preserved: true });
+  } catch (error) {
+    req.log.error({ err: error, orderId: id }, "관리자 주문 삭제 실패");
+    res.status(500).json({ error: "주문을 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
+});
+
+// Second-stage admin list cleanup never deletes the underlying order/evidence.
+router.delete("/admin/orders/:id/list-entry", async (req, res): Promise<void> => {
+  const adminSession =
+    (!!req.session?.adminId && req.session.adminRole === "admin") ||
+    (!!req.session?.userId && req.session.userRole === "admin");
+  if (!adminSession) { res.status(403).json({ error: "관리자 로그인이 필요합니다." }); return; }
+  const params = AdminHideOrderParams.safeParse(req.params);
+  if (!params.success || !Number.isSafeInteger(params.data.id) || params.data.id < 1) {
+    res.status(400).json({ error: "올바른 주문 ID가 아닙니다." }); return;
+  }
+  const id = params.data.id;
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
+  try {
+    const outcome = await db.transaction(async tx => {
+      const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, id)).for("update");
+      if (!order) return "missing";
+      if (order.adminHiddenAt) return "hidden";
+      if (!canHideAdminOrder(order)) return "protected";
+      await tx.update(ordersTable).set({
+        adminHiddenAt: new Date(), adminHiddenBy: actor, updatedAt: sql`${ordersTable.updatedAt}`,
+      }).where(eq(ordersTable.id, id));
+      return "hidden";
+    });
+    if (outcome === "missing") { res.status(404).json({ error: "주문을 찾을 수 없습니다." }); return; }
+    if (outcome === "protected") {
+      res.status(409).json({ error: "완료 또는 취소 후 이미 삭제된 주문만 목록에서 제거할 수 있습니다." }); return;
+    }
+    req.log.info({ orderId: id, actor }, "관리자 삭제 주문 목록에서 제거; 주문 및 정산·대화 기록 보존");
+    res.set("Cache-Control", "no-store");
+    res.json(AdminHideOrderResponse.parse({ ok: true, preserved: true }));
+  } catch (error) {
+    req.log.error({ err: error, orderId: id }, "관리자 삭제 주문 목록 제거 실패");
+    res.status(500).json({ error: "주문을 목록에서 제거하지 못했습니다. 다시 시도해 주세요." });
+  }
+});
+
 // 출금 신청 목록
 router.get("/admin/withdrawals", async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
   const { status } = req.query;
-  let query = db.select().from(withdrawalsTable).$dynamic();
+  const conditions = [isNull(withdrawalsTable.adminDeletedAt)];
   if (status && typeof status === "string") {
-    query = query.where(eq(withdrawalsTable.status, status as typeof withdrawalsTable.$inferSelect["status"]));
+    if (!["pending", "approved", "rejected"].includes(status)) {
+      res.status(400).json({ error: "올바르지 않은 출금 상태입니다." }); return;
+    }
+    conditions.push(eq(withdrawalsTable.status, status as typeof withdrawalsTable.$inferSelect["status"]));
   }
-  const withdrawals = await query;
+  const withdrawals = await db.select().from(withdrawalsTable).where(and(...conditions));
   res.json(withdrawals.map(w => ({
     id: w.id,
     userId: w.userId,
@@ -424,6 +526,42 @@ router.get("/admin/withdrawals", async (req, res): Promise<void> => {
     processedAt: w.processedAt,
     createdAt: w.createdAt,
   })));
+});
+
+router.delete("/admin/withdrawals/:id", requirePolicyAdmin, async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  if (req.headers["sec-fetch-site"] === "cross-site") {
+    res.status(403).json({ error: "다른 사이트에서는 삭제할 수 없습니다." }); return;
+  }
+  const parsed = AdminRemoveWithdrawalParams.safeParse(req.params);
+  if (!parsed.success || !Number.isSafeInteger(parsed.data.id)) {
+    res.status(400).json({ error: "올바른 출금 ID가 아닙니다." }); return;
+  }
+  const id = parsed.data.id;
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
+  try {
+    const outcome = await db.transaction(async tx => {
+      const [withdrawal] = await tx.select().from(withdrawalsTable)
+        .where(eq(withdrawalsTable.id, id)).for("update");
+      if (!withdrawal) return "missing";
+      if (withdrawal.status !== "approved" && withdrawal.status !== "rejected") return "pending";
+      if (withdrawal.adminDeletedAt) return "removed";
+      await tx.update(withdrawalsTable).set({
+        adminDeletedAt: new Date(), adminDeletedBy: actor,
+        updatedAt: sql`${withdrawalsTable.updatedAt}`,
+      }).where(eq(withdrawalsTable.id, id));
+      return "removed";
+    });
+    if (outcome === "missing") { res.status(404).json({ error: "출금 신청을 찾을 수 없습니다." }); return; }
+    if (outcome === "pending") {
+      res.status(409).json({ error: "대기 중인 출금은 삭제할 수 없습니다. 승인 또는 거절 처리 후 삭제해 주세요." }); return;
+    }
+    req.log.info({ withdrawalId: id, actor }, "관리자 출금 목록 삭제; 회원 내역 및 금액 보존");
+    res.json(AdminRemoveWithdrawalResponse.parse({ ok: true, preserved: true }));
+  } catch {
+    req.log.error({ withdrawalId: id }, "관리자 출금 목록 삭제 실패");
+    res.status(500).json({ error: "목록에서 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
 });
 
 // 출금 처리 (승인/거절)
@@ -490,6 +628,9 @@ router.get("/admin/users/:id/auth-states", async (req, res): Promise<void> => {
 // 인증상태 수정
 router.put("/admin/users/:id/auth-states", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  const [target] = await db.select({ deletedAt: usersTable.deletedAt }).from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+  if (target.deletedAt) { res.status(409).json({ error: "삭제된 회원은 기록 조회만 가능합니다." }); return; }
   const { excellent, phone, email, ipin, withdraw } = req.body as Record<string, boolean>;
   const authStates: AuthStates = {
     excellent: !!excellent,
@@ -508,38 +649,95 @@ router.put("/admin/users/:id/auth-states", async (req, res): Promise<void> => {
 });
 
 // 마일리지(잔액) 수정
-router.patch("/admin/users/:id/balance", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
-
-  const { amount, mode } = req.body as { amount: number; mode: "add" | "set" };
-  const amt = Number(amount);
-  if (isNaN(amt) || !["add", "set"].includes(mode)) {
-    res.status(400).json({ error: "amount(숫자)와 mode(add|set)가 필요합니다." }); return;
+router.patch("/admin/users/:id/balance", requirePolicyAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error: "잘못된 ID" }); return; }
+  try {
+    const balance = await changeMemberBalance(id, req.body);
+    pushToUser(id, "balance", { balance });
+    res.json({ balance });
+  } catch (error) {
+    if (error instanceof MemberActionError) { res.status(error.status).json({ error: error.message }); return; }
+    req.log.error({ err: error }, "마일리지 수정 실패");
+    res.status(500).json({ error: "마일리지 수정에 실패했습니다. 다시 시도해 주세요." });
   }
-
-  const [existing] = await db.select().from(walletsTable).where(eq(walletsTable.userId, id));
-  let newBalance: number;
-  if (!existing) {
-    newBalance = Math.max(0, mode === "add" ? amt : amt);
-    await db.insert(walletsTable).values({ userId: id, balance: newBalance });
-  } else {
-    const current = Number(existing.balance);
-    newBalance = Math.max(0, mode === "add" ? current + amt : amt);
-    await db.update(walletsTable).set({ balance: newBalance }).where(eq(walletsTable.userId, id));
-  }
-
-  pushToUser(id, "balance", { balance: newBalance });
-  res.json({ balance: newBalance });
 });
 
 // 회원 정보 수정 (닉네임, 전화번호, 이메일, 역할)
+router.post("/admin/users/:id/password-view", requirePolicyAdmin, async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  const id = Number(req.params.id);
+  const adminPassword = req.body?.adminPassword;
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
+    res.status(400).json({ error: "잘못된 회원 ID입니다." }); return;
+  }
+  if (typeof adminPassword !== "string" || !adminPassword || adminPassword.length > 128) {
+    res.status(400).json({ error: "관리자 본인의 비밀번호를 입력하세요." }); return;
+  }
+  const actorId = req.session.adminId ?? req.session.userId!;
+  try {
+    const [actor] = await db.select({ passwordHash: usersTable.passwordHash })
+      .from(usersTable).where(eq(usersTable.id, actorId));
+    if (!actor || !(await bcrypt.compare(adminPassword, actor.passwordHash))) {
+      res.status(403).json({ error: "관리자 비밀번호가 올바르지 않습니다." }); return;
+    }
+    const [target] = await db.select({ role: usersTable.role, deletedAt: usersTable.deletedAt })
+      .from(usersTable).where(eq(usersTable.id, id));
+    if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+    if (target.role === "admin" || target.deletedAt) {
+      res.status(403).json({ error: "관리자 또는 삭제된 회원의 비밀번호는 조회할 수 없습니다." }); return;
+    }
+    const [original] = await db.select({ password: memberPasswordOriginalsTable.password })
+      .from(memberPasswordOriginalsTable).where(eq(memberPasswordOriginalsTable.userId, id));
+    req.log.info({ adminId: actorId, memberId: id }, "관리자가 회원 비밀번호를 조회했습니다");
+    res.json({ userId: id, password: original?.password ?? null });
+  } catch {
+    req.log.error({ adminId: actorId, memberId: id }, "회원 비밀번호 조회 실패");
+    res.status(500).json({ error: "비밀번호를 조회하지 못했습니다." });
+  }
+});
+
+router.post("/admin/users/:id/password-reset", requirePolicyAdmin, async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  const id = Number(req.params.id);
+  const { identityVerified, adminPassword } = req.body ?? {};
+  if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
+    res.status(400).json({ error: "잘못된 회원 ID입니다." }); return;
+  }
+  if (identityVerified !== true) {
+    res.status(400).json({ error: "회원 본인 확인 후 재설정해 주세요." }); return;
+  }
+  if (typeof adminPassword !== "string" || !adminPassword || adminPassword.length > 128) {
+    res.status(400).json({ error: "관리자 본인의 비밀번호를 입력하세요." }); return;
+  }
+  const actorId = req.session.adminId ?? req.session.userId!;
+  try {
+    const [actor] = await db.select({ passwordHash: usersTable.passwordHash })
+      .from(usersTable).where(eq(usersTable.id, actorId));
+    if (!actor || !(await bcrypt.compare(adminPassword, actor.passwordHash))) {
+      res.status(403).json({ error: "관리자 비밀번호가 올바르지 않습니다." }); return;
+    }
+    const temporaryPassword = await resetMemberPassword(id);
+    disconnectSSEClients(id);
+    req.log.info({ adminId: actorId, memberId: id }, "관리자가 회원 임시 비밀번호를 발급했습니다");
+    res.json({ userId: id, temporaryPassword });
+  } catch (error) {
+    if (error instanceof MemberPasswordError) {
+      res.status(error.status).json({ error: error.message }); return;
+    }
+    // SQL errors can include parameter values: do not log the error or response payload.
+    req.log.error({ adminId: actorId, memberId: id }, "회원 비밀번호 재설정 실패");
+    res.status(500).json({ error: "비밀번호를 재설정하지 못했습니다." });
+  }
+});
+
 router.patch("/admin/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
 
   const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
+  if (target.deletedAt) { res.status(409).json({ error: "삭제된 회원은 기록 조회만 가능합니다." }); return; }
 
   const { nickname, name, phone, email, role, grade, creditScore } = req.body as Record<string, string>;
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -594,47 +792,18 @@ router.patch("/admin/users/:id", async (req, res): Promise<void> => {
 });
 
 // 회원 삭제
-router.delete("/admin/users/:id", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { res.status(400).json({ error: "잘못된 ID" }); return; }
-  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-  if (!target) { res.status(404).json({ error: "회원을 찾을 수 없습니다." }); return; }
-  if (target.role === "admin") { res.status(403).json({ error: "관리자 계정은 삭제할 수 없습니다." }); return; }
+router.delete("/admin/users/:id", requirePolicyAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error: "잘못된 ID" }); return; }
   try {
-    // 1. 이 유저가 참여한 채팅방 목록 조회
-    const rooms = await db
-      .select({ id: chatRoomsTable.id })
-      .from(chatRoomsTable)
-      .where(or(eq(chatRoomsTable.buyerId, id), eq(chatRoomsTable.sellerId, id)));
-    const roomIds = rooms.map(r => r.id);
-
-    // 2. 채팅 메시지 삭제 (senderId FK + 채팅방 소속 메시지)
-    if (roomIds.length > 0) {
-      await db.delete(chatMessagesTable).where(inArray(chatMessagesTable.roomId, roomIds));
-    }
-    await db.delete(chatMessagesTable).where(eq(chatMessagesTable.senderId, id));
-
-    // 3. 채팅방 삭제
-    if (roomIds.length > 0) {
-      await db.delete(chatRoomsTable).where(inArray(chatRoomsTable.id, roomIds));
-    }
-
-    // 4. 주문 삭제 (buyerId / sellerId FK)
-    await db.delete(ordersTable).where(or(eq(ordersTable.buyerId, id), eq(ordersTable.sellerId, id)));
-
-    // 5. 출금 신청 삭제
-    await db.delete(withdrawalsTable).where(eq(withdrawalsTable.userId, id));
-
-    // 6. 지갑 삭제
-    await db.delete(walletsTable).where(eq(walletsTable.userId, id));
-
-    // 7. 유저 삭제
-    await db.delete(usersTable).where(eq(usersTable.id, id));
-
-    res.json({ ok: true });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: "삭제에 실패했습니다: " + msg });
+    await removeMember(id, (req.session.adminId ?? req.session.userId)!);
+    invalidateAccountSuspension(id);
+    disconnectSSEClients(id);
+    res.json({ ok: true, archived: true, message: "회원이 삭제되었습니다. 잔액·정산·거래·대화 기록은 보존됩니다." });
+  } catch (error) {
+    if (error instanceof MemberActionError) { res.status(error.status).json({ error: error.message }); return; }
+    req.log.error({ err: error }, "회원 삭제 실패");
+    res.status(500).json({ error: "회원 삭제에 실패했습니다. 기록은 변경되지 않았습니다." });
   }
 });
 
@@ -642,6 +811,7 @@ router.delete("/admin/users/:id", async (req, res): Promise<void> => {
 
 // 전체 상품 목록
 router.get("/admin/products", async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
   const page  = Math.max(1, parseInt(String(req.query.page  ?? "1"),  10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
   const offset = (page - 1) * limit;
@@ -649,6 +819,7 @@ router.get("/admin/products", async (req, res): Promise<void> => {
   const status   = req.query.status   as string | undefined;
 
   const where = and(
+    isNull(productsTable.adminHiddenAt),
     category ? eq(productsTable.category, category as "sell" | "buy") : undefined,
     // Archived trade listings remain available under the explicit inactive filter
     // for audit/history, but should disappear from the normal admin list.
@@ -731,7 +902,9 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
   if (description !== undefined) updates.description = description ? String(description).trim() : null;
   if (sellerName !== undefined) updates.sellerName = sellerName ? String(sellerName).trim() : null;
 
-  const [updated] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
+  const [updated] = await db.update(productsTable).set(updates)
+    .where(and(eq(productsTable.id, id), isNull(productsTable.adminHiddenAt))).returning();
+  if (!updated) { res.status(404).json({ error: "상품을 찾을 수 없거나 관리자 목록에서 삭제된 상품입니다." }); return; }
   res.json({ id: updated.id, status: updated.status, title: updated.title });
 });
 
@@ -746,12 +919,12 @@ router.delete("/admin/products/no-grade", async (_req, res): Promise<void> => {
     const result = await db.transaction(async tx => {
       // Product locks serialize this cleanup against chat/order creation.
       await tx.select({ id: productsTable.id }).from(productsTable)
-        .where(sql`${productsTable.sellerGrade} IS NULL`).for("update");
+        .where(and(sql`${productsTable.sellerGrade} IS NULL`, isNull(productsTable.adminHiddenAt))).for("update");
       const archived = await tx.update(productsTable).set({ status: "inactive" })
-        .where(and(sql`${productsTable.sellerGrade} IS NULL`, productHasTradeHistory))
+        .where(and(sql`${productsTable.sellerGrade} IS NULL`, isNull(productsTable.adminHiddenAt), productHasTradeHistory))
         .returning({ id: productsTable.id });
       const deleted = await tx.delete(productsTable)
-        .where(and(sql`${productsTable.sellerGrade} IS NULL`, sql`NOT ${productHasTradeHistory}`))
+        .where(and(sql`${productsTable.sellerGrade} IS NULL`, isNull(productsTable.adminHiddenAt), sql`NOT ${productHasTradeHistory}`))
         .returning({ id: productsTable.id });
       return { deleted: deleted.length, archived: archived.length };
     });
@@ -759,6 +932,40 @@ router.delete("/admin/products/no-grade", async (_req, res): Promise<void> => {
   } catch (error) {
     logger.error({ err: error }, "등급 없는 상품 삭제 실패");
     res.status(500).json({ error: "상품을 삭제하지 못했습니다. 다시 시도해 주세요." });
+  }
+});
+
+router.delete("/admin/products/:id/list-entry", requirePolicyAdmin, async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store");
+  if (req.headers["sec-fetch-site"] === "cross-site") {
+    res.status(403).json({ error: "다른 사이트에서는 삭제할 수 없습니다." }); return;
+  }
+  const parsed = AdminHideInactiveProductParams.safeParse(req.params);
+  if (!parsed.success || !Number.isSafeInteger(parsed.data.id)) {
+    res.status(400).json({ error: "올바른 상품 ID가 아닙니다." }); return;
+  }
+  const id = parsed.data.id;
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
+  try {
+    const outcome = await db.transaction(async tx => {
+      const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, id)).for("update");
+      if (!product) return "missing";
+      if (product.adminHiddenAt) return "hidden";
+      if (product.status !== "inactive") return "active";
+      await tx.update(productsTable).set({
+        adminHiddenAt: new Date(), adminHiddenBy: actor, updatedAt: sql`${productsTable.updatedAt}`,
+      }).where(eq(productsTable.id, id));
+      return "hidden";
+    });
+    if (outcome === "missing") { res.status(404).json({ error: "상품을 찾을 수 없습니다." }); return; }
+    if (outcome === "active") {
+      res.status(409).json({ error: "비활성 상품만 목록에서 삭제할 수 있습니다. 상품 상태를 확인해 주세요." }); return;
+    }
+    req.log.info({ productId: id, actor }, "비활성 상품 관리자 목록 삭제; 상품 및 거래 기록 보존");
+    res.json(AdminHideInactiveProductResponse.parse({ ok: true, hidden: true, preserved: true }));
+  } catch {
+    req.log.error({ productId: id }, "비활성 상품 관리자 목록 삭제 실패");
+    res.status(500).json({ error: "상품을 목록에서 삭제하지 못했습니다. 다시 시도해 주세요." });
   }
 });
 
@@ -770,9 +977,10 @@ router.delete("/admin/products/:id", async (req, res): Promise<void> => {
   }
   try {
     const result = await db.transaction(async tx => {
-      const [product] = await tx.select({ id: productsTable.id })
+      const [product] = await tx.select({ id: productsTable.id, adminHiddenAt: productsTable.adminHiddenAt })
         .from(productsTable).where(eq(productsTable.id, id)).for("update");
       if (!product) return null;
+      if (product.adminHiddenAt) return { archived: true, hidden: true };
       const [linkedChat] = await tx.select({ id: chatRoomsTable.id }).from(chatRoomsTable)
         .where(eq(chatRoomsTable.productId, id)).limit(1);
       const [linkedOrder] = await tx.select({ id: ordersTable.id }).from(ordersTable)
@@ -796,11 +1004,14 @@ router.delete("/admin/products/:id", async (req, res): Promise<void> => {
 });
 
 // 전체 채팅 거래 내역
-router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
+router.get("/admin/chat-rooms", async (req, res): Promise<void> => {
   const rooms = await db
     .select({
       id: chatRoomsTable.id,
       orderId: chatRoomsTable.orderId,
+      adminDeletedAt: chatRoomsTable.adminDeletedAt,
+      adminDeletedBy: chatRoomsTable.adminDeletedBy,
+      adminHiddenAt: chatRoomsTable.adminHiddenAt,
       sellerId: chatRoomsTable.sellerId,
       buyerId: chatRoomsTable.buyerId,
       productId: chatRoomsTable.productId,
@@ -812,11 +1023,20 @@ router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
       amount:         sql<number>`(SELECT price FROM products WHERE id = ${chatRoomsTable.productId})`,
     })
     .from(chatRoomsTable)
+    .where(and(
+      isNull(chatRoomsTable.adminHiddenAt),
+      req.query.includeDeleted === "1" ? undefined : isNull(chatRoomsTable.adminDeletedAt),
+    ))
     .orderBy(desc(chatRoomsTable.createdAt));
 
+  res.set("Cache-Control", "no-store");
   res.json(rooms.map(r => ({
     id: r.id,
-    canDelete: r.orderId === null,
+    orderId: r.orderId,
+    canDelete: canRemoveAdminChat(r),
+    canHide: canHideAdminChat(r),
+    adminDeletedAt: r.adminDeletedAt,
+    adminDeletedBy: r.adminDeletedBy,
     sellerId: r.sellerId,
     buyerId: r.buyerId,
     sellerNickname: r.sellerNickname ?? null,
@@ -828,8 +1048,7 @@ router.get("/admin/chat-rooms", async (_req, res): Promise<void> => {
   })));
 });
 
-// Deletion is deliberately limited to rooms without an order. Keep all order,
-// escrow and payment history intact even when a room is removed by an admin.
+// Admin list removal is separate from member dismissal and financial state.
 router.delete("/admin/chat-rooms/:id", async (req, res): Promise<void> => {
   // The shared admin guard also permits the crawler key; it must not authorize
   // irreversible deletion.
@@ -845,24 +1064,26 @@ router.delete("/admin/chat-rooms/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "올바른 채팅방 ID가 아닙니다." });
     return;
   }
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
   try {
     const outcome = await db.transaction(async tx => {
-      // Serializes against a buyer starting payment on this room.
-      const [room] = await tx.select({ orderId: chatRoomsTable.orderId })
+      // Serialize against checkout/completion without modifying its lifecycle.
+      const [room] = await tx.select()
         .from(chatRoomsTable).where(eq(chatRoomsTable.id, id)).for("update");
       if (!room) return "missing";
-      if (room.orderId !== null) return "order-linked";
-      await tx.delete(chatMessagesTable).where(eq(chatMessagesTable.roomId, id));
-      await tx.delete(chatRoomsTable).where(and(eq(chatRoomsTable.id, id), isNull(chatRoomsTable.orderId)));
+      if (room.adminDeletedAt) return "deleted";
+      if (!canRemoveAdminChat(room)) return "active";
+      await tx.update(chatRoomsTable).set({ adminDeletedAt: new Date(), adminDeletedBy: actor })
+        .where(eq(chatRoomsTable.id, id));
       return "deleted";
     });
     if (outcome === "missing") {
       res.status(404).json({ error: "이미 삭제되었거나 존재하지 않는 채팅방입니다." });
-    } else if (outcome === "order-linked") {
-      res.status(409).json({ error: "주문에 연결된 채팅방은 거래 기록 보호를 위해 삭제할 수 없습니다." });
+    } else if (outcome === "active") {
+      res.status(409).json({ error: "진행 중인 주문에 연결된 채팅은 삭제할 수 없습니다. 거래 종료 후 삭제해 주세요." });
     } else {
-      req.log.info({ chatRoomId: id }, "관리자가 주문 없는 채팅방을 삭제했습니다");
-      res.json({ ok: true });
+      req.log.info({ chatRoomId: id, actor }, "관리자 채팅 목록 삭제; 대화 및 정산 기록 보존");
+      res.json({ ok: true, preserved: true });
     }
   } catch (error) {
     req.log.error({ err: error, chatRoomId: id }, "채팅방 삭제 실패");
@@ -870,10 +1091,46 @@ router.delete("/admin/chat-rooms/:id", async (req, res): Promise<void> => {
   }
 });
 
+// Explicit second-stage visibility cleanup, never physical conversation removal.
+router.delete("/admin/chat-rooms/:id/list-entry", async (req, res): Promise<void> => {
+  const adminSession =
+    (!!req.session?.adminId && req.session.adminRole === "admin") ||
+    (!!req.session?.userId && req.session.userRole === "admin");
+  if (!adminSession) { res.status(403).json({ error: "관리자 로그인이 필요합니다." }); return; }
+  const params = AdminHideChatRoomParams.safeParse(req.params);
+  if (!params.success || !Number.isSafeInteger(params.data.id) || params.data.id < 1) {
+    res.status(400).json({ error: "올바른 채팅방 ID가 아닙니다." }); return;
+  }
+  const id = params.data.id;
+  const actor = req.session.adminId ? `admin:${req.session.adminId}` : `user:${req.session.userId}`;
+  try {
+    const outcome = await db.transaction(async tx => {
+      const [room] = await tx.select().from(chatRoomsTable)
+        .where(eq(chatRoomsTable.id, id)).for("update");
+      if (!room) return "missing";
+      if (room.adminHiddenAt) return "hidden";
+      if (!canHideAdminChat(room)) return "protected";
+      await tx.update(chatRoomsTable).set({ adminHiddenAt: new Date(), adminHiddenBy: actor })
+        .where(eq(chatRoomsTable.id, id));
+      return "hidden";
+    });
+    if (outcome === "missing") { res.status(404).json({ error: "채팅방을 찾을 수 없습니다." }); return; }
+    if (outcome === "protected") {
+      res.status(409).json({ error: "종료 후 이미 삭제된 채팅거래만 목록에서 제거할 수 있습니다." }); return;
+    }
+    req.log.info({ chatRoomId: id, actor }, "관리자 삭제 채팅 목록에서 제거; 대화·거래·정산 보존");
+    res.set("Cache-Control", "no-store");
+    res.json(AdminHideChatRoomResponse.parse({ ok: true, preserved: true }));
+  } catch (error) {
+    req.log.error({ err: error, chatRoomId: id }, "관리자 채팅 목록 제거 실패");
+    res.status(500).json({ error: "채팅거래를 목록에서 제거하지 못했습니다. 다시 시도해 주세요." });
+  }
+});
+
 // 대시보드 통계
 router.get("/admin/stats", async (_req, res): Promise<void> => {
   const [[userCount], [productCount], [orderCount], [pendingOrderCount], [totalRevenue]] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(usersTable),
+    db.select({ count: sql<number>`count(*)::int` }).from(usersTable).where(isNull(usersTable.deletedAt)),
     db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(eq(productsTable.status, "active")),
     db.select({ count: sql<number>`count(*)::int` }).from(ordersTable),
     db.select({ count: sql<number>`count(*)::int` }).from(ordersTable).where(eq(ordersTable.status, "pending")),
@@ -1676,6 +1933,44 @@ router.get("/admin/crawl-script", async (req, res): Promise<void> => {
     "Cache-Control": "no-store",
   });
   res.send(script);
+});
+
+const loginLogoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024, files: 1 } }).single("logo");
+function brandingAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!(req.session?.adminId && req.session.adminRole === "admin") &&
+      !(req.session?.userId && req.session.userRole === "admin")) {
+    res.status(401).json({ error: "관리자 로그인이 필요합니다." }); return;
+  }
+  if (req.method !== "GET" && req.get("origin")) {
+    let host = "";
+    try { host = new URL(req.get("origin")!).host; } catch {}
+    const allowed = [req.get("host"), req.get("x-forwarded-host")?.split(",")[0].trim()];
+    if (!allowed.includes(host)) { res.status(403).json({ error: "허용되지 않은 요청입니다." }); return; }
+  }
+  next();
+}
+router.get("/admin/login-branding", brandingAdmin, async (_req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store").json(await loginLogoStatus());
+});
+router.put("/admin/login-branding/name", brandingAdmin, async (req, res): Promise<void> => {
+  let brandName: string;
+  try { brandName = normalizeLoginBrandName(req.body?.brandName); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  res.set("Cache-Control", "no-store").json(await updateLoginBrandName(brandName));
+});
+router.post("/admin/login-branding/logo", brandingAdmin, (req, res, next) => {
+  loginLogoUpload(req, res, error => {
+    if (error) { res.status(400).json({ error: "이미지 파일 한 개만, 최대 2MB까지 업로드할 수 있습니다." }); return; }
+    next();
+  });
+}, async (req, res): Promise<void> => {
+  if (!req.file || !logoImageType(req.file.buffer)) {
+    res.status(400).json({ error: "PNG, JPG, WEBP 이미지 파일을 선택하세요." }); return;
+  }
+  res.json(await updateLoginLogo(req.file.buffer));
+});
+router.delete("/admin/login-branding/logo", brandingAdmin, async (_req, res): Promise<void> => {
+  res.json(await updateLoginLogo(null));
 });
 
 router.post("/admin/crawl/upload-html", async (req, res): Promise<void> => {

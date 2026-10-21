@@ -270,15 +270,13 @@ ${mobileMenuMarkup()}
        if(!meResponse.ok)throw Error('로그인 상태를 확인할 수 없습니다.');
        var me=await meResponse.json(),draft=reviewDraft;
        var description=[];
-       if(draft.quantity)description.push('수량: '+Number(draft.quantity).toLocaleString('ko-KR')+'개');
        if(draft.tradeType)description.push('거래 유형: '+(draft.tradeType==='split'?'분할':'일반'));
-       if(draft.character)description.push('캐릭터명: '+draft.character);
        if(draft.shopName)description.push('상점명: '+draft.shopName);
        if(draft.description)description.push(draft.description);
        var response=await fetch('/api/products',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({
          title:draft.title||gameName+' '+categoryLabel(draft.category)+(isBuy?' 삽니다':' 팝니다'),
-         price:draft.price,gameName:gameName,serverName:draft.serverName||'',category:isBuy?'buy':'sell',
-         itemCategory:categoryLabel(draft.category),sellerName:me.nickname||me.email||'',description:description.join('\\n')
+         price:draft.price,quantityLabel:draft.quantity?Number(draft.quantity).toLocaleString('ko-KR')+'개':undefined,gameName:gameName,serverName:draft.serverName||'',category:isBuy?'buy':'sell',
+         itemCategory:categoryLabel(draft.category),sellerName:me.nickname||me.email||'',characterName:draft.character||undefined,description:description.join('\\n')
        })});
        var created=await response.json().catch(function(){return {}});
        if(response.status===401){try{sessionStorage.setItem('_im_login_next',location.href)}catch(e){}location.href='/login';return}

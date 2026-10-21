@@ -1,7 +1,7 @@
 // Isolated development regression test for the registration policy.
 //
 // The script derives the dedicated member_trade_test database from DATABASE_URL
-// by changing only its pathname, and only applies the policy table DDL there.
+// by changing only its pathname, and applies policy/private-auth prerequisites there.
 if (process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT) {
   throw new Error("Registration policy tests are development-only.");
 }
@@ -95,9 +95,17 @@ async function verifyTestDatabaseAndEnsurePolicyTable() {
     `Dedicated test database is missing schema tables: ${missing.join(", ")}. Apply the DB schema to this test database first.`,
   );
 
-  // This is the sole schema addition made by this script, and the URL above is
-  // already verified to target only member_trade_test.
+  // The persistent test DB can predate private admin sessions/password retention.
+  // These empty prerequisite tables are created only in member_trade_test.
   await testDb.query(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      sid varchar PRIMARY KEY, sess json NOT NULL, expire timestamp(6) NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS admin_sessions_expire_idx ON admin_sessions (expire);
+    CREATE TABLE IF NOT EXISTS member_password_originals (
+      user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      password text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS registration_settings (
       key text PRIMARY KEY,
       blocked boolean NOT NULL DEFAULT false,
@@ -245,6 +253,8 @@ async function fixtureAccountId(email) {
 
 async function assertFixtureWallet(email, label) {
   const userId = await fixtureAccountId(email);
+  const member = await testDb.query("SELECT grade FROM users WHERE id = $1", [userId]);
+  equal(member.rows[0].grade, "gold", `${label} new member starts at gold`);
   const { rows } = await testDb.query("SELECT balance FROM wallets WHERE user_id = $1", [userId]);
   equal(rows.length, 1, `${label} creates one wallet`);
   equal(Number(rows[0].balance), 0, `${label} wallet starts at zero`);
@@ -490,6 +500,8 @@ async function runRegressionTests() {
   assert(blockedLegacyPost.text.includes("현재 신규 가입이 중단되었습니다."), "Blocked legacy POST omitted its explanatory message.");
   assertCountsEqual(await accountCounts(), onRequestCounts, "blocked API and legacy requests");
 
+  // Existing grades are owned by the member/admin history, not the new default.
+  await testDb.query("UPDATE users SET grade='bronze' WHERE id=$1", [apiSignup.id]);
   const validApiLogin = await apiRequest("/auth/login", {
     method: "POST",
     body: { email: apiSignup.email, password: apiSignup.password },
@@ -509,6 +521,8 @@ async function runRegressionTests() {
   const allowedLegacyGet = await legacyRequest(`/portal/user/login_form_ok.php?${legacyGetExisting.toString()}`);
   equal(allowedLegacyGet.status, 302, "existing legacy GET login while blocked");
   assert(allowedLegacyGet.location?.startsWith("/"), "Existing legacy GET login did not redirect locally.");
+  equal((await testDb.query("SELECT grade FROM users WHERE id=$1", [apiSignup.id])).rows[0].grade,
+    "bronze", "API and legacy login preserve existing member grade");
 
   const legacyPostExisting = new URLSearchParams({
     user_id: apiSignup.email,

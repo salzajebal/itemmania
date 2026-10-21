@@ -16,11 +16,16 @@ export const productsTable = pgTable("products", {
   sellerName: text("seller_name"),
   sellerGrade: text("seller_grade"),
   isPremium: boolean("is_premium").notNull().default(false),
+  viewCount: integer("view_count").notNull().default(0),
+  registeredCharacterName: text("registered_character_name"),
+  characterNameInDescription: boolean("character_name_in_description").notNull().default(false),
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),
   detailUrl: text("detail_url"),
   itemCategory: text("item_category"),
   status: productStatusEnum("status").notNull().default("active"),
+  adminHiddenAt: timestamp("admin_hidden_at", { withTimezone: true }),
+  adminHiddenBy: text("admin_hidden_by"),
   crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -28,6 +33,11 @@ export const productsTable = pgTable("products", {
 
 export const insertProductSchema = createInsertSchema(productsTable).omit({
   id: true,
+  viewCount: true,
+  adminHiddenAt: true,
+  adminHiddenBy: true,
+  registeredCharacterName: true,
+  characterNameInDescription: true,
   createdAt: true,
   updatedAt: true,
 });

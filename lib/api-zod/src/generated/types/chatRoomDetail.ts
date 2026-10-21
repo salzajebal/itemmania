@@ -5,9 +5,17 @@
  * 아이템마니아 클론 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ChatRoomDetailBuyerAuthStates } from './chatRoomDetailBuyerAuthStates';
+import type { ChatRoomDetailSellerAuthStates } from './chatRoomDetailSellerAuthStates';
 
 export interface ChatRoomDetail {
   id: number;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderCreatedAt?: Date | null;
+  createdAt: Date;
+  tradeInfo: string;
   buyerId: number;
   sellerId: number;
   /** @nullable */
@@ -18,11 +26,45 @@ export interface ChatRoomDetail {
   /** @nullable */
   productPrice?: number | null;
   /** @nullable */
+  productCreatedAt?: Date | null;
+  /** @nullable */
+  productItemmaniaId?: string | null;
+  /** @nullable */
+  productItemCategory?: string | null;
+  /** @nullable */
+  productDescription?: string | null;
+  /** @nullable */
+  productCategory?: string | null;
+  /** @nullable */
   characterName?: string | null;
+  /** @nullable */
+  buyerCharacterName?: string | null;
+  /** @nullable */
+  sellerCharacterName?: string | null;
   /** @nullable */
   goodsType?: string | null;
   buyerNickname: string;
   sellerNickname: string;
+  /** @nullable */
+  buyerName?: string | null;
+  /** @nullable */
+  buyerPhone?: string | null;
+  /** @nullable */
+  sellerName?: string | null;
+  /** @nullable */
+  sellerPhone?: string | null;
+  /** @nullable */
+  buyerGrade?: string | null;
+  /** @nullable */
+  sellerGrade?: string | null;
+  /** @nullable */
+  buyerCreditScore?: number | null;
+  /** @nullable */
+  sellerCreditScore?: number | null;
+  /** @nullable */
+  buyerAuthStates?: ChatRoomDetailBuyerAuthStates;
+  /** @nullable */
+  sellerAuthStates?: ChatRoomDetailSellerAuthStates;
   /** @nullable */
   gameName?: string | null;
   /** @nullable */

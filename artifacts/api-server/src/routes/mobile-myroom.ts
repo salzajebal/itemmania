@@ -48,7 +48,9 @@ export function renderMobileMyroom(user: Record<string, unknown> | null, badges:
     icon('<path d="M16 3 27 15v13H5V15Z" fill="#f5b3c5"/><rect x="3" y="15" width="26" height="12" rx="2" fill="#de6e85"/><text x="16" y="23" fill="#fff" font-weight="bold" text-anchor="middle" font-size="8">OPEN</text>'),
   ];
   const services = ["신용등급", "상품 알리미", "찜 리스트", "거래성사율", "개인정보", "채팅관리", "메시지함", "로그인 기록", "회원탈퇴", "상점명 관리"];
-  const serviceList = services.map((label, i) => `<button type="button" class="service" data-unavailable="${label}" data-testid="button-other-${i}"><span class="service-icon">${littleIcons[i]}</span><span>${label}</span></button>`).join("");
+  const serviceList = services.map((label, i) => label === "개인정보"
+    ? `<a class="service" href="/myroom/myinfo/myinfo_check.html" data-testid="button-other-${i}" style="text-decoration:none;color:inherit"><span class="service-icon">${littleIcons[i]}</span><span>${label}</span></a>`
+    : `<button type="button" class="service" data-unavailable="${label}" data-testid="button-other-${i}"><span class="service-icon">${littleIcons[i]}</span><span>${label}</span></button>`).join("");
   const authBadges = [["excellent", "우수인증"], ["phone", "휴대폰"], ["email", "이메일"], ["ipin", "아이핀"], ["withdraw", "출금계좌"]]
     .map(([key, label]) => `<span class="auth-badge ${auth[key] === true ? "verified" : auth[key] === false ? "unverified" : ""}" aria-label="${label}: ${auth[key] === true ? "인증됨" : auth[key] === false ? "미인증" : "확인 불가"}">${label}</span>`).join("");
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>마이룸 | 아이템매니아</title>

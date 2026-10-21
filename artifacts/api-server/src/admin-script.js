@@ -51,12 +51,16 @@ document.getElementById('loginForm').addEventListener('submit',function(e){e.pre
 
 async function checkSession(){
   try{
-    var r=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
-    if(!r.ok){showLogin();return;}
+    var r=await fetch('/api/admin/me',{credentials:'include',cache:'no-store'});
+    if(r.status===401||r.status===403){showLogin();return;}
+    if(!r.ok){throw new Error('관리자 로그인 상태 확인 실패');}
     var d=await r.json();
     if(d.role!=='admin'){showLogin();return;}
     showAdmin(d);
-  }catch(e){showLogin();}
+  }catch(e){
+    showToast('연결 오류로 로그인 상태를 확인하지 못했습니다. 잠시 후 다시 확인합니다.');
+    setTimeout(checkSession,5000);
+  }
 }
 
 function showLogin(){
@@ -106,6 +110,110 @@ function startNotifPolling(){
 
 var loadedTabs={};
 
+var loginLogoObjectUrl=null;
+var loginLogoSavedUrl=null;
+var loginLogoValidated=false;
+function showLoginLogo(url){
+  var image=document.getElementById('loginLogoPreview');
+  image.style.display=url?'block':'none';
+  if(url)image.src=url;else image.removeAttribute('src');
+  document.getElementById('loginLogoEmpty').style.display=url?'none':'block';
+}
+function loginLogoMessage(message,error){
+  var el=document.getElementById('loginLogoStatus');
+  el.textContent=message;el.style.color=error?'#b92b32':'#347348';
+}
+function previewLoginBrandName(){
+  var value=document.getElementById('loginBrandName').value.trim();
+  document.getElementById('loginBrandNamePreview').textContent=(value?value+' ':'')+'회원 로그인';
+}
+async function saveLoginBrandName(){
+  var input=document.getElementById('loginBrandName'),button=document.getElementById('loginBrandNameSave'),status=document.getElementById('loginBrandNameStatus');
+  input.disabled=true;button.disabled=true;status.textContent='브랜드 이름을 저장하는 중입니다.';
+  try{
+    var r=await fetch('/api/admin/login-branding/name',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({brandName:input.value})});
+    var d=await r.json();if(!r.ok)throw new Error(d.error||'브랜드 이름 저장에 실패했습니다.');
+    input.value=d.brandName;previewLoginBrandName();
+    status.style.color='#347348';status.textContent='저장했습니다. PC·모바일 로그인 화면에 반영됩니다.';
+  }catch(e){status.style.color='#b92b32';status.textContent=e.message;}
+  finally{input.disabled=false;button.disabled=false;}
+}
+async function loadLoginBranding(keepBrandName){
+  try{
+    var r=await fetch('/api/admin/login-branding',{credentials:'include',cache:'no-store'});
+    var d=await r.json();
+    if(!r.ok)throw new Error(d.error||'로고 설정을 불러오지 못했습니다.');
+    loginLogoSavedUrl=d.logoUrl;
+    if(!keepBrandName){
+      document.getElementById('loginBrandName').value=d.brandName||'';
+      previewLoginBrandName();
+    }
+    loginLogoValidated=false;
+    if(loginLogoObjectUrl){URL.revokeObjectURL(loginLogoObjectUrl);loginLogoObjectUrl=null;}
+    document.getElementById('loginLogoFile').value='';
+    showLoginLogo(d.logoUrl);loginLogoMessage(d.logoUrl?'저장된 로고가 표시됩니다.':'로고 파일을 선택한 뒤 저장해 주세요.',false);
+  }catch(e){loginLogoMessage(e.message,true);}
+}
+async function previewLoginLogo(){
+  var input=document.getElementById('loginLogoFile'),file=input.files[0];
+  var image=document.getElementById('loginLogoPreview');
+  image.onload=null;image.onerror=null;loginLogoValidated=false;
+  if(loginLogoObjectUrl){URL.revokeObjectURL(loginLogoObjectUrl);loginLogoObjectUrl=null;}
+  if(!file){showLoginLogo(loginLogoSavedUrl);return;}
+  if(['image/png','image/jpeg','image/webp'].indexOf(file.type)===-1||file.size>2*1024*1024){
+    input.value='';showLoginLogo(loginLogoSavedUrl);
+    loginLogoMessage('PNG, JPG, WEBP 이미지 파일만, 최대 2MB까지 선택할 수 있습니다.',true);return;
+  }
+  try{
+    var bytes=new Uint8Array(await file.slice(0,32).arrayBuffer());
+    if(input.files[0]!==file)return;
+    var png=bytes.length>=32&&[137,80,78,71,13,10,26,10].every(function(value,i){return bytes[i]===value;});
+    var jpg=bytes.length>=32&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+    var webp=bytes.length>=32&&String.fromCharCode.apply(null,bytes.slice(0,4))==='RIFF'&&String.fromCharCode.apply(null,bytes.slice(8,12))==='WEBP';
+    if(!png&&!jpg&&!webp)throw new Error('올바른 PNG, JPG, WEBP 이미지 파일이 아닙니다.');
+    image.onload=function(){
+      if(input.files[0]!==file)return;
+      loginLogoValidated=true;image.onload=null;image.onerror=null;
+      loginLogoMessage('미리보기입니다. 저장 버튼을 눌러야 실제 화면에 반영됩니다.',false);
+    };
+    image.onerror=function(){
+      image.onload=null;image.onerror=null;input.value='';loginLogoValidated=false;
+      if(loginLogoObjectUrl){URL.revokeObjectURL(loginLogoObjectUrl);loginLogoObjectUrl=null;}
+      showLoginLogo(loginLogoSavedUrl);loginLogoMessage('이미지 파일을 읽을 수 없습니다. 다른 파일을 선택하세요.',true);
+    };
+    loginLogoObjectUrl=URL.createObjectURL(file);showLoginLogo(loginLogoObjectUrl);
+    loginLogoMessage('이미지 파일을 확인하는 중입니다.',false);
+  }catch(e){
+    input.value='';showLoginLogo(loginLogoSavedUrl);loginLogoMessage(e.message,true);
+  }
+}
+function loginLogoBusy(busy){
+  document.getElementById('loginLogoSave').disabled=busy;
+  document.getElementById('loginLogoRemove').disabled=busy;
+  document.getElementById('loginLogoFile').disabled=busy;
+}
+async function saveLoginLogo(){
+  var file=document.getElementById('loginLogoFile').files[0];
+  if(!file){loginLogoMessage('업로드할 로고 이미지 파일을 선택하세요.',true);return;}
+  if(!loginLogoValidated){loginLogoMessage('올바른 이미지의 미리보기가 표시된 뒤 저장하세요.',true);return;}
+  loginLogoBusy(true);loginLogoMessage('로고를 저장하는 중입니다.',false);
+  try{
+    var data=new FormData();data.append('logo',file);
+    var r=await fetch('/api/admin/login-branding/logo',{method:'POST',credentials:'include',body:data});
+    var d=await r.json();if(!r.ok)throw new Error(d.error||'로고 저장에 실패했습니다.');
+    await loadLoginBranding(true);loginLogoMessage('저장했습니다. 로그인 화면에 바로 반영됩니다.',false);
+  }catch(e){loginLogoMessage(e.message,true);}finally{loginLogoBusy(false);}
+}
+async function removeLoginLogo(){
+  if(!confirm('로그인 화면에 표시되는 로고를 삭제할까요? 회원·거래 데이터에는 영향을 주지 않습니다.'))return;
+  loginLogoBusy(true);
+  try{
+    var r=await fetch('/api/admin/login-branding/logo',{method:'DELETE',credentials:'include'});
+    var d=await r.json();if(!r.ok)throw new Error(d.error||'로고 삭제에 실패했습니다.');
+    await loadLoginBranding(true);loginLogoMessage('로그인 화면에서 로고를 삭제했습니다.',false);
+  }catch(e){loginLogoMessage(e.message,true);}finally{loginLogoBusy(false);}
+}
+
 async function doLogout(){
   await fetch('/api/admin/logout',{method:'POST',credentials:'include'});
   location.reload();
@@ -113,10 +221,12 @@ async function doLogout(){
 
 function switchTab(tab){
   currentTab=tab;
-  var tabs=['products','users','orders','withdrawals','crawl','chatrooms','ipblocks'];
+  var tabs=['products','users','orders','withdrawals','crawl','chatrooms','ipblocks','support','loginbranding'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',tabs[i]===tab);});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='loginbranding'){loadLoginBranding();return;}
+  if(tab==='support'){if(typeof window.initializeSupportAdmin==='function')window.initializeSupportAdmin();else showToast('고객센터 스크립트를 불러오는 중입니다.');return;}
   if(tab==='crawl'){initCrawlTab();return;}
   if(tab==='users')loadRegistrationPolicy();
   if(!loadedTabs[tab]){
@@ -633,7 +743,7 @@ async function browserCrawl(){
   }
 }
 
-function fmtDate(d){if(!d)return'-';return new Date(d).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function fmtDate(d){if(!d)return'-';return new Date(d).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function fmtMoney(n){if(n==null)return'-';return Number(n).toLocaleString('ko-KR')+'원';}
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -666,11 +776,16 @@ async function loadProducts(page){
   var url='/api/admin/products?'+params;
   try{
     var r=await fetch(url,{credentials:'include',cache:'no-store'});
+    if(!r.ok)throw new Error('상품 목록을 불러오지 못했습니다.');
     var data=await r.json();
     var products=Array.isArray(data)?data:(data.products||[]);
     var total=data.total||products.length;
     totalProductsPages=data.totalPages||1;
     currentProductsPage=data.page||currentProductsPage;
+    if(!products.length&&currentProductsPage>1){
+      currentProductsPage=Math.max(1,Math.min(currentProductsPage-1,data.totalPages||1));
+      return loadProducts();
+    }
     document.getElementById('statProducts').textContent=total;
     if(!products.length){tbody.innerHTML='<tr class="empty-row"><td colspan="9">상품이 없습니다</td></tr>';renderProductsPagination(0);return;}
     tbody.innerHTML=products.map(function(p){
@@ -688,7 +803,7 @@ async function loadProducts(page){
         +'<td>'+fmtDate(p.createdAt)+'</td>'
         +'<td>'
           +'<button class="action-btn edit" onclick="openEditModal('+JSON.stringify(p).replace(/"/g,'&quot;')+')">수정</button>'
-          +'<button class="action-btn delete" onclick="deleteProduct('+p.id+')">삭제</button>'
+          +'<button class="action-btn delete" onclick="deleteProduct('+p.id+','+(p.status==='inactive')+')">삭제</button>'
         +'</td>'
         +'</tr>';
     }).join('');
@@ -789,15 +904,28 @@ async function saveProduct(){
   }catch(e){showToast('서버 오류');btn.disabled=false;}
 }
 
-async function deleteProduct(id){
-  if(!confirm('이 상품을 삭제하시겠습니까?\n거래 기록이 있는 글은 거래 내역 보호를 위해 비활성화됩니다.'))return;
+var deletingProducts={};
+async function deleteProduct(id,fromInactive){
+  if(deletingProducts[id])return;
+  var message=fromInactive
+    ?'비활성 상품을 관리자 목록에서 삭제하시겠습니까?\n원본 상품·거래·채팅·정산 기록은 보존됩니다.'
+    :'이 상품을 삭제하시겠습니까?\n거래 기록이 있는 글은 거래 내역 보호를 위해 비활성화됩니다.';
+  if(!confirm(message))return;
+  deletingProducts[id]=true;
+  var row=document.getElementById('prod-'+id);
+  var buttons=row?row.querySelectorAll('.action-btn'):[];
+  buttons.forEach(function(b){b.disabled=true;});
   try{
-    var r=await fetch('/api/admin/products/'+id,{method:'DELETE',credentials:'include'});
+    var r=await fetch('/api/admin/products/'+id+(fromInactive?'/list-entry':''),{method:'DELETE',credentials:'include'});
     var d=await r.json().catch(function(){return {}});
-    if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
-    showToast(d.archived?'거래 기록을 보존하며 글을 비활성화했습니다.':'🗑 상품이 삭제되었습니다');
-    loadProducts(currentProductsPage);
-  }catch(e){showToast('삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.');}
+    if(!r.ok||!d.ok||(fromInactive&&(!d.hidden||!d.preserved)))throw new Error(d.error||'삭제 실패');
+    showToast(fromInactive?'관리자 목록에서 삭제했습니다. 원본 및 거래 기록은 보존됩니다.'
+      :(d.archived?'거래 기록을 보존하며 글을 비활성화했습니다.':'🗑 상품이 삭제되었습니다'));
+    await loadProducts(currentProductsPage);
+  }catch(e){
+    showToast('오류: '+(e.message||'삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.'));
+    buttons.forEach(function(b){b.disabled=false;});
+  }finally{delete deletingProducts[id];}
 }
 
 async function deleteNoGradeProducts(){
@@ -903,25 +1031,26 @@ async function loadUsers(){
   var tbody=document.getElementById('usersBody');
   tbody.innerHTML='<tr class="empty-row"><td colspan="11">로딩 중...</td></tr>';
   try{
-    var r=await fetch('/api/admin/users',{credentials:'include',cache:'no-store'});
+    var includeDeleted=document.getElementById('usersIncludeDeleted').checked;
+    var r=await fetch('/api/admin/users?limit=100'+(includeDeleted?'&includeDeleted=1':''),{credentials:'include',cache:'no-store'});
     if(!r.ok)throw new Error('회원 목록을 불러오지 못했습니다.');
     var users=await r.json();
     adminUsersById=Object.create(null);
     users.forEach(function(u){adminUsersById[u.id]=u});
-    document.getElementById('statUsers').textContent=users.length;
     if(!users.length){tbody.innerHTML='<tr class="empty-row"><td colspan="11">회원이 없습니다</td></tr>';return;}
     tbody.innerHTML=users.map(function(u){
-      var delBtn=u.role!=='admin'
+      var delBtn=u.deletedAt?'삭제됨':u.role!=='admin'
         ?'<button class="action-btn delete" onclick="deleteUser('+u.id+')">삭제</button>'
         :'-';
       var authBtn='<button class="action-btn auth" onclick="openAuthModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+')">인증</button>';
       var milBtn='<button class="action-btn edit" onclick="openBalanceModal('+u.id+','+JSON.stringify(u.nickname||u.email).replace(/"/g,'&quot;')+','+(u.balance||0)+')">💰</button>';
       var editBtn='<button class="action-btn" style="background:#f0f4ff;color:#5a5fc7" onclick="openUserEditModal('+JSON.stringify(u).replace(/"/g,'&quot;')+')">수정</button>';
+      var passwordBtn=u.deletedAt||u.suspendedAt||u.role==='admin'?'':'<button class="action-btn" onclick="openUserPasswordModal('+u.id+')">비밀번호 관리</button>';
       var ipRow=function(label,ip,kind){
         return '<div style="white-space:nowrap">'+label+': <code>'+escHtml(ip||'미기록')+'</code>'
           +(ip? " <button class=\"action-btn\" onclick=\"blockMemberIp("+u.id+",'"+kind+"')\">이 IP 차단</button>":'')+'</div>';
       };
-      var accountBtn=u.role==='admin'?'-':'<button class="action-btn '+(u.suspendedAt?'edit':'delete')+'" onclick="setMemberSuspension('+u.id+','+(!u.suspendedAt)+')">'+(u.suspendedAt?'차단 해제':'계정 차단')+'</button>';
+      var accountBtn=u.deletedAt||u.role==='admin'?'-':'<button class="action-btn '+(u.suspendedAt?'edit':'delete')+'" onclick="setMemberSuspension('+u.id+','+(!u.suspendedAt)+')">'+(u.suspendedAt?'차단 해제':'계정 차단')+'</button>';
       return '<tr id="user-row-'+u.id+'">'
         +'<td>'+u.id+'</td>'
         +'<td>'+escHtml(u.email)+'</td>'
@@ -931,8 +1060,8 @@ async function loadUsers(){
         +'<td id="user-bal-'+u.id+'">'+fmtMoney(u.balance)+'</td>'
         +'<td>'+fmtDate(u.createdAt)+'</td>'
         +'<td>'+ipRow('가입',u.signupIp,'signup')+ipRow('최근 로그인',u.lastLoginIp,'login')+'</td>'
-        +'<td>'+(u.suspendedAt?'<strong style="color:#b42318">차단됨</strong>':'정상')+'<br>'+accountBtn+'</td>'
-        +'<td>'+editBtn+milBtn+authBtn+'</td>'
+        +'<td>'+(u.deletedAt?'<strong style="color:#b42318">삭제됨 (기록 보존)</strong>':u.suspendedAt?'<strong style="color:#b42318">차단됨</strong>':'정상')+'<br>'+accountBtn+'</td>'
+        +'<td>'+(u.deletedAt?'-':editBtn+milBtn+authBtn+passwordBtn)+'</td>'
         +'<td>'+delBtn+'</td>'
         +'</tr>';
     }).join('');
@@ -968,15 +1097,90 @@ async function blockMemberIp(id,kind){
 }
 
 async function deleteUser(id){
-  if(!confirm('이 회원을 삭제하시겠습니까? 지갑 데이터도 함께 삭제됩니다.'))return;
+  if(!confirm('이 회원을 삭제하시겠습니까? 로그인은 해제되고 회원 목록에서 제외됩니다. 잔액·정산·거래·대화 기록은 보존됩니다. 진행 중인 거래나 대기 출금이 있으면 먼저 처리해야 합니다.'))return;
   try{
     var r=await fetch('/api/admin/users/'+id,{method:'DELETE',credentials:'include'});
     var d=await r.json();
     if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));return;}
-    showToast('🗑 회원이 삭제되었습니다');
-    loadUsers();
+    showToast(d.message||'회원이 삭제되었습니다. 기록은 보존됩니다.');
+    await loadUsers();
+    loadStats();
   }catch(e){showToast('서버 오류');}
 }
+
+var userPasswordBusy=false;
+function openUserPasswordModal(id){
+  if(userPasswordBusy)return;
+  var u=adminUsersById[id];if(!u||u.role==='admin'||u.deletedAt||u.suspendedAt)return;
+  document.getElementById('userPasswordId').value=id;
+  document.getElementById('userPasswordMember').textContent=(u.nickname||'회원')+' / '+u.email+' (#'+id+')';
+  document.getElementById('userPasswordVerified').checked=false;
+  document.getElementById('userPasswordAdmin').value='';
+  document.getElementById('userPasswordIssued').value='';
+  document.getElementById('userPasswordErr').textContent='';
+  document.getElementById('userPasswordResult').style.display='none';
+  document.getElementById('userPasswordResetBtn').style.display='';
+  document.getElementById('userPasswordModal').classList.add('open');
+}
+function closeUserPasswordModal(){
+  if(userPasswordBusy)return;
+  document.getElementById('userPasswordAdmin').value='';
+  document.getElementById('userPasswordIssued').value='';
+  document.getElementById('userPasswordId').value='';
+  document.getElementById('userPasswordModal').classList.remove('open');
+}
+async function viewMemberPassword(){
+  if(userPasswordBusy)return;
+  var err=document.getElementById('userPasswordErr'),pw=document.getElementById('userPasswordAdmin');
+  err.textContent='';
+  document.getElementById('userPasswordIssued').value='';
+  document.getElementById('userPasswordResult').style.display='none';
+  if(!pw.value){err.textContent='관리자 본인의 비밀번호를 입력하세요.';return}
+  userPasswordBusy=true;
+  var btn=document.getElementById('userPasswordViewBtn'),close=document.getElementById('userPasswordCloseBtn'),reset=document.getElementById('userPasswordResetBtn');
+  btn.disabled=true;close.disabled=true;reset.disabled=true;
+  try{
+    var r=await fetch('/api/admin/users/'+document.getElementById('userPasswordId').value+'/password-view',{
+      method:'POST',credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({adminPassword:pw.value})
+    });
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||'비밀번호를 조회하지 못했습니다.');
+    if(data.password===null){err.textContent='저장된 원문이 없습니다. 기존 해시는 복원할 수 없으며, 이후 비밀번호 변경·재설정 시 저장됩니다.';return}
+    document.getElementById('userPasswordIssued').value=data.password;
+    document.getElementById('userPasswordResult').style.display='block';
+  }catch(e){err.textContent=e.message||'비밀번호를 조회하지 못했습니다.'}
+  finally{pw.value='';userPasswordBusy=false;btn.disabled=false;close.disabled=false;reset.disabled=false}
+}
+async function issueMemberPassword(){
+  if(userPasswordBusy)return;
+  var err=document.getElementById('userPasswordErr'),pw=document.getElementById('userPasswordAdmin');
+  err.textContent='';
+  if(!document.getElementById('userPasswordVerified').checked){err.textContent='회원 본인 확인을 먼저 완료해 주세요.';return}
+  if(!pw.value){err.textContent='관리자 본인의 비밀번호를 입력하세요.';return}
+  if(!confirm('이 회원의 기존 비밀번호와 로그인 세션을 무효화하고 새 임시 비밀번호를 발급할까요?'))return;
+  userPasswordBusy=true;
+  var btn=document.getElementById('userPasswordResetBtn'),close=document.getElementById('userPasswordCloseBtn');
+  btn.disabled=true;close.disabled=true;document.getElementById('userPasswordViewBtn').disabled=true;btn.textContent='발급 중…';
+  try{
+    var r=await fetch('/api/admin/users/'+document.getElementById('userPasswordId').value+'/password-reset',{
+      method:'POST',credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({identityVerified:true,adminPassword:pw.value})
+    });
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||'임시 비밀번호를 발급하지 못했습니다.');
+    document.getElementById('userPasswordIssued').value=data.temporaryPassword;
+    document.getElementById('userPasswordResult').style.display='block';
+    btn.style.display='none';
+  }catch(e){err.textContent=e.message||'발급 결과를 확인하지 못했습니다. 상태를 확인한 뒤 다시 발급해 주세요.'}
+  finally{pw.value='';userPasswordBusy=false;btn.disabled=false;close.disabled=false;document.getElementById('userPasswordViewBtn').disabled=false;btn.textContent='임시 비밀번호 발급'}
+}
+async function copyPasswordText(value,input){
+  try{await navigator.clipboard.writeText(value);showToast('복사했습니다.')}
+  catch(e){if(input){input.focus();input.select();showToast('복사 권한이 없습니다. 선택된 내용을 직접 복사해 주세요.')}else{showToast('주소: '+value)}}
+}
+function copyIssuedPassword(){var input=document.getElementById('userPasswordIssued');if(input.value)copyPasswordText(input.value,input)}
+function copyPasswordChangeLink(){copyPasswordText(location.origin+'/member-password')}
 
 // ── 회원 정보 수정 ───────────────────────────────────────────
 function openUserEditModal(u){
@@ -1092,17 +1296,27 @@ async function saveAuthStates(){
 // ── 주문 ─────────────────────────────────────────────────
 async function loadOrders(){
   var tbody=document.getElementById('ordersBody');
-  tbody.innerHTML='<tr class="empty-row"><td colspan="7">로딩 중...</td></tr>';
+  tbody.innerHTML='<tr class="empty-row"><td colspan="8">로딩 중...</td></tr>';
   var status=document.getElementById('orderStatusFilter').value;
-  var url='/api/admin/orders'+(status?'?status='+status:'');
+  var params=new URLSearchParams();
+  if(status)params.set('status',status);
+  if(document.getElementById('ordersIncludeDeleted').checked)params.set('includeDeleted','1');
+  var url='/api/admin/orders'+(params.toString()?'?'+params.toString():'');
   try{
     var r=await fetch(url,{credentials:'include'});
     var orders=await r.json();
+    if(!r.ok||!Array.isArray(orders))throw new Error(orders.error||'주문을 불러오지 못했습니다.');
     document.getElementById('statOrders').textContent=orders.length;
-    if(!orders.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">주문이 없습니다</td></tr>';return;}
+    if(!orders.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">주문이 없습니다</td></tr>';return;}
     tbody.innerHTML=orders.map(function(o){
-      var sl={active:'진행중',completed:'완료',cancelled:'취소됨',escrow:'에스크로'}[o.status]||o.status;
-      return '<tr>'
+      var sl={pending:'거래대기',shipped:'인계완료',confirmed:'인수확인',completed:'완료',cancelled:'취소됨',disputed:'분쟁'}[o.status]||o.status;
+      var action=o.adminDeletedAt
+        ?'<span class="badge" title="'+escHtml(fmtDate(o.adminDeletedAt))+'">삭제됨 (기록 보존)</span>'
+          +(o.canHide?'<br><button class="action-btn delete" id="hide-order-'+o.id+'" onclick="hideOrder('+o.id+')">목록에서 제거</button>':'')
+        :o.canDelete
+          ?'<button class="action-btn delete" id="delete-order-'+o.id+'" onclick="deleteOrder('+o.id+')">삭제</button>'
+          :'<button class="action-btn delete" disabled title="완료 또는 취소된 주문만 삭제할 수 있습니다">삭제 불가</button>';
+      return '<tr id="order-'+o.id+'">'
         +'<td>'+o.id+'</td>'
         +'<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(o.productTitle||'-')+'</td>'
         +'<td>'+o.buyerId+'</td>'
@@ -1110,9 +1324,42 @@ async function loadOrders(){
         +'<td>'+fmtMoney(o.amount)+'</td>'
         +'<td><span class="badge '+o.status+'">'+sl+'</span></td>'
         +'<td>'+fmtDate(o.createdAt)+'</td>'
+        +'<td>'+action+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="7">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">'+escHtml(e.message||'오류 발생')+'</td></tr>';}
+}
+
+async function deleteOrder(id){
+  if(!confirm('주문 #'+id+'을 관리자 목록에서 삭제하시겠습니까?\n정산·회원 잔액·연결된 거래 및 대화 기록은 보존됩니다.'))return;
+  var btn=document.getElementById('delete-order-'+id);
+  if(btn)btn.disabled=true;
+  try{
+    var response=await fetch('/api/admin/orders/'+id,{method:'DELETE',credentials:'include'});
+    var result=await response.json();
+    if(!response.ok)throw new Error(result.error||'주문 삭제 실패');
+    showToast('주문을 관리자 목록에서 삭제했습니다. 정산·거래 기록은 보존됩니다.');
+    await loadOrders();
+  }catch(error){
+    showToast(error.message||'서버 오류');
+    if(btn)btn.disabled=false;
+  }
+}
+
+async function hideOrder(id){
+  if(!confirm('삭제된 주문 #'+id+'을 주문관리 목록에서 제거하시겠습니까?\n이후에는 “삭제된 항목 포함”을 선택해도 표시되지 않습니다.\n주문 원본·정산·회원 잔액·연결된 거래 및 대화 기록은 보존됩니다.'))return;
+  var btn=document.getElementById('hide-order-'+id);
+  if(btn)btn.disabled=true;
+  try{
+    var response=await fetch('/api/admin/orders/'+id+'/list-entry',{method:'DELETE',credentials:'include'});
+    var result=await response.json();
+    if(!response.ok)throw new Error(result.error||'목록 제거 실패');
+    showToast('삭제된 주문을 목록에서 제거했습니다. 거래·정산 기록은 보존됩니다.');
+    await loadOrders();
+  }catch(error){
+    showToast(error.message||'서버 오류');
+    if(btn)btn.disabled=false;
+  }
 }
 
 // ── 채팅 거래 ─────────────────────────────────────────────
@@ -1121,15 +1368,18 @@ async function loadChatRooms(){
   if(!tbody)return;
   tbody.innerHTML='<tr class="empty-row"><td colspan="8">로딩 중...</td></tr>';
   var statusFilter=document.getElementById('chatroomStatusFilter').value;
-  var url='/api/admin/chat-rooms'+(statusFilter?'?status='+statusFilter:'');
+  var params=new URLSearchParams();
+  if(statusFilter)params.set('status',statusFilter);
+  if(document.getElementById('chatroomsIncludeDeleted').checked)params.set('includeDeleted','1');
+  var url='/api/admin/chat-rooms'+(params.toString()?'?'+params.toString():'');
   try{
-    var r=await fetch(url,{credentials:'include'});
+    var r=await fetch(url,{credentials:'include',cache:'no-store'});
     var rooms=await r.json();
-    if(!Array.isArray(rooms))rooms=[];
+    if(!r.ok||!Array.isArray(rooms))throw new Error(rooms.error||'채팅 거래를 불러오지 못했습니다.');
     if(!rooms.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">채팅 거래가 없습니다</td></tr>';return;}
     var filtered=statusFilter?rooms.filter(function(rm){return rm.status===statusFilter;}):rooms;
     if(!filtered.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">해당 상태의 거래가 없습니다</td></tr>';return;}
-    var statusLabel={active:'진행중',handover:'인계완료',ended:'거래완료',cancelled:'취소'};
+    var statusLabel={pending:'거래대기',active:'진행중',handover:'인계완료',ended:'거래완료',cancelled:'취소',rejected:'거래불가'};
     tbody.innerHTML=filtered.map(function(rm){
       var sl=statusLabel[rm.status]||rm.status;
       return '<tr>'
@@ -1140,27 +1390,46 @@ async function loadChatRooms(){
         +'<td>'+(rm.amount!=null?fmtMoney(rm.amount):'-')+'</td>'
         +'<td><span class="badge '+rm.status+'">'+sl+'</span></td>'
         +'<td>'+fmtDate(rm.createdAt)+'</td>'
-        +'<td>'+(rm.canDelete
+        +'<td>'+(rm.adminDeletedAt
+          ?'<span class="badge" title="'+escHtml(fmtDate(rm.adminDeletedAt))+'">삭제됨 (기록 보존)</span>'
+            +(rm.canHide?'<br><button class="action-btn delete" id="hide-chatroom-'+rm.id+'" onclick="hideChatRoom('+rm.id+')">목록에서 제거</button>':'')
+          :rm.canDelete
           ?'<button class="action-btn delete" id="delete-chatroom-'+rm.id+'" onclick="deleteChatRoom('+rm.id+')">삭제</button>'
-          :'<button class="action-btn delete" disabled title="주문에 연결된 채팅방은 삭제할 수 없습니다">삭제 불가</button>')+'</td>'
+          :'<button class="action-btn delete" disabled title="주문에 연결된 진행 중인 거래는 종료 후 삭제할 수 있습니다">삭제 불가</button>')+'</td>'
         +'</tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">오류 발생</td></tr>';}
+  }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="8">'+escHtml(e.message||'오류 발생')+'</td></tr>';}
 }
 
 async function deleteChatRoom(id){
-  if(!confirm('채팅방 #'+id+'과 모든 메시지를 영구 삭제하시겠습니까?\n구매자·판매자에게도 보이지 않으며 복구할 수 없습니다. 주문에 연결된 방은 삭제되지 않습니다.'))return;
+  if(!confirm('채팅거래 #'+id+'을 관리자 목록에서 삭제하시겠습니까?\n회원의 대화 기록·주문·정산·잔액은 보존됩니다.'))return;
   var btn=document.getElementById('delete-chatroom-'+id);
   if(btn)btn.disabled=true;
   try{
     var r=await fetch('/api/admin/chat-rooms/'+id,{method:'DELETE',credentials:'include'});
     var d=await r.json().catch(function(){return {}});
     if(!r.ok){showToast('오류: '+(d.error||'삭제 실패'));loadChatRooms();return;}
-    showToast('채팅방과 메시지가 삭제되었습니다.');
+    showToast('채팅거래를 관리자 목록에서 삭제했습니다. 대화·정산 기록은 보존됩니다.');
     loadChatRooms();
   }catch(e){
     showToast('삭제 요청을 전송하지 못했습니다. 다시 시도해 주세요.');
     loadChatRooms();
+  }
+}
+
+async function hideChatRoom(id){
+  if(!confirm('삭제된 채팅거래 #'+id+'을 채팅거래 목록에서 제거하시겠습니까?\n이후에는 “삭제된 항목 포함”을 선택해도 표시되지 않습니다.\n회원의 대화·거래·정산·잔액 및 원래 삭제 기록은 보존됩니다.'))return;
+  var btn=document.getElementById('hide-chatroom-'+id);
+  if(btn)btn.disabled=true;
+  try{
+    var response=await fetch('/api/admin/chat-rooms/'+id+'/list-entry',{method:'DELETE',credentials:'include'});
+    var result=await response.json();
+    if(!response.ok)throw new Error(result.error||'목록 제거 실패');
+    showToast('삭제된 채팅거래를 목록에서 제거했습니다. 대화·거래·정산 기록은 보존됩니다.');
+    await loadChatRooms();
+  }catch(error){
+    showToast(error.message||'목록 제거 실패');
+    if(btn)btn.disabled=false;
   }
 }
 
@@ -1311,7 +1580,8 @@ async function loadWithdrawals(){
   var status=document.getElementById('wdStatusFilter').value;
   var url='/api/admin/withdrawals'+(status?'?status='+status:'');
   try{
-    var r=await fetch(url,{credentials:'include'});
+    var r=await fetch(url,{credentials:'include',cache:'no-store'});
+    if(!r.ok)throw new Error('load failed');
     var wds=await r.json();
     document.getElementById('statPendingWd').textContent=wds.filter(function(w){return w.status==='pending';}).length;
     document.getElementById('statApprovedWd').textContent=wds.filter(function(w){return w.status==='approved';}).length;
@@ -1321,16 +1591,15 @@ async function loadWithdrawals(){
       var actions=w.status==='pending'
         ?'<button class="action-btn approve" onclick="processWd('+w.id+',' + "'approved'" + ')">승인</button>'
           +'<button class="action-btn reject" onclick="processWd('+w.id+',' + "'rejected'" + ')">거절</button>'
-        :'-';
-      var methodLabel=w.method==='phone'?'📱 휴대폰':'🏦 은행계좌';
-      var contactInfo=w.method==='phone'
-        ?escHtml(w.phoneNumber||'-')
-        :escHtml(w.bankName||'-')+' / '+escHtml(w.accountNumber||'-')+' ('+escHtml(w.accountHolder||'-')+')';
+        :(w.status==='approved'||w.status==='rejected'
+          ?'<button class="action-btn reject" onclick="removeWithdrawal('+w.id+')" data-testid="remove-withdrawal-'+w.id+'">삭제</button>'
+          :'-');
       return '<tr id="wd-'+w.id+'">'
         +'<td>'+w.id+'</td><td>'+w.userId+'</td>'
-        +'<td>'+methodLabel+'</td>'
         +'<td>'+fmtMoney(w.amount)+'</td>'
-        +'<td>'+contactInfo+'</td>'
+        +'<td>'+(w.method==='phone'?'📱 휴대폰':escHtml(w.bankName||'-'))+'</td>'
+        +'<td>'+escHtml((w.method==='phone'?w.phoneNumber:w.accountNumber)||'-')+'</td>'
+        +'<td>'+escHtml(w.method==='phone'?'-':(w.accountHolder||'-'))+'</td>'
         +'<td><span class="badge '+w.status+'">'+sl+'</span></td>'
         +'<td>'+escHtml(w.adminNote||'-')+'</td>'
         +'<td>'+fmtDate(w.createdAt)+'</td>'
@@ -1338,6 +1607,28 @@ async function loadWithdrawals(){
         +'</tr>';
     }).join('');
   }catch(e){tbody.innerHTML='<tr class="empty-row"><td colspan="10">오류 발생</td></tr>';}
+}
+
+var removingWithdrawals={};
+async function removeWithdrawal(id){
+  if(removingWithdrawals[id])return;
+  if(!confirm('이 출금 항목을 관리자 목록에서 삭제하시겠습니까?\n회원 출금 내역·잔액·정산 기록은 그대로 보존됩니다.'))return;
+  removingWithdrawals[id]=true;
+  var row=document.getElementById('wd-'+id);
+  var btns=row?row.querySelectorAll('.action-btn'):[];
+  btns.forEach(function(b){b.disabled=true;});
+  try{
+    var r=await fetch('/api/admin/withdrawals/'+id,{method:'DELETE',credentials:'include',cache:'no-store'});
+    var d=await r.json();
+    if(!r.ok||!d.ok||!d.preserved)throw new Error(d.error||'삭제 실패');
+    showToast('관리자 목록에서 삭제했습니다. 회원 내역과 금액은 보존됩니다.');
+    await loadWithdrawals();
+  }catch(e){
+    showToast('오류: '+(e.message||'목록에서 삭제하지 못했습니다.'));
+    btns.forEach(function(b){b.disabled=false;});
+  }finally{
+    delete removingWithdrawals[id];
+  }
 }
 
 async function processWd(id,status){
@@ -1363,6 +1654,7 @@ function openBalanceModal(id,nickname,current){
   document.getElementById('balanceCurrent').textContent=fmtMoney(current);
   document.getElementById('balanceMode').value='add';
   document.getElementById('balanceAmount').value='';
+  document.getElementById('balanceSaveBtn').disabled=false;
   document.getElementById('balanceModal').classList.add('open');
   setTimeout(function(){document.getElementById('balanceAmount').focus();},100);
 }
@@ -1375,12 +1667,15 @@ function closeBalanceModal(){
 async function saveBalance(){
   if(!balanceModalUserId)return;
   var btn=document.getElementById('balanceSaveBtn');
-  var amount=parseInt(document.getElementById('balanceAmount').value,10);
+  if(btn.disabled)return;
+  var userId=balanceModalUserId;
+  var rawAmount=document.getElementById('balanceAmount').value.trim();
+  var amount=Number(rawAmount);
   var mode=document.getElementById('balanceMode').value;
-  if(isNaN(amount)||amount<0){showToast('금액을 올바르게 입력하세요');return;}
+  if(!rawAmount||!Number.isSafeInteger(amount)||amount<0){showToast('금액은 0 이상의 정수로 입력하세요');return;}
   btn.disabled=true;
   try{
-    var r=await fetch('/api/admin/users/'+balanceModalUserId+'/balance',{
+    var r=await fetch('/api/admin/users/'+userId+'/balance',{
       method:'PATCH',
       headers:{'Content-Type':'application/json'},
       credentials:'include',
@@ -1391,11 +1686,17 @@ async function saveBalance(){
     var modeLabel=mode==='add'?'추가':'설정';
     showToast('✅ 마일리지 '+modeLabel+' 완료: '+fmtMoney(d.balance));
     // 테이블 행의 잔액 셀 즉시 업데이트
-    var balCell=document.getElementById('user-bal-'+balanceModalUserId);
+    var balCell=document.getElementById('user-bal-'+userId);
     if(balCell)balCell.textContent=fmtMoney(d.balance);
-    document.getElementById('balanceCurrent').textContent=fmtMoney(d.balance);
-    closeBalanceModal();
-  }catch(e){showToast('서버 오류');btn.disabled=false;}
+    if(adminUsersById[userId])adminUsersById[userId].balance=d.balance;
+    if(balanceModalUserId===userId){
+      document.getElementById('balanceCurrent').textContent=fmtMoney(d.balance);
+      closeBalanceModal();
+    }
+    await loadUsers();
+    loadStats();
+  }catch(e){showToast('서버 오류');}
+  finally{btn.disabled=false;}
 }
 
 function showToast(msg){

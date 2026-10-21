@@ -1,0 +1,9 @@
+[project]
+name = "itemmania-font-build-tools"
+version = "0.1.0"
+description = "Build-only tooling for lossless captured-font delivery optimization"
+requires-python = ">=3.13"
+dependencies = [
+    "brotli>=1.2.0",
+    "fonttools>=4.66.1",
+]

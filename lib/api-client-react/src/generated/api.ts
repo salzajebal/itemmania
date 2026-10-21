@@ -20,12 +20,19 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminChangeMemberBalance200,
   AdminChatRoom,
   AdminDeleteChatRoom200,
+  AdminDeleteOrder200,
+  AdminHideChatRoom200,
+  AdminHideOrder200,
+  AdminListChatRoomsParams,
   AdminListOrdersParams,
   AdminListUsersParams,
   AdminListWithdrawalsParams,
+  AdminOrder,
   AdminProduct,
+  AdminRemoveMember200,
   AdminSetUserSuspension200,
   AdminSuspensionRequest,
   AdminUser,
@@ -37,11 +44,22 @@ import type {
   ChatRoom,
   ChatRoomUpdateInput,
   ChatRoomUpdateResult,
+  DismissChatRoom200,
   ErrorResponse,
+  GetSupportMessagesParams,
   HealthStatus,
+  InactiveProductRemovalResult,
+  ListChatRoomsParams,
   ListOrdersParams,
   ListProductsParams,
+  ListSupportConversationsParams,
   LoginInput,
+  MemberBalanceRequest,
+  MemberPasswordChanged,
+  MemberPasswordInput,
+  MemberPasswordResetInput,
+  MemberPasswordResetResult,
+  MemberProfile,
   MessageInput,
   Order,
   OrderInput,
@@ -51,8 +69,17 @@ import type {
   RegistrationPolicy,
   RegistrationPolicyUpdate,
   SuccessResponse,
+  SupportConversationPage,
+  SupportHistory,
+  SupportMessageInput,
+  SupportReadInput,
+  SupportRemovalInput,
+  SupportRemovalResult,
+  SupportSendResult,
+  SupportSummary,
   WalletInfo,
   WithdrawInput,
+  WithdrawalListRemovalResult,
   WithdrawalRecord,
   WithdrawalUpdate
 } from './api.schemas';
@@ -83,6 +110,865 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetSupportSummaryUrl = () => {
+
+
+
+
+  return `/api/support/summary`
+}
+
+export const getSupportSummary = async ( options?: Parameters<typeof customFetch>[1]): Promise<SupportSummary> => {
+
+  return customFetch<SupportSummary>(getGetSupportSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupportSummaryQueryKey = () => {
+    return [
+    `/api/support/summary`
+    ] as const;
+    }
+
+
+export const getGetSupportSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getSupportSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupportSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupportSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupportSummary>>> = ({ signal }) => getSupportSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupportSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupportSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getSupportSummary>>>
+export type GetSupportSummaryQueryError = ErrorType<unknown>
+
+
+
+export function useGetSupportSummary<TData = Awaited<ReturnType<typeof getSupportSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupportSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupportSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSupportMessagesUrl = (params?: GetSupportMessagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/support/messages?${stringifiedParams}` : `/api/support/messages`
+}
+
+export const getSupportMessages = async (params?: GetSupportMessagesParams, options?: Parameters<typeof customFetch>[1]): Promise<SupportHistory> => {
+
+  return customFetch<SupportHistory>(getGetSupportMessagesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupportMessagesQueryKey = (params?: GetSupportMessagesParams,) => {
+    return [
+    `/api/support/messages`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSupportMessagesQueryOptions = <TData = Awaited<ReturnType<typeof getSupportMessages>>, TError = ErrorType<unknown>>(params?: GetSupportMessagesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupportMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupportMessagesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupportMessages>>> = ({ signal }) => getSupportMessages(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupportMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupportMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof getSupportMessages>>>
+export type GetSupportMessagesQueryError = ErrorType<unknown>
+
+
+
+export function useGetSupportMessages<TData = Awaited<ReturnType<typeof getSupportMessages>>, TError = ErrorType<unknown>>(
+ params?: GetSupportMessagesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupportMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupportMessagesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendSupportMessageUrl = () => {
+
+
+
+
+  return `/api/support/messages`
+}
+
+export const sendSupportMessage = async (supportMessageInput: SupportMessageInput, options?: Parameters<typeof customFetch>[1]): Promise<SupportSendResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SupportSendResult>(getSendSupportMessageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(supportMessageInput)
+  }
+);}
+
+
+
+
+
+export const getSendSupportMessageMutationKey = () => ['sendSupportMessage'] as const;
+
+export const getSendSupportMessageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendSupportMessage>>, TError,SendSupportMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendSupportMessage>>, TError,SendSupportMessageMutationVariables, TContext> => {
+
+const mutationKey = getSendSupportMessageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendSupportMessage>>, SendSupportMessageMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendSupportMessage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendSupportMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendSupportMessage>>>
+    export type SendSupportMessageMutationBody = BodyType<SupportMessageInput>
+    export type SendSupportMessageMutationError = ErrorType<unknown>
+    export type SendSupportMessageMutationVariables = {data: BodyType<SupportMessageInput>}
+
+    export const useSendSupportMessage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendSupportMessage>>, TError,SendSupportMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendSupportMessage>>,
+        TError,
+        SendSupportMessageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendSupportMessageMutationOptions(options));
+    }
+
+export const getReadSupportMessagesUrl = () => {
+
+
+
+
+  return `/api/support/read`
+}
+
+export const readSupportMessages = async (supportReadInput: SupportReadInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getReadSupportMessagesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(supportReadInput)
+  }
+);}
+
+
+
+
+
+export const getReadSupportMessagesMutationKey = () => ['readSupportMessages'] as const;
+
+export const getReadSupportMessagesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readSupportMessages>>, TError,ReadSupportMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof readSupportMessages>>, TError,ReadSupportMessagesMutationVariables, TContext> => {
+
+const mutationKey = getReadSupportMessagesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof readSupportMessages>>, ReadSupportMessagesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  readSupportMessages(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReadSupportMessagesMutationResult = NonNullable<Awaited<ReturnType<typeof readSupportMessages>>>
+    export type ReadSupportMessagesMutationBody = BodyType<SupportReadInput>
+    export type ReadSupportMessagesMutationError = ErrorType<unknown>
+    export type ReadSupportMessagesMutationVariables = {data: BodyType<SupportReadInput>}
+
+    export const useReadSupportMessages = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readSupportMessages>>, TError,ReadSupportMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof readSupportMessages>>,
+        TError,
+        ReadSupportMessagesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReadSupportMessagesMutationOptions(options));
+    }
+
+export const getStreamSupportEventsUrl = () => {
+
+
+
+
+  return `/api/support/events`
+}
+
+export const streamSupportEvents = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getStreamSupportEventsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamSupportEventsQueryKey = () => {
+    return [
+    `/api/support/events`
+    ] as const;
+    }
+
+
+export const getStreamSupportEventsQueryOptions = <TData = Awaited<ReturnType<typeof streamSupportEvents>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamSupportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamSupportEventsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamSupportEvents>>> = ({ signal }) => streamSupportEvents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamSupportEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StreamSupportEventsQueryResult = NonNullable<Awaited<ReturnType<typeof streamSupportEvents>>>
+export type StreamSupportEventsQueryError = ErrorType<unknown>
+
+
+
+export function useStreamSupportEvents<TData = Awaited<ReturnType<typeof streamSupportEvents>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamSupportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStreamSupportEventsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSupportConversationsUrl = (params?: ListSupportConversationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/support/conversations?${stringifiedParams}` : `/api/admin/support/conversations`
+}
+
+export const listSupportConversations = async (params?: ListSupportConversationsParams, options?: Parameters<typeof customFetch>[1]): Promise<SupportConversationPage> => {
+
+  return customFetch<SupportConversationPage>(getListSupportConversationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupportConversationsQueryKey = (params?: ListSupportConversationsParams,) => {
+    return [
+    `/api/admin/support/conversations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSupportConversationsQueryOptions = <TData = Awaited<ReturnType<typeof listSupportConversations>>, TError = ErrorType<unknown>>(params?: ListSupportConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupportConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupportConversationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupportConversations>>> = ({ signal }) => listSupportConversations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupportConversations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupportConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof listSupportConversations>>>
+export type ListSupportConversationsQueryError = ErrorType<unknown>
+
+
+
+export function useListSupportConversations<TData = Awaited<ReturnType<typeof listSupportConversations>>, TError = ErrorType<unknown>>(
+ params?: ListSupportConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupportConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupportConversationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRemoveSupportConversationUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/support/${userId}`
+}
+
+/**
+ * Native administrator only. Permanently removes customer support messages and conversation, never trade chats or financial records. Rejects a stale last-message precondition.
+ */
+export const removeSupportConversation = async (userId: number,
+    supportRemovalInput: SupportRemovalInput, options?: Parameters<typeof customFetch>[1]): Promise<SupportRemovalResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SupportRemovalResult>(getRemoveSupportConversationUrl(userId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(supportRemovalInput)
+  }
+);}
+
+
+
+
+
+export const getRemoveSupportConversationMutationKey = () => ['removeSupportConversation'] as const;
+
+export const getRemoveSupportConversationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeSupportConversation>>, TError,RemoveSupportConversationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeSupportConversation>>, TError,RemoveSupportConversationMutationVariables, TContext> => {
+
+const mutationKey = getRemoveSupportConversationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeSupportConversation>>, RemoveSupportConversationMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  removeSupportConversation(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveSupportConversationMutationResult = NonNullable<Awaited<ReturnType<typeof removeSupportConversation>>>
+    export type RemoveSupportConversationMutationBody = BodyType<SupportRemovalInput>
+    export type RemoveSupportConversationMutationError = ErrorType<void>
+    export type RemoveSupportConversationMutationVariables = {userId: number;data: BodyType<SupportRemovalInput>}
+
+    export const useRemoveSupportConversation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeSupportConversation>>, TError,RemoveSupportConversationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeSupportConversation>>,
+        TError,
+        RemoveSupportConversationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveSupportConversationMutationOptions(options));
+    }
+
+export const getGetAdminSupportMessagesUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/support/${userId}/messages`
+}
+
+/**
+ * Latest 100 ascending messages. Optional afterId or beforeId query cursor; only one direction per request.
+ */
+export const getAdminSupportMessages = async (userId: number, options?: Parameters<typeof customFetch>[1]): Promise<SupportHistory> => {
+
+  return customFetch<SupportHistory>(getGetAdminSupportMessagesUrl(userId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminSupportMessagesQueryKey = (userId: number,) => {
+    return [
+    `/api/admin/support/${userId}/messages`
+    ] as const;
+    }
+
+
+export const getGetAdminSupportMessagesQueryOptions = <TData = Awaited<ReturnType<typeof getAdminSupportMessages>>, TError = ErrorType<unknown>>(userId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminSupportMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminSupportMessagesQueryKey(userId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminSupportMessages>>> = ({ signal }) => getAdminSupportMessages(userId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: userId !== null && userId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminSupportMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminSupportMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminSupportMessages>>>
+export type GetAdminSupportMessagesQueryError = ErrorType<unknown>
+
+
+
+export function useGetAdminSupportMessages<TData = Awaited<ReturnType<typeof getAdminSupportMessages>>, TError = ErrorType<unknown>>(
+ userId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminSupportMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminSupportMessagesQueryOptions(userId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendAdminSupportMessageUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/support/${userId}/messages`
+}
+
+export const sendAdminSupportMessage = async (userId: number,
+    supportMessageInput: SupportMessageInput, options?: Parameters<typeof customFetch>[1]): Promise<SupportSendResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SupportSendResult>(getSendAdminSupportMessageUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(supportMessageInput)
+  }
+);}
+
+
+
+
+
+export const getSendAdminSupportMessageMutationKey = () => ['sendAdminSupportMessage'] as const;
+
+export const getSendAdminSupportMessageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendAdminSupportMessage>>, TError,SendAdminSupportMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendAdminSupportMessage>>, TError,SendAdminSupportMessageMutationVariables, TContext> => {
+
+const mutationKey = getSendAdminSupportMessageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendAdminSupportMessage>>, SendAdminSupportMessageMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  sendAdminSupportMessage(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendAdminSupportMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendAdminSupportMessage>>>
+    export type SendAdminSupportMessageMutationBody = BodyType<SupportMessageInput>
+    export type SendAdminSupportMessageMutationError = ErrorType<unknown>
+    export type SendAdminSupportMessageMutationVariables = {userId: number;data: BodyType<SupportMessageInput>}
+
+    export const useSendAdminSupportMessage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendAdminSupportMessage>>, TError,SendAdminSupportMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendAdminSupportMessage>>,
+        TError,
+        SendAdminSupportMessageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendAdminSupportMessageMutationOptions(options));
+    }
+
+export const getReadAdminSupportMessagesUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/support/${userId}/read`
+}
+
+export const readAdminSupportMessages = async (userId: number,
+    supportReadInput: SupportReadInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getReadAdminSupportMessagesUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(supportReadInput)
+  }
+);}
+
+
+
+
+
+export const getReadAdminSupportMessagesMutationKey = () => ['readAdminSupportMessages'] as const;
+
+export const getReadAdminSupportMessagesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readAdminSupportMessages>>, TError,ReadAdminSupportMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof readAdminSupportMessages>>, TError,ReadAdminSupportMessagesMutationVariables, TContext> => {
+
+const mutationKey = getReadAdminSupportMessagesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof readAdminSupportMessages>>, ReadAdminSupportMessagesMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  readAdminSupportMessages(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReadAdminSupportMessagesMutationResult = NonNullable<Awaited<ReturnType<typeof readAdminSupportMessages>>>
+    export type ReadAdminSupportMessagesMutationBody = BodyType<SupportReadInput>
+    export type ReadAdminSupportMessagesMutationError = ErrorType<unknown>
+    export type ReadAdminSupportMessagesMutationVariables = {userId: number;data: BodyType<SupportReadInput>}
+
+    export const useReadAdminSupportMessages = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readAdminSupportMessages>>, TError,ReadAdminSupportMessagesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof readAdminSupportMessages>>,
+        TError,
+        ReadAdminSupportMessagesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReadAdminSupportMessagesMutationOptions(options));
+    }
+
+export const getStreamAdminSupportEventsUrl = () => {
+
+
+
+
+  return `/api/admin/support/events`
+}
+
+export const streamAdminSupportEvents = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getStreamAdminSupportEventsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamAdminSupportEventsQueryKey = () => {
+    return [
+    `/api/admin/support/events`
+    ] as const;
+    }
+
+
+export const getStreamAdminSupportEventsQueryOptions = <TData = Awaited<ReturnType<typeof streamAdminSupportEvents>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamAdminSupportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamAdminSupportEventsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamAdminSupportEvents>>> = ({ signal }) => streamAdminSupportEvents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamAdminSupportEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StreamAdminSupportEventsQueryResult = NonNullable<Awaited<ReturnType<typeof streamAdminSupportEvents>>>
+export type StreamAdminSupportEventsQueryError = ErrorType<unknown>
+
+
+
+export function useStreamAdminSupportEvents<TData = Awaited<ReturnType<typeof streamAdminSupportEvents>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamAdminSupportEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStreamAdminSupportEventsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 
@@ -337,6 +1223,94 @@ export const useLogin = <TError = ErrorType<ErrorResponse>,
       return useMutation(getLoginMutationOptions(options));
     }
 
+export const getChangeMemberPasswordUrl = () => {
+
+
+
+
+  return `/api/auth/password`
+}
+
+/**
+ * @summary 현재 비밀번호 확인 후 회원 비밀번호 변경 및 회원 세션 해제
+ */
+export const changeMemberPassword = async (memberPasswordInput: MemberPasswordInput, options?: Parameters<typeof customFetch>[1]): Promise<MemberPasswordChanged> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MemberPasswordChanged>(getChangeMemberPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memberPasswordInput)
+  }
+);}
+
+
+
+
+
+export const getChangeMemberPasswordMutationKey = () => ['changeMemberPassword'] as const;
+
+export const getChangeMemberPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMemberPassword>>, TError,ChangeMemberPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeMemberPassword>>, TError,ChangeMemberPasswordMutationVariables, TContext> => {
+
+const mutationKey = getChangeMemberPasswordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeMemberPassword>>, ChangeMemberPasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  changeMemberPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeMemberPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changeMemberPassword>>>
+    export type ChangeMemberPasswordMutationBody = BodyType<MemberPasswordInput>
+    export type ChangeMemberPasswordMutationError = ErrorType<void>
+    export type ChangeMemberPasswordMutationVariables = {data: BodyType<MemberPasswordInput>}
+
+    /**
+ * @summary 현재 비밀번호 확인 후 회원 비밀번호 변경 및 회원 세션 해제
+ */
+export const useChangeMemberPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMemberPassword>>, TError,ChangeMemberPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeMemberPassword>>,
+        TError,
+        ChangeMemberPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getChangeMemberPasswordMutationOptions(options));
+    }
+
 export const getLogoutUrl = () => {
 
 
@@ -410,6 +1384,83 @@ export const useLogout = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getLogoutMutationOptions(options));
     }
+
+export const getGetAdminMeUrl = () => {
+
+
+
+
+  return `/api/admin/me`
+}
+
+/**
+ * @summary 관리자 전용 세션으로 로그인 상태 확인
+ */
+export const getAdminMe = async ( options?: Parameters<typeof customFetch>[1]): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getGetAdminMeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminMeQueryKey = () => {
+    return [
+    `/api/admin/me`
+    ] as const;
+    }
+
+
+export const getGetAdminMeQueryOptions = <TData = Awaited<ReturnType<typeof getAdminMe>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminMeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminMe>>> = ({ signal }) => getAdminMe({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminMe>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminMeQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminMe>>>
+export type GetAdminMeQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary 관리자 전용 세션으로 로그인 상태 확인
+ */
+
+export function useGetAdminMe<TData = Awaited<ReturnType<typeof getAdminMe>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminMeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMeUrl = () => {
 
@@ -487,6 +1538,171 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getGetMemberProfileUrl = () => {
+
+
+
+
+  return `/api/auth/profile`
+}
+
+/**
+ * @summary 로그인한 회원 본인의 개인정보 조회
+ */
+export const getMemberProfile = async ( options?: Parameters<typeof customFetch>[1]): Promise<MemberProfile> => {
+
+  return customFetch<MemberProfile>(getGetMemberProfileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMemberProfileQueryKey = () => {
+    return [
+    `/api/auth/profile`
+    ] as const;
+    }
+
+
+export const getGetMemberProfileQueryOptions = <TData = Awaited<ReturnType<typeof getMemberProfile>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemberProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMemberProfileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemberProfile>>> = ({ signal }) => getMemberProfile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemberProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMemberProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getMemberProfile>>>
+export type GetMemberProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary 로그인한 회원 본인의 개인정보 조회
+ */
+
+export function useGetMemberProfile<TData = Awaited<ReturnType<typeof getMemberProfile>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemberProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMemberProfileQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateMemberProfileUrl = () => {
+
+
+
+
+  return `/api/auth/profile`
+}
+
+/**
+ * @summary 회원 본인의 이름·휴대폰·계좌정보 저장
+ */
+export const updateMemberProfile = async (memberProfile: MemberProfile, options?: Parameters<typeof customFetch>[1]): Promise<MemberProfile> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MemberProfile>(getUpdateMemberProfileUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memberProfile)
+  }
+);}
+
+
+
+
+
+export const getUpdateMemberProfileMutationKey = () => ['updateMemberProfile'] as const;
+
+export const getUpdateMemberProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemberProfile>>, TError,UpdateMemberProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMemberProfile>>, TError,UpdateMemberProfileMutationVariables, TContext> => {
+
+const mutationKey = getUpdateMemberProfileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMemberProfile>>, UpdateMemberProfileMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateMemberProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMemberProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateMemberProfile>>>
+    export type UpdateMemberProfileMutationBody = BodyType<MemberProfile>
+    export type UpdateMemberProfileMutationError = ErrorType<void>
+    export type UpdateMemberProfileMutationVariables = {data: BodyType<MemberProfile>}
+
+    /**
+ * @summary 회원 본인의 이름·휴대폰·계좌정보 저장
+ */
+export const useUpdateMemberProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemberProfile>>, TError,UpdateMemberProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMemberProfile>>,
+        TError,
+        UpdateMemberProfileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateMemberProfileMutationOptions(options));
+    }
 
 export const getGetWalletUrl = () => {
 
@@ -1388,20 +2604,27 @@ export const useCancelOrder = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCancelOrderMutationOptions(options));
     }
 
-export const getListChatRoomsUrl = () => {
+export const getListChatRoomsUrl = (params?: ListChatRoomsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/chat/rooms`
+  return stringifiedParams.length > 0 ? `/api/chat/rooms?${stringifiedParams}` : `/api/chat/rooms`
 }
 
 /**
  * @summary 내 채팅방 목록
  */
-export const listChatRooms = async ( options?: Parameters<typeof customFetch>[1]): Promise<ChatRoom[]> => {
+export const listChatRooms = async (params?: ListChatRoomsParams, options?: Parameters<typeof customFetch>[1]): Promise<ChatRoom[]> => {
 
-  return customFetch<ChatRoom[]>(getListChatRoomsUrl(),
+  return customFetch<ChatRoom[]>(getListChatRoomsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1414,23 +2637,23 @@ export const listChatRooms = async ( options?: Parameters<typeof customFetch>[1]
 
 
 
-export const getListChatRoomsQueryKey = () => {
+export const getListChatRoomsQueryKey = (params?: ListChatRoomsParams,) => {
     return [
-    `/api/chat/rooms`
+    `/api/chat/rooms`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof listChatRooms>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof listChatRooms>>, TError = ErrorType<ErrorResponse>>(params?: ListChatRoomsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListChatRoomsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListChatRoomsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listChatRooms>>> = ({ signal }) => listChatRooms({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listChatRooms>>> = ({ signal }) => listChatRooms(params, { signal, ...requestOptions });
 
 
 
@@ -1448,11 +2671,11 @@ export type ListChatRoomsQueryError = ErrorType<ErrorResponse>
  */
 
 export function useListChatRooms<TData = Awaited<ReturnType<typeof listChatRooms>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListChatRoomsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListChatRoomsQueryOptions(options)
+  const queryOptions = getListChatRoomsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1552,6 +2775,80 @@ export const useUpdateChatRoom = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateChatRoomMutationOptions(options));
+    }
+
+export const getDismissChatRoomUrl = (roomId: number,) => {
+
+
+
+
+  return `/api/chat/rooms/${roomId}/dismiss`
+}
+
+/**
+ * @summary Close this participant's chat list entry without cancelling a trade
+ */
+export const dismissChatRoom = async (roomId: number, options?: Parameters<typeof customFetch>[1]): Promise<DismissChatRoom200> => {
+
+  return customFetch<DismissChatRoom200>(getDismissChatRoomUrl(roomId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDismissChatRoomMutationKey = () => ['dismissChatRoom'] as const;
+
+export const getDismissChatRoomMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissChatRoom>>, TError,DismissChatRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof dismissChatRoom>>, TError,DismissChatRoomMutationVariables, TContext> => {
+
+const mutationKey = getDismissChatRoomMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dismissChatRoom>>, DismissChatRoomMutationVariables> = (props) => {
+          const {roomId} = props ?? {};
+
+          return  dismissChatRoom(roomId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DismissChatRoomMutationResult = NonNullable<Awaited<ReturnType<typeof dismissChatRoom>>>
+
+    export type DismissChatRoomMutationError = ErrorType<ErrorResponse>
+    export type DismissChatRoomMutationVariables = {roomId: number}
+
+    /**
+ * @summary Close this participant's chat list entry without cancelling a trade
+ */
+export const useDismissChatRoom = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dismissChatRoom>>, TError,DismissChatRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof dismissChatRoom>>,
+        TError,
+        DismissChatRoomMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDismissChatRoomMutationOptions(options));
     }
 
 export const getGetChatMessagesUrl = (roomId: number,) => {
@@ -1969,6 +3266,258 @@ export function useAdminListUsers<TData = Awaited<ReturnType<typeof adminListUse
 
 
 
+export const getAdminRemoveMemberUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/users/${userId}`
+}
+
+/**
+ * @summary 회원 비활성화 및 목록 삭제 (잔액·거래·대화 보존)
+ */
+export const adminRemoveMember = async (userId: number, options?: Parameters<typeof customFetch>[1]): Promise<AdminRemoveMember200> => {
+
+  return customFetch<AdminRemoveMember200>(getAdminRemoveMemberUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminRemoveMemberMutationKey = () => ['adminRemoveMember'] as const;
+
+export const getAdminRemoveMemberMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveMember>>, TError,AdminRemoveMemberMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminRemoveMember>>, TError,AdminRemoveMemberMutationVariables, TContext> => {
+
+const mutationKey = getAdminRemoveMemberMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminRemoveMember>>, AdminRemoveMemberMutationVariables> = (props) => {
+          const {userId} = props ?? {};
+
+          return  adminRemoveMember(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminRemoveMemberMutationResult = NonNullable<Awaited<ReturnType<typeof adminRemoveMember>>>
+
+    export type AdminRemoveMemberMutationError = ErrorType<ErrorResponse>
+    export type AdminRemoveMemberMutationVariables = {userId: number}
+
+    /**
+ * @summary 회원 비활성화 및 목록 삭제 (잔액·거래·대화 보존)
+ */
+export const useAdminRemoveMember = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveMember>>, TError,AdminRemoveMemberMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminRemoveMember>>,
+        TError,
+        AdminRemoveMemberMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminRemoveMemberMutationOptions(options));
+    }
+
+export const getAdminResetMemberPasswordUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/users/${userId}/password-reset`
+}
+
+/**
+ * @summary 관리자 재인증 후 회원 임시 비밀번호 발급 (한 번만 반환, 저장하지 않음)
+ */
+export const adminResetMemberPassword = async (userId: number,
+    memberPasswordResetInput: MemberPasswordResetInput, options?: Parameters<typeof customFetch>[1]): Promise<MemberPasswordResetResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MemberPasswordResetResult>(getAdminResetMemberPasswordUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memberPasswordResetInput)
+  }
+);}
+
+
+
+
+
+export const getAdminResetMemberPasswordMutationKey = () => ['adminResetMemberPassword'] as const;
+
+export const getAdminResetMemberPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminResetMemberPassword>>, TError,AdminResetMemberPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminResetMemberPassword>>, TError,AdminResetMemberPasswordMutationVariables, TContext> => {
+
+const mutationKey = getAdminResetMemberPasswordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminResetMemberPassword>>, AdminResetMemberPasswordMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  adminResetMemberPassword(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminResetMemberPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof adminResetMemberPassword>>>
+    export type AdminResetMemberPasswordMutationBody = BodyType<MemberPasswordResetInput>
+    export type AdminResetMemberPasswordMutationError = ErrorType<void>
+    export type AdminResetMemberPasswordMutationVariables = {userId: number;data: BodyType<MemberPasswordResetInput>}
+
+    /**
+ * @summary 관리자 재인증 후 회원 임시 비밀번호 발급 (한 번만 반환, 저장하지 않음)
+ */
+export const useAdminResetMemberPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminResetMemberPassword>>, TError,AdminResetMemberPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminResetMemberPassword>>,
+        TError,
+        AdminResetMemberPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminResetMemberPasswordMutationOptions(options));
+    }
+
+export const getAdminChangeMemberBalanceUrl = (userId: number,) => {
+
+
+
+
+  return `/api/admin/users/${userId}/balance`
+}
+
+/**
+ * @summary 회원 마일리지 추가 또는 최종 잔액 직접 설정
+ */
+export const adminChangeMemberBalance = async (userId: number,
+    memberBalanceRequest: MemberBalanceRequest, options?: Parameters<typeof customFetch>[1]): Promise<AdminChangeMemberBalance200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminChangeMemberBalance200>(getAdminChangeMemberBalanceUrl(userId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memberBalanceRequest)
+  }
+);}
+
+
+
+
+
+export const getAdminChangeMemberBalanceMutationKey = () => ['adminChangeMemberBalance'] as const;
+
+export const getAdminChangeMemberBalanceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminChangeMemberBalance>>, TError,AdminChangeMemberBalanceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminChangeMemberBalance>>, TError,AdminChangeMemberBalanceMutationVariables, TContext> => {
+
+const mutationKey = getAdminChangeMemberBalanceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminChangeMemberBalance>>, AdminChangeMemberBalanceMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  adminChangeMemberBalance(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminChangeMemberBalanceMutationResult = NonNullable<Awaited<ReturnType<typeof adminChangeMemberBalance>>>
+    export type AdminChangeMemberBalanceMutationBody = BodyType<MemberBalanceRequest>
+    export type AdminChangeMemberBalanceMutationError = ErrorType<ErrorResponse>
+    export type AdminChangeMemberBalanceMutationVariables = {userId: number;data: BodyType<MemberBalanceRequest>}
+
+    /**
+ * @summary 회원 마일리지 추가 또는 최종 잔액 직접 설정
+ */
+export const useAdminChangeMemberBalance = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminChangeMemberBalance>>, TError,AdminChangeMemberBalanceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminChangeMemberBalance>>,
+        TError,
+        AdminChangeMemberBalanceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminChangeMemberBalanceMutationOptions(options));
+    }
+
 export const getAdminSetUserSuspensionUrl = (userId: number,) => {
 
 
@@ -2076,9 +3625,9 @@ export const getAdminListOrdersUrl = (params?: AdminListOrdersParams,) => {
 /**
  * @summary 전체 주문 목록
  */
-export const adminListOrders = async (params?: AdminListOrdersParams, options?: Parameters<typeof customFetch>[1]): Promise<Order[]> => {
+export const adminListOrders = async (params?: AdminListOrdersParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminOrder[]> => {
 
-  return customFetch<Order[]>(getAdminListOrdersUrl(params),
+  return customFetch<AdminOrder[]>(getAdminListOrdersUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2141,6 +3690,154 @@ export function useAdminListOrders<TData = Awaited<ReturnType<typeof adminListOr
 
 
 
+
+export const getAdminDeleteOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/orders/${id}`
+}
+
+/**
+ * @summary 완료 또는 취소된 주문을 관리자 목록에서 삭제하고 정산 기록 보존
+ */
+export const adminDeleteOrder = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AdminDeleteOrder200> => {
+
+  return customFetch<AdminDeleteOrder200>(getAdminDeleteOrderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminDeleteOrderMutationKey = () => ['adminDeleteOrder'] as const;
+
+export const getAdminDeleteOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminDeleteOrder>>, TError,AdminDeleteOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminDeleteOrder>>, TError,AdminDeleteOrderMutationVariables, TContext> => {
+
+const mutationKey = getAdminDeleteOrderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminDeleteOrder>>, AdminDeleteOrderMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminDeleteOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminDeleteOrderMutationResult = NonNullable<Awaited<ReturnType<typeof adminDeleteOrder>>>
+
+    export type AdminDeleteOrderMutationError = ErrorType<void>
+    export type AdminDeleteOrderMutationVariables = {id: number}
+
+    /**
+ * @summary 완료 또는 취소된 주문을 관리자 목록에서 삭제하고 정산 기록 보존
+ */
+export const useAdminDeleteOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminDeleteOrder>>, TError,AdminDeleteOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminDeleteOrder>>,
+        TError,
+        AdminDeleteOrderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminDeleteOrderMutationOptions(options));
+    }
+
+export const getAdminHideOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/orders/${id}/list-entry`
+}
+
+/**
+ * @summary 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거하고 원본 기록 보존
+ */
+export const adminHideOrder = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AdminHideOrder200> => {
+
+  return customFetch<AdminHideOrder200>(getAdminHideOrderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminHideOrderMutationKey = () => ['adminHideOrder'] as const;
+
+export const getAdminHideOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideOrder>>, TError,AdminHideOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminHideOrder>>, TError,AdminHideOrderMutationVariables, TContext> => {
+
+const mutationKey = getAdminHideOrderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminHideOrder>>, AdminHideOrderMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminHideOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminHideOrderMutationResult = NonNullable<Awaited<ReturnType<typeof adminHideOrder>>>
+
+    export type AdminHideOrderMutationError = ErrorType<void>
+    export type AdminHideOrderMutationVariables = {id: number}
+
+    /**
+ * @summary 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거하고 원본 기록 보존
+ */
+export const useAdminHideOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideOrder>>, TError,AdminHideOrderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminHideOrder>>,
+        TError,
+        AdminHideOrderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminHideOrderMutationOptions(options));
+    }
 
 export const getAdminListWithdrawalsUrl = (params?: AdminListWithdrawalsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -2226,6 +3923,81 @@ export function useAdminListWithdrawals<TData = Awaited<ReturnType<typeof adminL
 
 
 
+export const getAdminHideInactiveProductUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/products/${id}/list-entry`
+}
+
+/**
+ * Requires an active administrator session. Inactive listings only; retain the original product, orders, chats and settlement evidence. Idempotent without changing business timestamps.
+ * @summary 비활성 상품을 관리자 목록에서만 삭제
+ */
+export const adminHideInactiveProduct = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<InactiveProductRemovalResult> => {
+
+  return customFetch<InactiveProductRemovalResult>(getAdminHideInactiveProductUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminHideInactiveProductMutationKey = () => ['adminHideInactiveProduct'] as const;
+
+export const getAdminHideInactiveProductMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideInactiveProduct>>, TError,AdminHideInactiveProductMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminHideInactiveProduct>>, TError,AdminHideInactiveProductMutationVariables, TContext> => {
+
+const mutationKey = getAdminHideInactiveProductMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminHideInactiveProduct>>, AdminHideInactiveProductMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminHideInactiveProduct(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminHideInactiveProductMutationResult = NonNullable<Awaited<ReturnType<typeof adminHideInactiveProduct>>>
+
+    export type AdminHideInactiveProductMutationError = ErrorType<void>
+    export type AdminHideInactiveProductMutationVariables = {id: number}
+
+    /**
+ * @summary 비활성 상품을 관리자 목록에서만 삭제
+ */
+export const useAdminHideInactiveProduct = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideInactiveProduct>>, TError,AdminHideInactiveProductMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminHideInactiveProduct>>,
+        TError,
+        AdminHideInactiveProductMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminHideInactiveProductMutationOptions(options));
+    }
+
 export const getAdminListProductsUrl = () => {
 
 
@@ -2303,20 +4075,27 @@ export function useAdminListProducts<TData = Awaited<ReturnType<typeof adminList
 
 
 
-export const getAdminListChatRoomsUrl = () => {
+export const getAdminListChatRoomsUrl = (params?: AdminListChatRoomsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/admin/chat-rooms`
+  return stringifiedParams.length > 0 ? `/api/admin/chat-rooms?${stringifiedParams}` : `/api/admin/chat-rooms`
 }
 
 /**
  * @summary 전체 채팅 거래 내역
  */
-export const adminListChatRooms = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminChatRoom[]> => {
+export const adminListChatRooms = async (params?: AdminListChatRoomsParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminChatRoom[]> => {
 
-  return customFetch<AdminChatRoom[]>(getAdminListChatRoomsUrl(),
+  return customFetch<AdminChatRoom[]>(getAdminListChatRoomsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2329,23 +4108,23 @@ export const adminListChatRooms = async ( options?: Parameters<typeof customFetc
 
 
 
-export const getAdminListChatRoomsQueryKey = () => {
+export const getAdminListChatRoomsQueryKey = (params?: AdminListChatRoomsParams,) => {
     return [
-    `/api/admin/chat-rooms`
+    `/api/admin/chat-rooms`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getAdminListChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof adminListChatRooms>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getAdminListChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof adminListChatRooms>>, TError = ErrorType<ErrorResponse>>(params?: AdminListChatRoomsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getAdminListChatRoomsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getAdminListChatRoomsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListChatRooms>>> = ({ signal }) => adminListChatRooms({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminListChatRooms>>> = ({ signal }) => adminListChatRooms(params, { signal, ...requestOptions });
 
 
 
@@ -2363,11 +4142,11 @@ export type AdminListChatRoomsQueryError = ErrorType<ErrorResponse>
  */
 
 export function useAdminListChatRooms<TData = Awaited<ReturnType<typeof adminListChatRooms>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: AdminListChatRoomsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminListChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getAdminListChatRoomsQueryOptions(options)
+  const queryOptions = getAdminListChatRoomsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2389,7 +4168,7 @@ export const getAdminDeleteChatRoomUrl = (id: number,) => {
 }
 
 /**
- * @summary 주문에 연결되지 않은 채팅방과 메시지 영구 삭제
+ * @summary 종료된 주문 연결 채팅 또는 주문 없는 문의를 관리자 목록에서 삭제하고 메시지 보존
  */
 export const adminDeleteChatRoom = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AdminDeleteChatRoom200> => {
 
@@ -2441,7 +4220,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type AdminDeleteChatRoomMutationVariables = {id: number}
 
     /**
- * @summary 주문에 연결되지 않은 채팅방과 메시지 영구 삭제
+ * @summary 종료된 주문 연결 채팅 또는 주문 없는 문의를 관리자 목록에서 삭제하고 메시지 보존
  */
 export const useAdminDeleteChatRoom = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminDeleteChatRoom>>, TError,AdminDeleteChatRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2452,6 +4231,155 @@ export const useAdminDeleteChatRoom = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAdminDeleteChatRoomMutationOptions(options));
+    }
+
+export const getAdminHideChatRoomUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/chat-rooms/${id}/list-entry`
+}
+
+/**
+ * @summary 삭제된 채팅거래를 관리자 목록에서 제거하고 대화·거래·정산 원본 보존
+ */
+export const adminHideChatRoom = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AdminHideChatRoom200> => {
+
+  return customFetch<AdminHideChatRoom200>(getAdminHideChatRoomUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminHideChatRoomMutationKey = () => ['adminHideChatRoom'] as const;
+
+export const getAdminHideChatRoomMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideChatRoom>>, TError,AdminHideChatRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminHideChatRoom>>, TError,AdminHideChatRoomMutationVariables, TContext> => {
+
+const mutationKey = getAdminHideChatRoomMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminHideChatRoom>>, AdminHideChatRoomMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminHideChatRoom(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminHideChatRoomMutationResult = NonNullable<Awaited<ReturnType<typeof adminHideChatRoom>>>
+
+    export type AdminHideChatRoomMutationError = ErrorType<void>
+    export type AdminHideChatRoomMutationVariables = {id: number}
+
+    /**
+ * @summary 삭제된 채팅거래를 관리자 목록에서 제거하고 대화·거래·정산 원본 보존
+ */
+export const useAdminHideChatRoom = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminHideChatRoom>>, TError,AdminHideChatRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminHideChatRoom>>,
+        TError,
+        AdminHideChatRoomMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminHideChatRoomMutationOptions(options));
+    }
+
+export const getAdminRemoveWithdrawalUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/withdrawals/${id}`
+}
+
+/**
+ * Active administrator session required. Pending withdrawals cannot be removed. Preserve member history, status, amounts and balances. Repeated deletion is idempotent.
+ * @summary 처리된 출금 신청을 관리자 목록에서만 삭제
+ */
+export const adminRemoveWithdrawal = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<WithdrawalListRemovalResult> => {
+
+  return customFetch<WithdrawalListRemovalResult>(getAdminRemoveWithdrawalUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminRemoveWithdrawalMutationKey = () => ['adminRemoveWithdrawal'] as const;
+
+export const getAdminRemoveWithdrawalMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveWithdrawal>>, TError,AdminRemoveWithdrawalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminRemoveWithdrawal>>, TError,AdminRemoveWithdrawalMutationVariables, TContext> => {
+
+const mutationKey = getAdminRemoveWithdrawalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminRemoveWithdrawal>>, AdminRemoveWithdrawalMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminRemoveWithdrawal(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminRemoveWithdrawalMutationResult = NonNullable<Awaited<ReturnType<typeof adminRemoveWithdrawal>>>
+
+    export type AdminRemoveWithdrawalMutationError = ErrorType<void>
+    export type AdminRemoveWithdrawalMutationVariables = {id: number}
+
+    /**
+ * @summary 처리된 출금 신청을 관리자 목록에서만 삭제
+ */
+export const useAdminRemoveWithdrawal = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRemoveWithdrawal>>, TError,AdminRemoveWithdrawalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminRemoveWithdrawal>>,
+        TError,
+        AdminRemoveWithdrawalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAdminRemoveWithdrawalMutationOptions(options));
     }
 
 export const getAdminUpdateWithdrawalUrl = (id: number,) => {

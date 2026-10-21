@@ -5,6 +5,150 @@
  * 아이템마니아 클론 API
  * OpenAPI spec version: 0.1.0
  */
+export interface InactiveProductRemovalResult {
+  ok: boolean;
+  hidden: boolean;
+  preserved: boolean;
+}
+
+export interface WithdrawalListRemovalResult {
+  ok: boolean;
+  preserved: boolean;
+}
+
+export interface MemberPasswordInput {
+  /** @maxLength 128 */
+  currentPassword: string;
+  /**
+     * @minLength 8
+     * @maxLength 16
+     */
+  newPassword: string;
+}
+
+export interface MemberPasswordChanged {
+  ok: boolean;
+  message: string;
+}
+
+export interface MemberPasswordResetInput {
+  /** 관리자에 의한 회원 본인 확인 완료 */
+  identityVerified: boolean;
+  /** @maxLength 128 */
+  adminPassword: string;
+}
+
+export interface MemberPasswordResetResult {
+  userId: number;
+  /** 발급 시에만 반환하는 16자 임시 비밀번호 */
+  temporaryPassword: string;
+}
+
+export interface SupportMessageInput {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  body: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  clientId: string;
+  /**
+     * Optional identity-change precondition
+     * @minimum 1
+     */
+  expectedUserId?: number;
+  /**
+     * Optional first-message generation; prevents replay into a deleted conversation
+     * @minimum 0
+     */
+  expectedConversationId?: number;
+}
+
+export interface SupportRemovalInput {
+  /** @minimum 0 */
+  lastMessageId: number;
+}
+
+export interface SupportRemovalResult {
+  ok: boolean;
+  deletedMessages: number;
+}
+
+export interface SupportReadInput {
+  /** @minimum 0 */
+  messageId: number;
+}
+
+export interface SupportSummary {
+  unreadCount: number;
+  latestMessageId: number;
+  /** First message ID of the current conversation or zero */
+  conversationId: number;
+}
+
+export type SupportMessageSender = typeof SupportMessageSender[keyof typeof SupportMessageSender];
+
+
+export const SupportMessageSender = {
+  member: 'member',
+  admin: 'admin',
+} as const;
+
+export interface SupportMessage {
+  id: number;
+  userId: number;
+  sender: SupportMessageSender;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface SupportSendResult {
+  message: SupportMessage;
+}
+
+export interface SupportMember {
+  id: number;
+  nickname: string;
+  /** @nullable */
+  deletedAt: string | null;
+  /** @nullable */
+  suspendedAt: string | null;
+}
+
+export interface SupportHistory {
+  messages: SupportMessage[];
+  hasMore: boolean;
+  latestMessageId: number;
+  unreadCount: number;
+  member: SupportMember;
+  conversationId: number;
+}
+
+export interface SupportConversation {
+  userId: number;
+  nickname: string;
+  email: string;
+  /** @nullable */
+  deletedAt: string | null;
+  /** @nullable */
+  suspendedAt: string | null;
+  lastMessageId: number;
+  latestMemberMessageId?: number;
+  lastMessagePreview: string;
+  updatedAt: string;
+  unreadCount: number;
+}
+
+export interface SupportConversationPage {
+  conversations: SupportConversation[];
+  hasMore: boolean;
+  latestMemberMessageId: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -130,11 +274,18 @@ export interface Product {
   sellerName?: string | null;
   /** @nullable */
   description?: string | null;
+  /** 등록한 수량·범위·단위. 과거 수량이 저장되지 않은 물품은 '-'로 표시. */
+  quantityLabel?: string;
   /** @nullable */
   thumbnailUrl?: string | null;
   /** @nullable */
   detailUrl?: string | null;
   status: ProductStatus;
+  /**
+     * 서버에 누적 저장된 상세 페이지 조회수
+     * @minimum 0
+     */
+  viewCount?: number;
   crawledAt: string;
 }
 
@@ -197,8 +348,24 @@ export interface ChatRoom {
   createdAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type ChatRoomDetailBuyerAuthStates = {[key: string]: boolean} | null;
+
+/**
+ * @nullable
+ */
+export type ChatRoomDetailSellerAuthStates = {[key: string]: boolean} | null;
+
 export interface ChatRoomDetail {
   id: number;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderCreatedAt?: string | null;
+  createdAt: string;
+  tradeInfo: string;
   buyerId: number;
   sellerId: number;
   /** @nullable */
@@ -209,11 +376,45 @@ export interface ChatRoomDetail {
   /** @nullable */
   productPrice?: number | null;
   /** @nullable */
+  productCreatedAt?: string | null;
+  /** @nullable */
+  productItemmaniaId?: string | null;
+  /** @nullable */
+  productItemCategory?: string | null;
+  /** @nullable */
+  productDescription?: string | null;
+  /** @nullable */
+  productCategory?: string | null;
+  /** @nullable */
   characterName?: string | null;
+  /** @nullable */
+  buyerCharacterName?: string | null;
+  /** @nullable */
+  sellerCharacterName?: string | null;
   /** @nullable */
   goodsType?: string | null;
   buyerNickname: string;
   sellerNickname: string;
+  /** @nullable */
+  buyerName?: string | null;
+  /** @nullable */
+  buyerPhone?: string | null;
+  /** @nullable */
+  sellerName?: string | null;
+  /** @nullable */
+  sellerPhone?: string | null;
+  /** @nullable */
+  buyerGrade?: string | null;
+  /** @nullable */
+  sellerGrade?: string | null;
+  /** @nullable */
+  buyerCreditScore?: number | null;
+  /** @nullable */
+  sellerCreditScore?: number | null;
+  /** @nullable */
+  buyerAuthStates?: ChatRoomDetailBuyerAuthStates;
+  /** @nullable */
+  sellerAuthStates?: ChatRoomDetailSellerAuthStates;
   /** @nullable */
   gameName?: string | null;
   /** @nullable */
@@ -286,10 +487,28 @@ export interface AdminProduct {
   createdAt: string;
 }
 
+export type AdminOrder = Order & ({
+  canDelete: boolean;
+  /** 이미 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거할 수 있는지 여부 */
+  canHide: boolean;
+  /** @nullable */
+  adminDeletedAt: string | null;
+  /** @nullable */
+  adminDeletedBy: string | null;
+});
+
 export interface AdminChatRoom {
   id: number;
-  /** 주문에 연결되지 않아 삭제할 수 있는 채팅방인지 여부 */
+  /** 종료된 주문 연결 거래 또는 주문 없는 문의로 관리자 목록 삭제가 가능한지 여부 */
   canDelete: boolean;
+  /** 이미 삭제된 거래를 삭제 항목 포함 목록에서도 제거할 수 있는지 여부 */
+  canHide: boolean;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  adminDeletedAt?: string | null;
+  /** @nullable */
+  adminDeletedBy?: string | null;
   sellerId: number;
   buyerId: number;
   /** @nullable */
@@ -302,6 +521,34 @@ export interface AdminChatRoom {
   amount?: number | null;
   status: string;
   createdAt: string;
+}
+
+export interface MemberProfile {
+  /**
+     * @maxLength 50
+     * @nullable
+     */
+  name: string | null;
+  /**
+     * @maxLength 30
+     * @nullable
+     */
+  phone: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  bankName: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  bankAccountNumber: string | null;
+  /**
+     * @maxLength 50
+     * @nullable
+     */
+  bankAccountHolder: string | null;
 }
 
 export interface RegistrationPolicy {
@@ -334,13 +581,55 @@ export interface AdminUser {
   /** @nullable */
   suspendedAt?: string | null;
   /** @nullable */
+  deletedAt?: string | null;
+  /** @nullable */
   balance?: number | null;
   createdAt: string;
+}
+
+export type MemberBalanceRequestMode = typeof MemberBalanceRequestMode[keyof typeof MemberBalanceRequestMode];
+
+
+export const MemberBalanceRequestMode = {
+  add: 'add',
+  set: 'set',
+} as const;
+
+export interface MemberBalanceRequest {
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  amount: number;
+  mode: MemberBalanceRequestMode;
 }
 
 export interface AdminSuspensionRequest {
   suspended: boolean;
 }
+
+export type GetSupportMessagesParams = {
+/**
+ * @minimum 0
+ */
+afterId?: number;
+/**
+ * @minimum 1
+ */
+beforeId?: number;
+};
+
+export type ListSupportConversationsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 1
+ */
+beforeId?: number;
+};
 
 export type ListProductsParams = {
 page?: number;
@@ -362,9 +651,46 @@ export const ListOrdersRole = {
   seller: 'seller',
 } as const;
 
+export type ListChatRoomsParams = {
+/**
+ * 마이룸 거래 조회용. 본인이 닫은 채팅도 포함하며 참여자 범위는 유지합니다.
+ */
+includeDismissed?: ListChatRoomsIncludeDismissed;
+};
+
+export type ListChatRoomsIncludeDismissed = typeof ListChatRoomsIncludeDismissed[keyof typeof ListChatRoomsIncludeDismissed];
+
+
+export const ListChatRoomsIncludeDismissed = {
+  NUMBER_1: '1',
+} as const;
+
+export type DismissChatRoom200 = {
+  success: boolean;
+};
+
 export type AdminListUsersParams = {
+includeDeleted?: AdminListUsersIncludeDeleted;
 page?: number;
 limit?: number;
+};
+
+export type AdminListUsersIncludeDeleted = typeof AdminListUsersIncludeDeleted[keyof typeof AdminListUsersIncludeDeleted];
+
+
+export const AdminListUsersIncludeDeleted = {
+  NUMBER_0: 0,
+  NUMBER_1: 1,
+} as const;
+
+export type AdminRemoveMember200 = {
+  ok: boolean;
+  archived: boolean;
+  message: string;
+};
+
+export type AdminChangeMemberBalance200 = {
+  balance: number;
 };
 
 export type AdminSetUserSuspension200 = {
@@ -376,6 +702,24 @@ export type AdminSetUserSuspension200 = {
 export type AdminListOrdersParams = {
 page?: number;
 status?: string;
+includeDeleted?: AdminListOrdersIncludeDeleted;
+};
+
+export type AdminListOrdersIncludeDeleted = typeof AdminListOrdersIncludeDeleted[keyof typeof AdminListOrdersIncludeDeleted];
+
+
+export const AdminListOrdersIncludeDeleted = {
+  NUMBER_1: '1',
+} as const;
+
+export type AdminDeleteOrder200 = {
+  ok: boolean;
+  preserved: boolean;
+};
+
+export type AdminHideOrder200 = {
+  ok: boolean;
+  preserved: boolean;
 };
 
 export type AdminListWithdrawalsParams = {
@@ -391,7 +735,24 @@ export const AdminListWithdrawalsStatus = {
   rejected: 'rejected',
 } as const;
 
+export type AdminListChatRoomsParams = {
+includeDeleted?: AdminListChatRoomsIncludeDeleted;
+};
+
+export type AdminListChatRoomsIncludeDeleted = typeof AdminListChatRoomsIncludeDeleted[keyof typeof AdminListChatRoomsIncludeDeleted];
+
+
+export const AdminListChatRoomsIncludeDeleted = {
+  NUMBER_1: '1',
+} as const;
+
 export type AdminDeleteChatRoom200 = {
   ok: boolean;
+  preserved: boolean;
+};
+
+export type AdminHideChatRoom200 = {
+  ok: boolean;
+  preserved: boolean;
 };
 

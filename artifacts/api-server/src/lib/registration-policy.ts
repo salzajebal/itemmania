@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db, registrationSettingsTable, usersTable, walletsTable } from "@workspace/db";
+import { db, memberPasswordOriginalsTable, registrationSettingsTable, usersTable, walletsTable } from "@workspace/db";
 
 const POLICY_KEY = "new_members";
 // Shared by every member-creation path and the administrator's policy update.
@@ -31,7 +31,7 @@ export async function setRegistrationPolicy(blocked: boolean) {
   });
 }
 
-export async function createMemberAccount(values: typeof usersTable.$inferInsert) {
+export async function createMemberAccount(values: typeof usersTable.$inferInsert, originalPassword?: string) {
   return db.transaction(async tx => {
     await tx.execute(policyLock);
     const [existing] = await tx.select().from(usersTable).where(eq(usersTable.email, values.email));
@@ -40,6 +40,9 @@ export async function createMemberAccount(values: typeof usersTable.$inferInsert
       .where(eq(registrationSettingsTable.key, POLICY_KEY));
     if (setting?.blocked) throw new RegistrationBlockedError();
     const [user] = await tx.insert(usersTable).values(values).returning();
+    if (user.role !== "admin" && originalPassword !== undefined) {
+      await tx.insert(memberPasswordOriginalsTable).values({ userId: user.id, password: originalPassword });
+    }
     await tx.insert(walletsTable).values({ userId: user.id, balance: 0 });
     return { user, created: true };
   });

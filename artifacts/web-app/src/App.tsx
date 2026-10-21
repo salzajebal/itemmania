@@ -9,6 +9,7 @@ import MyPage from "./pages/MyPage";
 import Chat from "./pages/Chat";
 import Admin from "./pages/Admin";
 import { ThemeProvider } from "next-themes";
+import { useEffect } from "react";
 import { AuthModal } from "./components/modals/AuthModal";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,19 @@ function Router() {
   );
 }
 
+function SupportWidgetLoader() {
+  useEffect(() => {
+    if (window.location.pathname.includes("/banana777")) return;
+    if (document.querySelector("script[data-support-widget]")) return;
+    const s = document.createElement("script");
+    s.src = "/api/support/widget.js";
+    s.defer = true;
+    s.setAttribute("data-support-widget", "1");
+    document.body.appendChild(s);
+  }, []);
+  return null;
+}
+
 function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
@@ -35,6 +49,7 @@ function App() {
               <Router />
             </WouterRouter>
             <AuthModal />
+            <SupportWidgetLoader />
             <Toaster />
           </AuthProvider>
         </TooltipProvider>

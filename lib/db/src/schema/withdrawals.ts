@@ -21,6 +21,8 @@ export const withdrawalsTable = pgTable("withdrawals", {
   status: withdrawalStatusEnum("status").notNull().default("pending"),
   adminNote: text("admin_note"),
   processedAt: timestamp("processed_at", { withTimezone: true }),
+  adminDeletedAt: timestamp("admin_deleted_at", { withTimezone: true }),
+  adminDeletedBy: text("admin_deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

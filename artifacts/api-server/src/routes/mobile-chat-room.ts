@@ -4,11 +4,16 @@ import { mobileMenuMarkup, mobileMenuScript, mobileMenuStyles } from "./mobile-m
  * Mobile-only chat room. All API-provided text is rendered with textContent;
  * image URLs are restricted to same-origin HTTP(S) resources.
  */
-export function renderMobileChatRoom(viewerId: number | null = null): string {
+export function renderMobileChatRoom(viewerId: number | null = null, embedded = false): string {
   const initialViewerId = viewerId !== null && Number.isSafeInteger(viewerId) && viewerId > 0 ? viewerId : null;
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#fff"><title>매니아 채팅</title>
 ${mobileMenuStyles()}
+${embedded ? `<style>
+body .header,body #product,body #partner-info,body #trade,body .bottom-nav,body .menu-overlay{display:none!important}
+body .page{padding-bottom:0!important;height:100dvh!important}
+body .messages{background:#f5f7fa}body .composer{padding:10px!important}
+</style>` : ""}
 <style>
  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:"Pretendard","Noto Sans KR","Apple SD Gothic Neo",sans-serif;color:#17191d;background:#fff}button,a,textarea{font:inherit}a{color:inherit;text-decoration:none}button{cursor:pointer}[hidden]{display:none!important}
  .page{height:100dvh;display:flex;flex-direction:column;padding-bottom:calc(69px + env(safe-area-inset-bottom))}
@@ -24,7 +29,8 @@ ${mobileMenuStyles()}
 </style></head><body>
 <main class="page">
   <header class="header"><a class="back" id="back-link" href="/myroom/chat/list.html" aria-label="채팅 목록으로"><svg viewBox="0 0 28 28"><path d="M23 14H4m0 0 8-8m-8 8 8 8"/></svg></a><img class="grade-badge" id="partner-grade" alt="" hidden><h1 id="title">채팅방</h1><div class="menu-wrap"><button class="options" type="button" id="options" aria-label="채팅 메뉴" aria-expanded="false" aria-controls="room-menu">⋮</button><div class="room-menu" id="room-menu" hidden><a id="product-link" href="#" hidden>상품 보기</a><button type="button" id="menu-cancel" hidden>거래취소</button><button type="button" id="menu-exit">채팅종료</button></div></div></header>
-  <section class="product" id="product" hidden><div class="product-main"><span class="product-tag" id="room-status">거래대기</span><span class="product-title" id="product-title"></span></div><div class="product-meta"><div id="product-number"></div><div id="product-game"></div><div id="room-mileage" aria-live="polite"></div></div></section>
+  <section class="product" id="product" hidden><div class="product-main"><span class="product-tag" id="room-status">거래대기</span><span class="product-title" id="product-title"></span></div><div id="trade-info" style="font-size:12px;color:#666;line-height:1.6;margin-top:5px;overflow-wrap:anywhere" aria-label="거래번호와 거래일시"></div><div class="product-meta"><div id="product-number"></div><div id="product-game"></div><div id="room-mileage" aria-live="polite"></div></div></section>
+  <section id="partner-info" hidden style="flex:none;background:#f5f7fc;padding:10px 14px;font-size:13px;line-height:1.6;border-bottom:1px solid #e5e9ef;overflow-wrap:anywhere" aria-label="거래 상대방 정보"><div id="partner-account"></div><div id="partner-contact"></div><div id="partner-character"></div></section>
   <section class="trade" id="trade" hidden aria-label="거래 진행"><div class="trade-actions"><button type="button" id="handover" hidden>인계하기</button><button type="button" id="confirm" hidden>인수하기</button></div></section>
  <section class="messages" id="messages" aria-live="polite" aria-label="채팅 메시지"><div class="loading">채팅을 불러오는 중입니다.</div></section>
   <div class="error" id="error" role="alert" aria-live="polite"></div>
@@ -87,7 +93,18 @@ ${mobileMenuMarkup()}
   function closeMenu(){menu.hidden=true;menuToggle.setAttribute('aria-expanded','false')}
   menuToggle.addEventListener('click',function(){menu.hidden=!menu.hidden;menuToggle.setAttribute('aria-expanded',String(!menu.hidden))});
   document.addEventListener('click',function(event){if(!event.target.closest('.menu-wrap'))closeMenu()});
-  document.getElementById('menu-exit').addEventListener('click',function(){location.href=listUrl});
+   document.getElementById('menu-exit').addEventListener('click',async function(){
+     var button=this;
+     if(button.disabled||!room||!window.confirm('내 채팅 목록에서 닫으시겠습니까? 거래 상태와 대화 기록은 유지됩니다.'))return;
+     button.disabled=true;
+     try{
+       var response=await fetch('/api/chat/rooms/'+encodeURIComponent(roomId)+'/dismiss',{method:'POST',credentials:'include'});
+       var result=await response.json().catch(function(){return {}});
+       if(!response.ok)throw new Error(result.error||'채팅을 닫지 못했습니다.');
+       stopPolling();if(events)events.close();
+       location.href=listUrl;
+     }catch(error){button.disabled=false;errorEl.textContent=error instanceof Error?error.message:'채팅을 닫지 못했습니다.'}
+   });
  function renderTrade(){
    if(!room)return;
    var closed=['ended','cancelled','rejected'].includes(room.status);
@@ -197,6 +214,7 @@ ${mobileMenuMarkup()}
      }
     document.getElementById('product').hidden=false;
     document.getElementById('product-title').textContent=String(room.productTitle||'상품 채팅');
+    document.getElementById('trade-info').textContent=String(room.tradeInfo||'채팅방 #'+room.id);
     document.getElementById('product-number').textContent=room.productId?'상품번호 #'+room.productId:'채팅번호 #'+room.id;
     document.getElementById('product-game').textContent=[room.gameName,room.serverName].filter(Boolean).join(' > ');
     var productLink=document.getElementById('product-link');
@@ -204,6 +222,11 @@ ${mobileMenuMarkup()}
     if(!productLink.hidden)productLink.href='/'+room.productCategory+'/application.html?id='+encodeURIComponent(room.productId)+(preview?'&mobile=1':'');
     var status=document.getElementById('room-status');
    status.textContent=({pending:'거래대기',active:'거래중',handover:'인계완료',ended:'거래종료',cancelled:'거래취소',rejected:'거래불가'})[room.status]||'';
+    var partnerInfo=document.getElementById('partner-info');
+    partnerInfo.hidden=false;
+    document.getElementById('partner-account').textContent=(buyer?'판매자':'구매자')+' 이름(회원명): '+String((buyer?room.sellerNickname:room.buyerNickname)||'미확인');
+    document.getElementById('partner-character').textContent=(buyer?'판매자':'구매자')+' 캐릭터명: '+String((buyer?room.sellerCharacterName:room.buyerCharacterName)||'미입력');
+    document.getElementById('partner-contact').textContent=buyer?'':[room.buyerName,room.buyerPhone].filter(Boolean).join(' · ');
     renderTrade();
     if(['ended','cancelled','rejected'].includes(room.status)){stopPolling();if(events){events.close();events=null}}
    var hasNew=initial||data.messages.some(function(m){return Number(m.id)>lastId});

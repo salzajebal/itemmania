@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # Manual release for the separate Hostinger VPS. No initialization, full schema
-# push, source rebuild, database backup, environment-file edit, or upload deletion.
+# push, source rebuild, environment-file edit, or upload deletion.
 APP_ROOT=/opt/itemmania
 API_ROOT="$APP_ROOT/artifacts/api-server"
 DIST="$API_ROOT/dist"
@@ -34,16 +34,20 @@ on_error() {
 trap on_error ERR
 
 [[ $EUID -eq 0 ]] || fail "Run this script as root."
-for command in systemctl systemd-run node python3 curl sha256sum cp mktemp; do
+for command in systemctl systemd-run node python3 curl sha256sum cp mktemp runuser; do
   command -v "$command" >/dev/null || fail "Required command missing: $command"
 done
+[[ -n "${EXPECTED_CURRENT_SHA256:-}" ]] ||
+  fail "Provide the independently verified active runtime hash. Do not overwrite an unknown release."
+[[ "$(sha256sum "$DIST/index.mjs" | cut -d' ' -f1)" == "$EXPECTED_CURRENT_SHA256" ]] ||
+  fail "The active release changed after review; stop rather than overwrite newer work."
 [[ -f "$ENV_FILE" && -f "$DIST/index.mjs" && -f "$APP_ROOT/lib/db/package.json" ]] ||
   fail "Expected Itemmania installation/environment was not found. No deployment performed."
 [[ -f "$HERE/SHA256SUMS" && -f "$HERE/dist/index.mjs" &&
    -f "$HERE/registration-settings.sql" && -f "$HERE/db-setup.mjs" &&
    -d "$DIST" && ! -L "$DIST" ]] ||
   fail "Extract the entire release archive first."
-for required in dist/index.mjs db-setup.mjs registration-settings.sql deploy.sh; do
+for required in dist/index.mjs db-setup.mjs registration-settings.sql trade-character-names.sql admin-sessions.sql member-removal.sql support-chat.sql product-views.sql registered-character-privacy.sql member-password-originals.sql vps-release-backup.mjs deploy.sh; do
   grep -Eq "^[[:xdigit:]]{64}  ${required//./\\.}$" "$HERE/SHA256SUMS" ||
     fail "Release manifest is missing a required file."
 done
@@ -82,20 +86,36 @@ run_db() {
     "${environment_flags[@]}" \
     --setenv="APP_ROOT=$APP_ROOT" \
     --setenv="REGISTRATION_DDL=$HERE/registration-settings.sql" \
+    --setenv="TRADE_CHARACTER_DDL=$HERE/trade-character-names.sql" \
+    --setenv="ADMIN_SESSION_DDL=$HERE/admin-sessions.sql" \
+    --setenv="MEMBER_REMOVAL_DDL=$HERE/member-removal.sql" \
+    --setenv="SUPPORT_CHAT_DDL=$HERE/support-chat.sql" \
+    --setenv="PRODUCT_VIEWS_DDL=$HERE/product-views.sql" \
+    --setenv="REGISTERED_CHARACTER_PRIVACY_DDL=$HERE/registered-character-privacy.sql" \
+    --setenv="MEMBER_PASSWORD_ORIGINALS_DDL=$HERE/member-password-originals.sql" \
     "$NODE" "$HERE/db-setup.mjs" "$mode"
 }
 run_db check
+run_db backup
 
 # Stage and verify the compiled files before stopping the existing process.
 STAGED="$(mktemp -d "$API_ROOT/.release-dist-XXXXXXXX")"
 cp -R "$HERE/dist/." "$STAGED/"
 chmod --reference="$DIST" "$STAGED"
 chown --reference="$DIST" "$STAGED"
+# Extraction may use root's restrictive umask; the service is unprivileged.
+# Only public compiled code is readable here. Secret/config backups stay 0600.
+find "$STAGED" -type d -exec chmod 755 {} +
+find "$STAGED" -type f -exec chmod 644 {} +
+SERVICE_USER="$(systemctl show "$SERVICE" --property=User --value)"
+runuser -u "${SERVICE_USER:-root}" -- "$NODE" --check "$STAGED/index.mjs"
 (
   cd "$STAGED"
   sed -n 's|  dist/|  |p' "$HERE/SHA256SUMS" | sha256sum --check --quiet -
 )
 run_db apply
+[[ "$(sha256sum "$DIST/index.mjs" | cut -d' ' -f1)" == "$EXPECTED_CURRENT_SHA256" ]] ||
+  fail "The runtime changed during preparation; deployment stopped with the live release intact."
 
 echo "Replacing compiled API files; the service will briefly stop."
 systemctl stop "$SERVICE"
@@ -123,8 +143,7 @@ for ((attempt=1; attempt<=40; attempt++)); do
      curl -fsS --max-time 3 --resolve "$DOMAIN:443:127.0.0.1" \
        "$HEALTH_URL" -o /dev/null 2>/dev/null; then
     echo "Release successful: local HTTPS health check passed."
-    echo "Check admin > member management for the registration ON/OFF control."
-    echo "New settlements pay the seller the full amount with zero commission."
+    echo "Member password originals are ready for administrator reauthenticated lookup."
     exit 0
   fi
   sleep 2

@@ -178,11 +178,11 @@ async function registerAccount(name) {
   return { id: account.id, cookie: registration.cookie };
 }
 
-async function createProduct(owner, { category = "sell", price = 10000, title }) {
+async function createProduct(owner, { category = "sell", price = 10000, title, characterName }) {
   const product = expectStatus(await request("/products", {
     method: "POST",
     cookie: owner.cookie,
-    body: { title: `${title} ${suffix}`, price: String(price), category },
+    body: { title: `${title} ${suffix}`, price: String(price), category, characterName },
   }), 201, `create isolated ${category} listing`);
   assert(product.id && Number.isSafeInteger(product.id), "Listing creation did not return an ID.");
   fixtureProductIds.add(product.id);
@@ -314,6 +314,53 @@ async function assertOrderlessFailureState(room, buyer, seller, product, buyerBe
 }
 
 async function runRegressionTests() {
+  // Verify the two roles in both sell and buy listing applications without funds.
+  const nicknameSeller = await registerAccount("nickSeller");
+  const nicknameBuyer = await registerAccount("nickBuyer");
+  for (const category of ["sell", "buy"]) {
+    const owner = category === "sell" ? nicknameSeller : nicknameBuyer;
+    const applicant = category === "sell" ? nicknameBuyer : nicknameSeller;
+    const product = await createProduct(owner, {
+      category, title: `character-names-${category}`, characterName: `등록-${category}`,
+    });
+    const applicationBody = category === "sell"
+      ? { sellerId: nicknameSeller.id, productId: product.id }
+      : { buyerId: nicknameBuyer.id, productId: product.id };
+    const room = expectStatus(await request("/chat/rooms", {
+      method: "POST", cookie: applicant.cookie,
+      body: { ...applicationBody, characterName: `신청-${category}`, sellerCharacterName: "위조" },
+    }), 201, "create role-specific character room");
+    fixtureRoomIds.add(room.id);
+    for (const viewer of [nicknameBuyer, nicknameSeller]) {
+      const detail = await getRoom(room, viewer);
+      equal(detail.buyerCharacterName, category === "sell" ? "신청-sell" : "등록-buy", "correct buyer game name");
+      equal(detail.sellerCharacterName, category === "sell" ? "등록-sell" : "신청-buy", "correct seller game name");
+      assert(detail.buyerNickname && detail.sellerNickname, "Existing account nicknames must remain.");
+    }
+    expectStatus(await request("/chat/rooms", {
+      method: "POST", cookie: applicant.cookie,
+      body: { ...applicationBody, characterName: "덮어쓰기시도" },
+    }), 200, "reuse existing character room");
+    const detail = await getRoom(room, applicant);
+    const buyerActor = category === "buy" ? owner : applicant;
+    const sellerActor = category === "buy" ? applicant : owner;
+    for (const [side, actor] of [["buy", buyerActor], ["sell", sellerActor]]) {
+      const stats = expectStatus(await request("/products/my/stats", { cookie: actor.cookie }), 200, "myroom stats");
+      assert(stats[side === "buy" ? "buyProcessing" : "sellActive"] >= 1, "application is an ongoing trade before payment");
+      const origin = base.replace(/[/]api$/, "");
+      const page = await fetch(origin + `/myroom/${side}/${side}_ing.html`, { headers: { Cookie: actor.cookie } });
+      const html = await page.text();
+      equal(page.status, 200, "existing ongoing trade page");
+      assert(html.includes(`roomId=${room.id}`), "ongoing entry reopens exact application room");
+      assert(!html.includes(`data-order-id="${room.id}"`), "orderless room cannot invoke an unrelated order action");
+    }
+    equal(detail.characterName, `신청-${category}`, "legacy field preserved");
+    equal(detail[category === "sell" ? "buyerCharacterName" : "sellerCharacterName"],
+      `신청-${category}`, "recorded application name is not overwritten");
+    expectStatus(await request("/chat/rooms", {
+      method: "POST", cookie: applicant.cookie, body: { ...applicationBody, characterName: 123 },
+    }), 400, "reject non-text game name");
+  }
   const seller = await registerAccount("seller");
   const buyer = await registerAccount("buyer");
   const secondBuyer = await registerAccount("secondbuyer");
@@ -744,6 +791,21 @@ async function runRegressionTests() {
 
 try {
   await verifyTestSchema();
+  await testDb.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0");
+  await testDb.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS registered_character_name text, ADD COLUMN IF NOT EXISTS character_name_in_description boolean NOT NULL DEFAULT false");
+  await testDb.query(`ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+    ADD COLUMN IF NOT EXISTS deleted_by text`);
+  await testDb.query(`ALTER TABLE chat_rooms
+    ADD COLUMN IF NOT EXISTS buyer_character_name text,
+    ADD COLUMN IF NOT EXISTS seller_character_name text,
+    ADD COLUMN IF NOT EXISTS buyer_dismissed_at timestamptz,
+    ADD COLUMN IF NOT EXISTS seller_dismissed_at timestamptz,
+    ADD COLUMN IF NOT EXISTS admin_deleted_at timestamptz,
+    ADD COLUMN IF NOT EXISTS admin_deleted_by text`);
+  await testDb.query(`ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS admin_deleted_at timestamptz,
+    ADD COLUMN IF NOT EXISTS admin_deleted_by text`);
   base = await startIsolatedServer();
   await runRegressionTests();
 } finally {

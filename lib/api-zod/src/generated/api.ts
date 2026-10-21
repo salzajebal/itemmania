@@ -8,6 +8,228 @@
 import * as zod from 'zod';
 
 
+export const GetSupportSummaryResponse = zod.object({
+  "unreadCount": zod.number().int(),
+  "latestMessageId": zod.number().int(),
+  "conversationId": zod.number().int().describe('First message ID of the current conversation or zero')
+})
+
+
+export const getSupportMessagesQueryAfterIdMin = 0;
+
+
+
+
+export const GetSupportMessagesQueryParams = zod.object({
+  "afterId": zod.coerce.number().int().min(getSupportMessagesQueryAfterIdMin).optional(),
+  "beforeId": zod.coerce.number().int().min(1).optional()
+})
+
+export const GetSupportMessagesResponse = zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number().int(),
+  "userId": zod.number().int(),
+  "sender": zod.enum(['member', 'admin']),
+  "senderName": zod.string(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "hasMore": zod.boolean(),
+  "latestMessageId": zod.number().int(),
+  "unreadCount": zod.number().int(),
+  "member": zod.object({
+  "id": zod.number().int(),
+  "nickname": zod.string(),
+  "deletedAt": zod.coerce.date().nullable(),
+  "suspendedAt": zod.coerce.date().nullable()
+}),
+  "conversationId": zod.number().int()
+})
+
+
+export const sendSupportMessageBodyBodyMax = 2000;
+
+export const sendSupportMessageBodyClientIdMax = 80;
+
+
+export const sendSupportMessageBodyExpectedConversationIdMin = 0;
+
+
+
+export const SendSupportMessageBody = zod.object({
+  "body": zod.string().min(1).max(sendSupportMessageBodyBodyMax),
+  "clientId": zod.string().min(1).max(sendSupportMessageBodyClientIdMax),
+  "expectedUserId": zod.number().int().min(1).optional().describe('Optional identity-change precondition'),
+  "expectedConversationId": zod.number().int().min(sendSupportMessageBodyExpectedConversationIdMin).optional().describe('Optional first-message generation; prevents replay into a deleted conversation')
+})
+
+export const SendSupportMessageResponse = zod.object({
+  "message": zod.object({
+  "id": zod.number().int(),
+  "userId": zod.number().int(),
+  "sender": zod.enum(['member', 'admin']),
+  "senderName": zod.string(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+})
+
+
+export const readSupportMessagesBodyMessageIdMin = 0;
+
+
+
+export const ReadSupportMessagesBody = zod.object({
+  "messageId": zod.number().int().min(readSupportMessagesBodyMessageIdMin)
+})
+
+export const ReadSupportMessagesResponse = zod.unknown()
+
+
+export const StreamSupportEventsResponse = zod.unknown()
+
+
+export const listSupportConversationsQueryLimitDefault = 50;
+export const listSupportConversationsQueryLimitMax = 100;
+
+
+
+
+export const ListSupportConversationsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listSupportConversationsQueryLimitMax).default(listSupportConversationsQueryLimitDefault),
+  "beforeId": zod.coerce.number().int().min(1).optional()
+})
+
+export const ListSupportConversationsResponse = zod.object({
+  "conversations": zod.array(zod.object({
+  "userId": zod.number().int(),
+  "nickname": zod.string(),
+  "email": zod.string(),
+  "deletedAt": zod.coerce.date().nullable(),
+  "suspendedAt": zod.coerce.date().nullable(),
+  "lastMessageId": zod.number().int(),
+  "latestMemberMessageId": zod.number().int().optional(),
+  "lastMessagePreview": zod.string(),
+  "updatedAt": zod.coerce.date(),
+  "unreadCount": zod.number().int()
+})),
+  "hasMore": zod.boolean(),
+  "latestMemberMessageId": zod.number().int()
+})
+
+
+/**
+ * Native administrator only. Permanently removes customer support messages and conversation, never trade chats or financial records. Rejects a stale last-message precondition.
+ */
+
+
+
+export const RemoveSupportConversationParams = zod.object({
+  "userId": zod.coerce.number().int().min(1)
+})
+
+export const removeSupportConversationBodyLastMessageIdMin = 0;
+
+
+
+export const RemoveSupportConversationBody = zod.object({
+  "lastMessageId": zod.number().int().min(removeSupportConversationBodyLastMessageIdMin)
+})
+
+export const RemoveSupportConversationResponse = zod.object({
+  "ok": zod.boolean(),
+  "deletedMessages": zod.number().int()
+})
+
+
+/**
+ * Latest 100 ascending messages. Optional afterId or beforeId query cursor; only one direction per request.
+ */
+
+
+
+export const GetAdminSupportMessagesParams = zod.object({
+  "userId": zod.coerce.number().int().min(1)
+})
+
+export const GetAdminSupportMessagesResponse = zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number().int(),
+  "userId": zod.number().int(),
+  "sender": zod.enum(['member', 'admin']),
+  "senderName": zod.string(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "hasMore": zod.boolean(),
+  "latestMessageId": zod.number().int(),
+  "unreadCount": zod.number().int(),
+  "member": zod.object({
+  "id": zod.number().int(),
+  "nickname": zod.string(),
+  "deletedAt": zod.coerce.date().nullable(),
+  "suspendedAt": zod.coerce.date().nullable()
+}),
+  "conversationId": zod.number().int()
+})
+
+
+
+
+
+export const SendAdminSupportMessageParams = zod.object({
+  "userId": zod.coerce.number().int().min(1)
+})
+
+export const sendAdminSupportMessageBodyBodyMax = 2000;
+
+export const sendAdminSupportMessageBodyClientIdMax = 80;
+
+
+export const sendAdminSupportMessageBodyExpectedConversationIdMin = 0;
+
+
+
+export const SendAdminSupportMessageBody = zod.object({
+  "body": zod.string().min(1).max(sendAdminSupportMessageBodyBodyMax),
+  "clientId": zod.string().min(1).max(sendAdminSupportMessageBodyClientIdMax),
+  "expectedUserId": zod.number().int().min(1).optional().describe('Optional identity-change precondition'),
+  "expectedConversationId": zod.number().int().min(sendAdminSupportMessageBodyExpectedConversationIdMin).optional().describe('Optional first-message generation; prevents replay into a deleted conversation')
+})
+
+export const SendAdminSupportMessageResponse = zod.object({
+  "message": zod.object({
+  "id": zod.number().int(),
+  "userId": zod.number().int(),
+  "sender": zod.enum(['member', 'admin']),
+  "senderName": zod.string(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+})
+
+
+
+
+
+export const ReadAdminSupportMessagesParams = zod.object({
+  "userId": zod.coerce.number().int().min(1)
+})
+
+export const readAdminSupportMessagesBodyMessageIdMin = 0;
+
+
+
+export const ReadAdminSupportMessagesBody = zod.object({
+  "messageId": zod.number().int().min(readAdminSupportMessagesBodyMessageIdMin)
+})
+
+export const ReadAdminSupportMessagesResponse = zod.unknown()
+
+
+export const StreamAdminSupportEventsResponse = zod.unknown()
+
+
 /**
  * @summary Health check
  */
@@ -61,10 +283,44 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary 현재 비밀번호 확인 후 회원 비밀번호 변경 및 회원 세션 해제
+ */
+export const changeMemberPasswordBodyCurrentPasswordMax = 128;
+
+export const changeMemberPasswordBodyNewPasswordMin = 8;
+export const changeMemberPasswordBodyNewPasswordMax = 16;
+
+
+
+export const ChangeMemberPasswordBody = zod.object({
+  "currentPassword": zod.string().max(changeMemberPasswordBodyCurrentPasswordMax),
+  "newPassword": zod.string().min(changeMemberPasswordBodyNewPasswordMin).max(changeMemberPasswordBodyNewPasswordMax)
+})
+
+export const ChangeMemberPasswordResponse = zod.object({
+  "ok": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
  * @summary 로그아웃
  */
 export const LogoutResponse = zod.object({
   "ok": zod.boolean()
+})
+
+
+/**
+ * @summary 관리자 전용 세션으로 로그인 상태 확인
+ */
+export const GetAdminMeResponse = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "nickname": zod.string(),
+  "phone": zod.string().nullish(),
+  "role": zod.enum(['user', 'admin']),
+  "createdAt": zod.coerce.date()
 })
 
 
@@ -78,6 +334,74 @@ export const GetMeResponse = zod.object({
   "phone": zod.string().nullish(),
   "role": zod.enum(['user', 'admin']),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary 로그인한 회원 본인의 개인정보 조회
+ */
+export const getMemberProfileResponseNameMax = 50;
+
+export const getMemberProfileResponsePhoneMax = 30;
+
+export const getMemberProfileResponseBankNameMax = 40;
+
+export const getMemberProfileResponseBankAccountNumberMax = 40;
+
+export const getMemberProfileResponseBankAccountHolderMax = 50;
+
+
+
+export const GetMemberProfileResponse = zod.object({
+  "name": zod.string().max(getMemberProfileResponseNameMax).nullable(),
+  "phone": zod.string().max(getMemberProfileResponsePhoneMax).nullable(),
+  "bankName": zod.string().max(getMemberProfileResponseBankNameMax).nullable(),
+  "bankAccountNumber": zod.string().max(getMemberProfileResponseBankAccountNumberMax).nullable(),
+  "bankAccountHolder": zod.string().max(getMemberProfileResponseBankAccountHolderMax).nullable()
+})
+
+
+/**
+ * @summary 회원 본인의 이름·휴대폰·계좌정보 저장
+ */
+export const updateMemberProfileBodyNameMax = 50;
+
+export const updateMemberProfileBodyPhoneMax = 30;
+
+export const updateMemberProfileBodyBankNameMax = 40;
+
+export const updateMemberProfileBodyBankAccountNumberMax = 40;
+
+export const updateMemberProfileBodyBankAccountHolderMax = 50;
+
+
+
+export const UpdateMemberProfileBody = zod.object({
+  "name": zod.string().max(updateMemberProfileBodyNameMax).nullable(),
+  "phone": zod.string().max(updateMemberProfileBodyPhoneMax).nullable(),
+  "bankName": zod.string().max(updateMemberProfileBodyBankNameMax).nullable(),
+  "bankAccountNumber": zod.string().max(updateMemberProfileBodyBankAccountNumberMax).nullable(),
+  "bankAccountHolder": zod.string().max(updateMemberProfileBodyBankAccountHolderMax).nullable()
+})
+
+export const updateMemberProfileResponseNameMax = 50;
+
+export const updateMemberProfileResponsePhoneMax = 30;
+
+export const updateMemberProfileResponseBankNameMax = 40;
+
+export const updateMemberProfileResponseBankAccountNumberMax = 40;
+
+export const updateMemberProfileResponseBankAccountHolderMax = 50;
+
+
+
+export const UpdateMemberProfileResponse = zod.object({
+  "name": zod.string().max(updateMemberProfileResponseNameMax).nullable(),
+  "phone": zod.string().max(updateMemberProfileResponsePhoneMax).nullable(),
+  "bankName": zod.string().max(updateMemberProfileResponseBankNameMax).nullable(),
+  "bankAccountNumber": zod.string().max(updateMemberProfileResponseBankAccountNumberMax).nullable(),
+  "bankAccountHolder": zod.string().max(updateMemberProfileResponseBankAccountHolderMax).nullable()
 })
 
 
@@ -153,6 +477,10 @@ export const ListProductsQueryParams = zod.object({
   "keyword": zod.coerce.string().optional()
 })
 
+export const listProductsResponseItemsItemViewCountMin = 0;
+
+
+
 export const ListProductsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.number().int(),
@@ -163,9 +491,11 @@ export const ListProductsResponse = zod.object({
   "gameName": zod.string().nullish(),
   "sellerName": zod.string().nullish(),
   "description": zod.string().nullish(),
+  "quantityLabel": zod.string().optional().describe('등록한 수량·범위·단위. 과거 수량이 저장되지 않은 물품은 \'-\'로 표시.'),
   "thumbnailUrl": zod.string().nullish(),
   "detailUrl": zod.string().nullish(),
   "status": zod.enum(['active', 'sold', 'inactive']),
+  "viewCount": zod.number().int().min(listProductsResponseItemsItemViewCountMin).optional().describe('서버에 누적 저장된 상세 페이지 조회수'),
   "crawledAt": zod.coerce.date()
 })),
   "total": zod.number().int(),
@@ -181,6 +511,10 @@ export const GetProductParams = zod.object({
   "id": zod.coerce.number().int()
 })
 
+export const getProductResponseViewCountMin = 0;
+
+
+
 export const GetProductResponse = zod.object({
   "id": zod.number().int(),
   "itemmaniaid": zod.string(),
@@ -190,9 +524,11 @@ export const GetProductResponse = zod.object({
   "gameName": zod.string().nullish(),
   "sellerName": zod.string().nullish(),
   "description": zod.string().nullish(),
+  "quantityLabel": zod.string().optional().describe('등록한 수량·범위·단위. 과거 수량이 저장되지 않은 물품은 \'-\'로 표시.'),
   "thumbnailUrl": zod.string().nullish(),
   "detailUrl": zod.string().nullish(),
   "status": zod.enum(['active', 'sold', 'inactive']),
+  "viewCount": zod.number().int().min(getProductResponseViewCountMin).optional().describe('서버에 누적 저장된 상세 페이지 조회수'),
   "crawledAt": zod.coerce.date()
 })
 
@@ -337,6 +673,10 @@ export const CancelOrderResponse = zod.object({
 /**
  * @summary 내 채팅방 목록
  */
+export const ListChatRoomsQueryParams = zod.object({
+  "includeDismissed": zod.enum(['1']).optional().describe('마이룸 거래 조회용. 본인이 닫은 채팅도 포함하며 참여자 범위는 유지합니다.')
+})
+
 export const ListChatRoomsResponseItem = zod.object({
   "id": zod.number().int(),
   "orderId": zod.number().int().nullish(),
@@ -365,6 +705,18 @@ export const UpdateChatRoomResponse = zod.object({
 
 
 /**
+ * @summary Close this participant's chat list entry without cancelling a trade
+ */
+export const DismissChatRoomParams = zod.object({
+  "roomId": zod.coerce.number().int()
+})
+
+export const DismissChatRoomResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary 채팅 메시지 목록 및 방 정보
  */
 export const GetChatMessagesParams = zod.object({
@@ -374,16 +726,37 @@ export const GetChatMessagesParams = zod.object({
 export const GetChatMessagesResponse = zod.object({
   "room": zod.object({
   "id": zod.number().int(),
+  "orderId": zod.number().int().nullish(),
+  "orderCreatedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "tradeInfo": zod.string(),
   "buyerId": zod.number().int(),
   "sellerId": zod.number().int(),
   "productId": zod.number().int().nullish(),
   "status": zod.string(),
   "productTitle": zod.string().nullish(),
   "productPrice": zod.number().int().nullish(),
+  "productCreatedAt": zod.coerce.date().nullish(),
+  "productItemmaniaId": zod.string().nullish(),
+  "productItemCategory": zod.string().nullish(),
+  "productDescription": zod.string().nullish(),
+  "productCategory": zod.string().nullish(),
   "characterName": zod.string().nullish(),
+  "buyerCharacterName": zod.string().nullish(),
+  "sellerCharacterName": zod.string().nullish(),
   "goodsType": zod.string().nullish(),
   "buyerNickname": zod.string(),
   "sellerNickname": zod.string(),
+  "buyerName": zod.string().nullish(),
+  "buyerPhone": zod.string().nullish(),
+  "sellerName": zod.string().nullish(),
+  "sellerPhone": zod.string().nullish(),
+  "buyerGrade": zod.string().nullish(),
+  "sellerGrade": zod.string().nullish(),
+  "buyerCreditScore": zod.number().int().nullish(),
+  "sellerCreditScore": zod.number().int().nullish(),
+  "buyerAuthStates": zod.record(zod.string(), zod.boolean()).nullish(),
+  "sellerAuthStates": zod.record(zod.string(), zod.boolean()).nullish(),
   "gameName": zod.string().nullish(),
   "serverName": zod.string().nullish(),
   "itemCategory": zod.string().nullish()
@@ -444,10 +817,12 @@ export const AdminUpdateRegistrationPolicyResponse = zod.object({
 /**
  * @summary 전체 회원 목록
  */
+export const adminListUsersQueryIncludeDeletedDefault = 0;
 export const adminListUsersQueryPageDefault = 1;
 export const adminListUsersQueryLimitDefault = 50;
 
 export const AdminListUsersQueryParams = zod.object({
+  "includeDeleted": zod.union([zod.literal(0),zod.literal(1)]).default(adminListUsersQueryIncludeDeletedDefault),
   "page": zod.coerce.number().int().default(adminListUsersQueryPageDefault),
   "limit": zod.coerce.number().int().default(adminListUsersQueryLimitDefault)
 })
@@ -461,10 +836,69 @@ export const AdminListUsersResponseItem = zod.object({
   "signupIp": zod.string().nullish(),
   "lastLoginIp": zod.string().nullish(),
   "suspendedAt": zod.coerce.date().nullish(),
+  "deletedAt": zod.coerce.date().nullish(),
   "balance": zod.number().int().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const AdminListUsersResponse = zod.array(AdminListUsersResponseItem)
+
+
+/**
+ * @summary 회원 비활성화 및 목록 삭제 (잔액·거래·대화 보존)
+ */
+export const AdminRemoveMemberParams = zod.object({
+  "userId": zod.coerce.number().int()
+})
+
+export const AdminRemoveMemberResponse = zod.object({
+  "ok": zod.boolean(),
+  "archived": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary 관리자 재인증 후 회원 임시 비밀번호 발급 (한 번만 반환, 저장하지 않음)
+ */
+export const AdminResetMemberPasswordParams = zod.object({
+  "userId": zod.coerce.number().int()
+})
+
+export const adminResetMemberPasswordBodyAdminPasswordMax = 128;
+
+
+
+export const AdminResetMemberPasswordBody = zod.object({
+  "identityVerified": zod.boolean().describe('관리자에 의한 회원 본인 확인 완료'),
+  "adminPassword": zod.string().max(adminResetMemberPasswordBodyAdminPasswordMax)
+})
+
+export const AdminResetMemberPasswordResponse = zod.object({
+  "userId": zod.number().int(),
+  "temporaryPassword": zod.string().describe('발급 시에만 반환하는 16자 임시 비밀번호')
+})
+
+
+/**
+ * @summary 회원 마일리지 추가 또는 최종 잔액 직접 설정
+ */
+export const AdminChangeMemberBalanceParams = zod.object({
+  "userId": zod.coerce.number().int()
+})
+
+export const adminChangeMemberBalanceBodyAmountMin = 0;
+export const adminChangeMemberBalanceBodyAmountMax = 9007199254740991;
+
+
+
+export const AdminChangeMemberBalanceBody = zod.object({
+  "amount": zod.number().int().min(adminChangeMemberBalanceBodyAmountMin).max(adminChangeMemberBalanceBodyAmountMax),
+  "mode": zod.enum(['add', 'set'])
+})
+
+export const AdminChangeMemberBalanceResponse = zod.object({
+  "balance": zod.number().int()
+})
 
 
 /**
@@ -491,7 +925,8 @@ export const adminListOrdersQueryPageDefault = 1;
 
 export const AdminListOrdersQueryParams = zod.object({
   "page": zod.coerce.number().int().default(adminListOrdersQueryPageDefault),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "includeDeleted": zod.enum(['1']).optional()
 })
 
 export const AdminListOrdersResponseItem = zod.object({
@@ -505,8 +940,39 @@ export const AdminListOrdersResponseItem = zod.object({
   "cancelReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-})
+}).and(zod.object({
+  "canDelete": zod.boolean(),
+  "canHide": zod.boolean().describe('이미 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거할 수 있는지 여부'),
+  "adminDeletedAt": zod.coerce.date().nullable(),
+  "adminDeletedBy": zod.string().nullable()
+}))
 export const AdminListOrdersResponse = zod.array(AdminListOrdersResponseItem)
+
+
+/**
+ * @summary 완료 또는 취소된 주문을 관리자 목록에서 삭제하고 정산 기록 보존
+ */
+export const AdminDeleteOrderParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const AdminDeleteOrderResponse = zod.object({
+  "ok": zod.boolean(),
+  "preserved": zod.boolean()
+})
+
+
+/**
+ * @summary 삭제된 완료·취소 주문을 삭제 항목 목록에서도 제거하고 원본 기록 보존
+ */
+export const AdminHideOrderParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const AdminHideOrderResponse = zod.object({
+  "ok": zod.boolean(),
+  "preserved": zod.boolean()
+})
 
 
 /**
@@ -532,6 +998,25 @@ export const AdminListWithdrawalsResponse = zod.array(AdminListWithdrawalsRespon
 
 
 /**
+ * Requires an active administrator session. Inactive listings only; retain the original product, orders, chats and settlement evidence. Idempotent without changing business timestamps.
+ * @summary 비활성 상품을 관리자 목록에서만 삭제
+ */
+export const adminHideInactiveProductPathIdMax = 2147483647;
+
+
+
+export const AdminHideInactiveProductParams = zod.object({
+  "id": zod.coerce.number().int().min(1).max(adminHideInactiveProductPathIdMax)
+})
+
+export const AdminHideInactiveProductResponse = zod.object({
+  "ok": zod.boolean(),
+  "hidden": zod.boolean(),
+  "preserved": zod.boolean()
+})
+
+
+/**
  * @summary 전체 상품(판매/구매글) 목록
  */
 export const AdminListProductsResponseItem = zod.object({
@@ -551,9 +1036,17 @@ export const AdminListProductsResponse = zod.array(AdminListProductsResponseItem
 /**
  * @summary 전체 채팅 거래 내역
  */
+export const AdminListChatRoomsQueryParams = zod.object({
+  "includeDeleted": zod.enum(['1']).optional()
+})
+
 export const AdminListChatRoomsResponseItem = zod.object({
   "id": zod.number().int(),
-  "canDelete": zod.boolean().describe('주문에 연결되지 않아 삭제할 수 있는 채팅방인지 여부'),
+  "canDelete": zod.boolean().describe('종료된 주문 연결 거래 또는 주문 없는 문의로 관리자 목록 삭제가 가능한지 여부'),
+  "canHide": zod.boolean().describe('이미 삭제된 거래를 삭제 항목 포함 목록에서도 제거할 수 있는지 여부'),
+  "orderId": zod.number().int().nullish(),
+  "adminDeletedAt": zod.coerce.date().nullish(),
+  "adminDeletedBy": zod.string().nullish(),
   "sellerId": zod.number().int(),
   "buyerId": zod.number().int(),
   "sellerNickname": zod.string().nullish(),
@@ -567,14 +1060,46 @@ export const AdminListChatRoomsResponse = zod.array(AdminListChatRoomsResponseIt
 
 
 /**
- * @summary 주문에 연결되지 않은 채팅방과 메시지 영구 삭제
+ * @summary 종료된 주문 연결 채팅 또는 주문 없는 문의를 관리자 목록에서 삭제하고 메시지 보존
  */
 export const AdminDeleteChatRoomParams = zod.object({
   "id": zod.coerce.number().int()
 })
 
 export const AdminDeleteChatRoomResponse = zod.object({
-  "ok": zod.boolean()
+  "ok": zod.boolean(),
+  "preserved": zod.boolean()
+})
+
+
+/**
+ * @summary 삭제된 채팅거래를 관리자 목록에서 제거하고 대화·거래·정산 원본 보존
+ */
+export const AdminHideChatRoomParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const AdminHideChatRoomResponse = zod.object({
+  "ok": zod.boolean(),
+  "preserved": zod.boolean()
+})
+
+
+/**
+ * Active administrator session required. Pending withdrawals cannot be removed. Preserve member history, status, amounts and balances. Repeated deletion is idempotent.
+ * @summary 처리된 출금 신청을 관리자 목록에서만 삭제
+ */
+export const adminRemoveWithdrawalPathIdMax = 2147483647;
+
+
+
+export const AdminRemoveWithdrawalParams = zod.object({
+  "id": zod.coerce.number().int().min(1).max(adminRemoveWithdrawalPathIdMax)
+})
+
+export const AdminRemoveWithdrawalResponse = zod.object({
+  "ok": zod.boolean(),
+  "preserved": zod.boolean()
 })
 
 

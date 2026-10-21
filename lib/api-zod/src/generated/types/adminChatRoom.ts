@@ -8,8 +8,16 @@
 
 export interface AdminChatRoom {
   id: number;
-  /** 주문에 연결되지 않아 삭제할 수 있는 채팅방인지 여부 */
+  /** 종료된 주문 연결 거래 또는 주문 없는 문의로 관리자 목록 삭제가 가능한지 여부 */
   canDelete: boolean;
+  /** 이미 삭제된 거래를 삭제 항목 포함 목록에서도 제거할 수 있는지 여부 */
+  canHide: boolean;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  adminDeletedAt?: Date | null;
+  /** @nullable */
+  adminDeletedBy?: string | null;
   sellerId: number;
   buyerId: number;
   /** @nullable */

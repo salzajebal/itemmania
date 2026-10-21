@@ -22,9 +22,9 @@ export async function rejectSuspendedAccount(req: Request, res: Response, next: 
   try {
     let state = cache.get(userId);
     if (!state || state.expires <= Date.now()) {
-      const [user] = await db.select({ suspendedAt: usersTable.suspendedAt })
+      const [user] = await db.select({ suspendedAt: usersTable.suspendedAt, deletedAt: usersTable.deletedAt })
         .from(usersTable).where(eq(usersTable.id, userId));
-      state = { suspended: !user || !!user.suspendedAt, expires: Date.now() + CACHE_MS };
+      state = { suspended: !user || !!user.suspendedAt || !!user.deletedAt, expires: Date.now() + CACHE_MS };
       if (cache.size > 2000) cache.clear();
       cache.set(userId, state);
     }

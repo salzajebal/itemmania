@@ -1,10 +1,14 @@
+import { listingQuantityLabel } from "../lib/listing-quantity";
+import { normalizeQuantityLabel } from "../lib/registration-quantity";
 import { Router, type IRouter } from "express";
+import { ongoingTrades } from "../lib/ongoing-trades";
 import { eq, ilike, and, sql, desc, asc, count, inArray } from "drizzle-orm";
 import { db, productsTable, gamesTable, ordersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { getAllGamesWithServers } from "./games";
 import { notifyAdmin } from "./notifications";
 import { localProductSellerId } from "./product-ownership";
+import { normalizeTradeCharacterName, publicListingDescription } from "../lib/trade-character-names";
 
 const router: IRouter = Router();
 
@@ -22,6 +26,9 @@ type ProductRow = {
   crawledAt: Date | null; createdAt: Date;
   sellerGrade?: string | null;
   isPremium: boolean;
+  viewCount: number;
+  registeredCharacterName?: string | null;
+  characterNameInDescription?: boolean;
 };
 
 function formatProduct(p: ProductRow) {
@@ -38,7 +45,9 @@ function formatProduct(p: ProductRow) {
     sellerName: p.sellerName,
     sellerGrade: p.sellerGrade ?? null,
     isPremium: p.isPremium,
-    description: p.description,
+    viewCount: p.viewCount,
+    description: publicListingDescription(p),
+    quantityLabel: listingQuantityLabel(p),
     thumbnailUrl: p.thumbnailUrl,
     detailUrl: p.detailUrl,
     status: p.status,
@@ -131,6 +140,9 @@ router.get("/products", async (req, res): Promise<void> => {
       createdAt: productsTable.createdAt,
       sellerGrade: visibleSellerGrade,
       isPremium: productsTable.isPremium,
+      viewCount: productsTable.viewCount,
+      registeredCharacterName: productsTable.registeredCharacterName,
+      characterNameInDescription: productsTable.characterNameInDescription,
     })
     .from(productsTable)
     .leftJoin(usersTable, eq(productsTable.sellerId, usersTable.id))
@@ -160,8 +172,26 @@ router.get("/products/:id", async (req, res): Promise<void> => {
 
 // 상품 등록 (로그인 필요)
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
-  const { title, price, gameName, serverName, category, itemCategory, description, sellerName } =
+  const { title, price, gameName, serverName, category, itemCategory, description, sellerName, characterName } =
     req.body as Record<string, string>;
+  let registeredCharacterName: string | null;
+  try {
+    registeredCharacterName = normalizeTradeCharacterName(characterName);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "잘못된 인게임 닉네임입니다." });
+    return;
+  }
+  const descriptionText = description ? String(description).trim() : "";
+  const quantityLabel = req.body.quantityLabel === undefined ? null : normalizeQuantityLabel(req.body.quantityLabel);
+  if (req.body.quantityLabel !== undefined && !quantityLabel) {
+    res.status(400).json({ error: "수량과 단위를 올바르게 입력해주세요." });
+    return;
+  }
+  const registeredDescription = [
+    quantityLabel ? `수량: ${quantityLabel}` : "",
+    descriptionText,
+    category !== "buy" && registeredCharacterName ? `캐릭터명: ${registeredCharacterName}` : "",
+  ].filter(Boolean).join("\n");
 
   if (!title || !price) {
     res.status(400).json({ error: "title과 price는 필수입니다." }); return;
@@ -187,7 +217,8 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
       itemCategory: itemCategory ? String(itemCategory).trim() : null,
       sellerId: userId,
       sellerName: sellerName ? String(sellerName).trim() : null,
-      description: description ? String(description).trim() : null,
+      description: registeredDescription || null,
+      registeredCharacterName,
       status: "active",
     })
     .returning();
@@ -212,10 +243,7 @@ router.get("/products/my/stats", requireAuth, async (req, res): Promise<void> =>
     .from(productsTable)
     .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "sell")));
 
-  const [sellActive] = await db
-    .select({ cnt: count() })
-    .from(productsTable)
-    .where(and(eq(productsTable.sellerId, userId), eq(productsTable.category, "sell"), eq(productsTable.status, "active")));
+  const sellActive = await ongoingTrades(userId, "sell");
 
   const [sellPending] = await db
     .select({ cnt: count() })
@@ -235,18 +263,15 @@ router.get("/products/my/stats", requireAuth, async (req, res): Promise<void> =>
     .where(and(eq(ordersTable.buyerId, userId), eq(ordersTable.status, "pending")));
 
   // 구매중: 판매자가 상품 인계 완료 또는 구매자 인수 확인 단계
-  const [buyProcessing] = await db
-    .select({ cnt: count() })
-    .from(ordersTable)
-    .where(and(eq(ordersTable.buyerId, userId), inArray(ordersTable.status, ["shipped", "confirmed"])));
+  const buyProcessing = await ongoingTrades(userId, "buy");
 
   res.json({
     sellTotal: Number(sellTotal?.cnt ?? 0),
-    sellActive: Number(sellActive?.cnt ?? 0),
+    sellActive: sellActive.length,
     sellPending: Number(sellPending?.cnt ?? 0),
     buyTotal: Number(buyTotal?.cnt ?? 0),
     buyPending: Number(buyPending?.cnt ?? 0),
-    buyProcessing: Number(buyProcessing?.cnt ?? 0),
+    buyProcessing: buyProcessing.length,
   });
 });
 

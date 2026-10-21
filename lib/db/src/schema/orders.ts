@@ -29,6 +29,10 @@ export const ordersTable = pgTable("orders", {
   feeAmount: bigint("fee_amount", { mode: "number" }).notNull().default(0),
   status: orderStatusEnum("status").notNull().default("pending"),
   cancelReason: text("cancel_reason"),
+  adminDeletedAt: timestamp("admin_deleted_at", { withTimezone: true }),
+  adminDeletedBy: text("admin_deleted_by"),
+  adminHiddenAt: timestamp("admin_hidden_at", { withTimezone: true }),
+  adminHiddenBy: text("admin_hidden_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

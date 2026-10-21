@@ -153,6 +153,8 @@ tbody tr:hover{background:#fafbff}
       <button class="tab-btn" onclick="switchTab('crawl')">🕷️ 크롤링</button>
       <button class="tab-btn" onclick="switchTab('chatrooms')">💬 채팅 거래</button>
       <button class="tab-btn" onclick="switchTab('ipblocks')">🚫 IP 차단</button>
+    <button class="tab-btn" onclick="switchTab('support')">고객센터</button>
+    <button class="tab-btn" onclick="switchTab('loginbranding')">로그인 화면</button>
     </div>
 
     <!-- 상품 탭 -->
@@ -199,6 +201,7 @@ tbody tr:hover{background:#fafbff}
       <div class="table-wrap">
         <div class="table-toolbar">
           <span class="title">회원 목록</span>
+          <label style="margin-left:12px;font-size:13px"><input type="checkbox" id="usersIncludeDeleted" onchange="loadUsers()"> 삭제된 회원 포함 (기록 조회)</label>
           <div class="spacer"></div>
           <button class="refresh-btn" onclick="refreshUsers()">↻ 새로고침</button>
         </div>
@@ -218,16 +221,19 @@ tbody tr:hover{background:#fafbff}
           <div class="spacer"></div>
           <select class="filter-select" id="orderStatusFilter" onchange="loadOrders()">
             <option value="">전체 상태</option>
-            <option value="active">진행중</option>
+            <option value="pending">거래대기</option>
+            <option value="shipped">인계완료</option>
+            <option value="confirmed">인수확인</option>
             <option value="completed">완료</option>
             <option value="cancelled">취소됨</option>
-            <option value="escrow">에스크로</option>
+            <option value="disputed">분쟁</option>
           </select>
+          <label style="font-size:13px"><input type="checkbox" id="ordersIncludeDeleted" onchange="loadOrders()"> 삭제된 항목 포함</label>
           <button class="refresh-btn" onclick="loadOrders()">↻ 새로고침</button>
         </div>
         <table>
-          <thead><tr><th>ID</th><th>상품명</th><th>구매자ID</th><th>판매자ID</th><th>금액</th><th>상태</th><th>주문일</th></tr></thead>
-          <tbody id="ordersBody"><tr class="empty-row"><td colspan="7">로딩 중...</td></tr></tbody>
+          <thead><tr><th>ID</th><th>상품명</th><th>구매자ID</th><th>판매자ID</th><th>금액</th><th>상태</th><th>주문일</th><th>관리</th></tr></thead>
+          <tbody id="ordersBody"><tr class="empty-row"><td colspan="8">로딩 중...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -266,6 +272,7 @@ tbody tr:hover{background:#fafbff}
             <option value="cancelled">취소</option>
           </select>
           <div class="spacer"></div>
+          <label style="font-size:13px"><input type="checkbox" id="chatroomsIncludeDeleted" onchange="loadChatRooms()"> 삭제된 항목 포함</label>
           <button class="refresh-btn" onclick="loadChatRooms()">↻ 새로고침</button>
         </div>
         <table>
@@ -274,6 +281,9 @@ tbody tr:hover{background:#fafbff}
         </table>
       </div>
     </div>
+
+    <!-- 고객센터 탭 -->
+    <div class="tab-panel" id="tab-support"><div id="supportAdminRoot"></div></div>
 
     <!-- IP 차단 탭 -->
     <div class="tab-panel" id="tab-ipblocks">
@@ -306,6 +316,34 @@ tbody tr:hover{background:#fafbff}
           <thead><tr><th>IP 주소</th><th>사유</th><th>차단일</th><th>관리</th></tr></thead>
           <tbody id="ipBlocksBody"><tr class="empty-row"><td colspan="4">탭을 열면 차단 목록을 불러옵니다.</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-loginbranding">
+      <div class="table-wrap">
+        <div class="table-toolbar"><span class="title">회원 로그인 브랜드 이름 · 로고</span></div>
+        <div style="padding:24px;max-width:640px">
+          <label for="loginBrandName" style="display:block;font-size:14px;margin-bottom:8px">브랜드 이름</label>
+          <input id="loginBrandName" type="text" maxlength="40" placeholder="내 브랜드 이름" oninput="previewLoginBrandName()" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:6px">
+          <p style="font-size:13px;color:#666">PC·모바일 로그인 버튼과 회원 로그인 화면 제목에 반영됩니다. 비워서 저장하면 ‘회원 로그인’으로 표시됩니다.</p>
+          <div id="loginBrandNamePreview" style="padding:12px;text-align:center;border-radius:6px;background:#03b753;color:white;font-weight:bold;margin:12px 0">회원 로그인</div>
+          <button id="loginBrandNameSave" type="button" onclick="saveLoginBrandName()" style="border:0;border-radius:6px;background:#03b753;color:#fff;padding:11px 20px;cursor:pointer">브랜드 이름 저장</button>
+          <p id="loginBrandNameStatus" role="status" style="min-height:20px;font-size:13px;margin:12px 0"></p>
+          <hr style="border:0;border-top:1px solid #eee;margin:24px 0">
+          <p style="font-size:14px;line-height:1.7;color:#555">로고 이미지는 초록색 회원 로그인 화면의 입력란 위에 표시됩니다. 이름과 로고는 각각 저장할 수 있습니다.</p>
+          <div style="min-height:110px;padding:20px;border:1px solid #ddd;border-radius:8px;display:flex;justify-content:center;align-items:center;margin:18px 0">
+            <img id="loginLogoPreview" alt="로그인 로고 미리보기" style="display:none;max-width:240px;max-height:90px;object-fit:contain">
+            <span id="loginLogoEmpty" style="color:#888">설정된 로고가 없습니다.</span>
+          </div>
+          <label for="loginLogoFile" style="display:block;font-size:14px;margin-bottom:8px">로고 이미지 파일 (PNG · JPG · WEBP, 최대 2MB)</label>
+          <input type="file" id="loginLogoFile" accept="image/png,image/jpeg,image/webp" onchange="previewLoginLogo()" style="max-width:100%">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+            <button type="button" id="loginLogoSave" onclick="saveLoginLogo()" style="border:0;border-radius:6px;background:#03b753;color:#fff;padding:11px 20px;cursor:pointer">로고 저장 / 교체</button>
+            <button type="button" id="loginLogoRemove" onclick="removeLoginLogo()" style="border:1px solid #ddd;border-radius:6px;background:#fff;padding:11px 20px;cursor:pointer">로고 삭제</button>
+            <a href="/login/member" target="_blank" rel="noopener" style="padding:11px 0">실제 로그인 화면 확인</a>
+          </div>
+          <p id="loginLogoStatus" role="status" style="min-height:20px;font-size:13px;margin-top:15px"></p>
+        </div>
       </div>
     </div>
 
@@ -576,6 +614,32 @@ tbody tr:hover{background:#fafbff}
     <div class="modal-btns">
       <button class="cancel-btn" onclick="closeUserEditModal()">취소</button>
       <button class="save-btn" id="userEditSaveBtn" onclick="saveUserEdit()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 회원 비밀번호 관리: 조회 시 관리자 재인증 -->
+<div class="modal-overlay" id="userPasswordModal" onclick="if(event.target===this)closeUserPasswordModal()">
+  <div class="modal" style="width:460px;max-width:calc(100vw - 40px)">
+    <h2>회원 비밀번호 관리</h2>
+    <input type="hidden" id="userPasswordId">
+    <p id="userPasswordMember" style="overflow-wrap:anywhere"></p>
+    <p style="font-size:13px;color:#666">변경 적용 이후 가입·변경·재설정된 비밀번호만 조회할 수 있습니다. 기존 해시의 원문은 복원할 수 없습니다. 임시 비밀번호를 발급하면 기존 비밀번호와 해당 회원의 로그인 세션이 무효화됩니다. 거래·잔액·대화는 유지됩니다.</p>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="userPasswordVerified" style="width:auto;margin:0">회원 본인 확인을 완료했습니다.</label>
+    <label>관리자 본인 비밀번호 확인</label>
+    <input type="password" id="userPasswordAdmin" autocomplete="current-password">
+    <div id="userPasswordErr" role="alert" style="color:#e53e3e;margin-top:10px"></div>
+    <div id="userPasswordResult" style="display:none;margin-top:16px;padding:12px;background:#f0f8ff;border-radius:8px">
+      <label>회원 비밀번호 — 본인 확인한 회원에게만 전달하세요.</label>
+      <input type="text" id="userPasswordIssued" readonly autocomplete="off" style="font-family:monospace;font-size:18px">
+      <button class="action-btn" onclick="copyIssuedPassword()">비밀번호 복사</button>
+      <p style="font-size:13px">본인 확인한 회원에게만 전달하세요. 로그인 후 <a href="/member-password" target="_blank" rel="noopener">비밀번호 변경</a> 페이지에서 회원이 직접 변경할 수 있습니다.</p>
+      <button class="action-btn" onclick="copyPasswordChangeLink()">변경 페이지 주소 복사</button>
+    </div>
+    <div class="modal-btns">
+      <button class="cancel-btn" id="userPasswordCloseBtn" onclick="closeUserPasswordModal()">닫기</button>
+      <button class="action-btn" id="userPasswordViewBtn" onclick="viewMemberPassword()">비밀번호 조회</button>
+      <button class="save-btn" id="userPasswordResetBtn" onclick="issueMemberPassword()">임시 비밀번호 발급</button>
     </div>
   </div>
 </div>
@@ -881,11 +945,11 @@ router.post(["/banana777", "/banana777/"], express.urlencoded({ extended: false 
     const { eq } = await import("drizzle-orm");
     const bcrypt = await import("bcryptjs");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.trim()));
-    if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.role !== "admin") {
+    if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.role !== "admin" || user.deletedAt || user.suspendedAt) {
       res.redirect("/banana777?loginerror=" + encodeURIComponent("아이디 또는 비밀번호가 올바르지 않습니다."));
       return;
     }
-    // 어드민 전용 세션(admin.sid)에만 기록 — 회원 세션(connect.sid)과 완전 분리됨
+    await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
     req.session.adminId = user.id;
     req.session.adminRole = user.role;
     await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));

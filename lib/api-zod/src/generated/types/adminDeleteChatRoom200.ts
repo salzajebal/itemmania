@@ -8,4 +8,5 @@
 
 export type AdminDeleteChatRoom200 = {
   ok: boolean;
+  preserved: boolean;
 };

@@ -63,3 +63,11 @@ test-results/
 *.backup
 backups/
 private-backups/
+/generated-artifacts/
+
+# Private input and operational state are not source backups.
+/.agents/
+/screenshots/
+/attached_assets/
+**/uploads/
+*.private.*

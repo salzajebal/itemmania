@@ -1,13 +1,14 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { addSSEClient, removeSSEClient } from "../lib/sse";
 import { requireAdmin } from "../middlewares/auth";
+import { keepEventStreamAlive } from "../lib/event-stream-heartbeat";
 
 const router: IRouter = Router();
 
 function streamEvents(userId: number, req: Request, res: Response): void {
   res.set({
     "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-cache, no-transform",
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
   });
@@ -17,7 +18,9 @@ function streamEvents(userId: number, req: Request, res: Response): void {
 
   addSSEClient(userId, res);
 
-  req.on("close", () => removeSSEClient(userId, res));
+  // Keep idle streams alive through the operating reverse proxy's read timeout.
+  const cleanup = keepEventStreamAlive(res, () => removeSSEClient(userId, res));
+  req.on("aborted", cleanup);
 }
 
 router.get("/events", (req, res): void => {

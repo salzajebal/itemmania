@@ -5,8 +5,10 @@
  * 아이템마니아 클론 API
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminListOrdersIncludeDeleted } from './adminListOrdersIncludeDeleted';
 
 export type AdminListOrdersParams = {
 page?: number;
 status?: string;
+includeDeleted?: AdminListOrdersIncludeDeleted;
 };

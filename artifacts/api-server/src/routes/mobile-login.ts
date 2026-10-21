@@ -1,4 +1,5 @@
 import { mobileMenuMarkup, mobileMenuScript, mobileMenuStyles } from "./mobile-menu";
+import { memberLoginLabel } from "../lib/member-login-entry";
 
 const icon = (body: string): string => `<svg viewBox="0 0 32 32" aria-hidden="true">${body}</svg>`;
 const home = icon('<path d="m4 14 12-10 12 10v14h-9v-9h-6v9H4Z"/>');
@@ -7,7 +8,7 @@ const search = icon('<circle cx="14" cy="14" r="9"/><path d="m21 21 7 7"/>');
 const person = icon('<circle cx="16" cy="10" r="5"/><path d="M5 29c0-7 4-11 11-11s11 4 11 11"/>');
 const menu = icon('<path d="M4 8h24M4 16h24M4 24h24"/>');
 
-export function renderMobileLogin(fontFaceStyles: string): string {
+export function renderMobileLogin(fontFaceStyles: string, brandName: string = ""): string {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="data:,"><title>로그인 | 아이템매니아</title>
 ${mobileMenuStyles()}<style>${fontFaceStyles}
 html,body{min-width:0;width:100%;margin:0;min-height:100%;background:#fff;overflow-x:hidden}
@@ -57,7 +58,7 @@ html,body{min-width:0;width:100%;margin:0;min-height:100%;background:#fff;overfl
 <input class="iml-field iml-password" id="user_password" name="user_password" type="password" placeholder="비밀번호를 입력해주세요." autocomplete="current-password" aria-label="비밀번호">
 <div class="iml-options"><label><input type="checkbox" id="id_save" name="id_save">아이디 저장</label><label><input type="checkbox" id="auto_login" name="auto_login">자동 로그인</label></div>
 <button class="iml-submit" type="submit">로그인</button></form>
-<button type="button" class="iml-naver" id="naver_id_login"><b aria-hidden="true">N</b>네이버 아이디로 로그인</button>
+<a href="/login/member" class="iml-naver im-member-login" id="im_member_login">${memberLoginLabel(brandName)}</a>
 <div class="iml-links"><a href="/customer" data-iml-help="아이디 찾기는 고객센터에 문의해 주세요.">아이디 찾기</a><i></i><a href="/customer" data-iml-help="비밀번호 찾기는 고객센터에 문의해 주세요.">비밀번호 찾기</a><a class="iml-join" href="/join">회원가입</a></div>
 <p class="iml-help" id="iml-help" role="status" aria-live="polite"></p>
 <div class="iml-adult"><span class="iml-adult-badge" aria-label="19세 미만 이용 불가">19</span><div><p>본 정보내용은 청소년유해매체물로서 [정보통신망 이용촉진 및 정보보호 등에 관한 법률] 및 [청소년 보호법]에 따라 19세 미만의 청소년이 이용할 수 없습니다.</p><a href="/">19세 미만 나가기</a></div></div></main>

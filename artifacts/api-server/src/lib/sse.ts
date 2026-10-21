@@ -15,6 +15,14 @@ export function removeSSEClient(userId: number, res: Response): void {
   }
 }
 
+export function disconnectSSEClients(userId: number): void {
+  const set = clients.get(userId);
+  clients.delete(userId);
+  for (const res of set ?? []) {
+    try { res.end(); } catch { /* Connection already closed. */ }
+  }
+}
+
 export function pushToUser(userId: number, event: string, data: object): void {
   const set = clients.get(userId);
   if (!set) return;

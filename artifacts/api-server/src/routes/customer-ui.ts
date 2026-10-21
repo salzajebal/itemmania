@@ -136,11 +136,11 @@ a:hover{color:#159EFD}
       <div class="nav_subject"><a href="/customer/" class="customer">고객감동센터</a></div>
       <div class="nav">
         <div class="nav_title"><a href="/customer/faq/" class="active">FAQ</a></div>
-        <div class="nav_title"><a href="/customer/report/">1:1 상담하기</a></div>
+        <div class="nav_title"><a href="/customer/report/" data-support-chat>1:1 상담하기</a></div>
         <ul class="nav_sub">
-          <li><a href="/customer/report/">거래취소 / 종료</a></li>
-          <li><a href="/customer/report/">이용관련</a></li>
-          <li><a href="/customer/report/">거래사고</a></li>
+          <li><a href="/customer/report/" data-support-chat>거래취소 / 종료</a></li>
+          <li><a href="/customer/report/" data-support-chat>이용관련</a></li>
+          <li><a href="/customer/report/" data-support-chat>거래사고</a></li>
         </ul>
         <div class="nav_title"><a href="/customer/myqna/">나의 질문과 답변</a></div>
         <div class="nav_title"><a href="/customer/safety/">안전거래</a></div>
@@ -186,15 +186,15 @@ a:hover{color:#159EFD}
 
     <!-- 빠른 메뉴 -->
     <ul class="submain_customer_info">
-      <li><a href="/customer/report/">
+      <li><a href="/customer/report/" data-support-chat>
         <div class="icon">🚫</div>
         <p class="name">거래취소/종료</p>
       </a></li>
-      <li><a href="/customer/report/">
+      <li><a href="/customer/report/" data-support-chat>
         <div class="icon">💬</div>
         <p class="name">이용관련</p>
       </a></li>
-      <li><a href="/customer/report/">
+      <li><a href="/customer/report/" data-support-chat>
         <div class="icon">⚠️</div>
         <p class="name">거래사고</p>
       </a></li>
@@ -528,6 +528,10 @@ function filterByKeyword(q) {
   document.getElementById('noResult').style.display = shown === 0 ? 'block' : 'none';
 }
 
+document.addEventListener('click', function(e) {
+  var a = e.target.closest && e.target.closest('a[data-support-chat]');
+  if (a && window.SupportChat) { e.preventDefault(); window.SupportChat.open(); }
+});
 // 페이지 진입 시 헤더 로그인 버튼 상태 반영
 fetch('/api/auth/me', {credentials:'include'})
   .then(r => r.ok ? r.json() : null)
